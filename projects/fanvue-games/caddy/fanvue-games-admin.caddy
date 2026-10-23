@@ -1,0 +1,28 @@
+# Сайт админки FanVue Games. Устанавливается в /etc/caddy/conf.d/fanvue-games-admin.caddy.
+# Как и основной сайт, слушает только 127.0.0.1 (порт 18090), к нему ходит туннель cloudflared. Перед админкой стоит
+# Cloudflare Access (вход по почте), потом логин самой админки.
+# Куда идёт трафик (blue или green), решает файл /etc/caddy/upstreams/fanvue-games-admin.caddy, его меняет скрипт деплоя.
+http://admin.fanvue-games.myapps.agency:18090 {
+	bind 127.0.0.1
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+
+	# Blazor Server работает по WebSocket: reverse_proxy пропускает его сам. Тела запросов небольшие.
+	request_body {
+		max_size 5MB
+	}
+	import /etc/caddy/upstreams/fanvue-games-admin.caddy
+
+	log {
+		output file /var/log/caddy/fanvue-games-admin.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}

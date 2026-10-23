@@ -1,0 +1,45 @@
+# Сайт FanVue Games. Устанавливается в /etc/caddy/conf.d/fanvue-games.caddy.
+# Трафик приходит из туннеля cloudflared (Cloudflare → туннель → этот адрес). Сайт слушает ТОЛЬКО 127.0.0.1:18080,
+# наружу (на 443) он не выставлен: обратиться к нему в обход Cloudflare по IP сервера нельзя.
+# Туннель пересылает исходное имя сайта в заголовке Host, поэтому адрес сайта задан по имени.
+# Запасной вариант на случай сбоя Cloudflare лежит рядом: fanvue-games.fallback.caddy.disabled (включается вручную).
+# Куда идёт трафик (blue или green), решает файл /etc/caddy/upstreams/fanvue-games.caddy, его меняет скрипт деплоя.
+http://fanvue-games.myapps.agency:18080 {
+	bind 127.0.0.1
+
+	encode zstd gzip
+
+	header {
+		# HTTPS только. includeSubDomains и preload не включаем: на домене могут жить другие сайты
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	# Сознательно НЕТ X-Frame-Options и своей Content-Security-Policy: приложение показывается внутри Fanvue,
+	# и разрешение на это (frame-ancestors) выставляет само приложение.
+
+	# Загрузка файлов в Vault: через бесплатный Cloudflare проходит не больше 100 МБ тела запроса.
+	@upload path /api/vault/upload
+	handle @upload {
+		request_body {
+			max_size 100MB
+		}
+		import /etc/caddy/upstreams/fanvue-games.caddy
+	}
+
+	# Всё остальное: небольшие запросы
+	handle {
+		request_body {
+			max_size 5MB
+		}
+		import /etc/caddy/upstreams/fanvue-games.caddy
+	}
+
+	log {
+		output file /var/log/caddy/fanvue-games.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}

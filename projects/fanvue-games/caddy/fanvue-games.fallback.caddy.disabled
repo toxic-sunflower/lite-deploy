@@ -1,0 +1,42 @@
+# ЗАПАСНОЙ ВАРИАНТ на случай сбоя Cloudflare или туннеля. В обычное время выключен: расширение .disabled,
+# Caddy такие файлы не читает (в основном Caddyfile подключается только /etc/caddy/conf.d/*.caddy).
+# Включение и возврат описаны в README.md этой папки, раздел «Если Cloudflare недоступен».
+#
+# Сайт открывается напрямую на 443 с обычным публичным сертификатом (Let's Encrypt, Caddy получает его сам).
+# Пока включён, обхода Cloudflare не избежать: сайт доступен по IP сервера. Держать включённым только на время сбоя.
+fanvue-games.myapps.agency {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# Скрипт деплоя ставит в upstream X-Forwarded-For из CF-Connecting-IP. Без Cloudflare этого заголовка нет, а присланный
+	# клиентом заголовок нельзя пускать дальше (подделка адреса), поэтому подставляем настоящий адрес сами.
+	request_header CF-Connecting-IP {remote_host}
+
+	@upload path /api/vault/upload
+	handle @upload {
+		request_body {
+			max_size 1500MB
+		}
+		import /etc/caddy/upstreams/fanvue-games.caddy
+	}
+
+	handle {
+		request_body {
+			max_size 5MB
+		}
+		import /etc/caddy/upstreams/fanvue-games.caddy
+	}
+
+	log {
+		output file /var/log/caddy/fanvue-games.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}

@@ -1,0 +1,29 @@
+# Слот green сервиса FanVue Games. Лежит в ~/.config/containers/systemd/ пользователя fanvue-games.
+# Копия слота blue, отличаются только имя, образ и порт.
+[Unit]
+Description=FanVue Games API (слот green)
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=fanvue-games-api-green
+Image=localhost/fanvue-games-api:green
+PublishPort=127.0.0.1:18082:8080
+EnvironmentFile=%h/.config/fanvue-games/app.env
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=Fanvue__UseMock=false
+Volume=/var/run/postgresql:/var/run/postgresql
+ReadOnly=true
+Tmpfs=/tmp
+NoNewPrivileges=true
+DropCapability=ALL
+PidsLimit=512
+Memory=768m
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

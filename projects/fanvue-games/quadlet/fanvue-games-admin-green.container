@@ -1,0 +1,30 @@
+# Слот green админки платформы. Лежит в ~/.config/containers/systemd/ пользователя fanvue-games.
+# Образ localhost/fanvue-games-admin:green создаёт скрипт деплоя (podman tag). Наружу порт не публикуется: к нему ходит только
+# Caddy (сайт админки на 127.0.0.1:18090), а к Caddy туннель cloudflared; вход закрыт Cloudflare Access и логином админки.
+[Unit]
+Description=FanVue Games admin (слот green)
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=fanvue-games-admin-green
+Image=localhost/fanvue-games-admin:green
+PublishPort=127.0.0.1:18092:8080
+# строка подключения к базе и вход в админку (Admin__Username, Admin__Password), файл создаётся руками, права 600
+EnvironmentFile=%h/.config/fanvue-games/admin.env
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Volume=/var/run/postgresql:/var/run/postgresql
+ReadOnly=true
+Tmpfs=/tmp
+NoNewPrivileges=true
+DropCapability=ALL
+PidsLimit=256
+Memory=384m
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

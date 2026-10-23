@@ -1,0 +1,33 @@
+# Слот blue сервиса FanVue Games. Лежит в ~/.config/containers/systemd/ пользователя fanvue-games.
+# Образ localhost/fanvue-games-api:blue создаёт скрипт деплоя (podman tag), сам файл версии не знает.
+[Unit]
+Description=FanVue Games API (слот blue)
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=fanvue-games-api-blue
+Image=localhost/fanvue-games-api:blue
+# наружу только на localhost, к нему ходит Caddy
+PublishPort=127.0.0.1:18081:8080
+# строка подключения к базе и секреты приложения (файл создаётся на сервере руками, права 600)
+EnvironmentFile=%h/.config/fanvue-games/app.env
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=Fanvue__UseMock=false
+# сокет PostgreSQL хоста
+Volume=/var/run/postgresql:/var/run/postgresql
+# ограничения контейнера
+ReadOnly=true
+Tmpfs=/tmp
+NoNewPrivileges=true
+DropCapability=ALL
+PidsLimit=512
+Memory=768m
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target
