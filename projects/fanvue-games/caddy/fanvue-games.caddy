@@ -4,7 +4,7 @@
 # Туннель пересылает исходное имя сайта в заголовке Host, поэтому адрес сайта задан по имени.
 # Запасной вариант на случай сбоя Cloudflare лежит рядом: fanvue-games.fallback.caddy.disabled (включается вручную).
 # Куда идёт трафик (blue или green), решает файл /etc/caddy/upstreams/fanvue-games.caddy, его меняет скрипт деплоя.
-http://fanvue-games.myapps.agency:18080 {
+http://fanvue-games.prozorov.site:18080 {
 	bind 127.0.0.1
 
 	encode zstd gzip

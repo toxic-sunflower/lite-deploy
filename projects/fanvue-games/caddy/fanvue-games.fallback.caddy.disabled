@@ -4,7 +4,7 @@
 #
 # Сайт открывается напрямую на 443 с обычным публичным сертификатом (Let's Encrypt, Caddy получает его сам).
 # Пока включён, обхода Cloudflare не избежать: сайт доступен по IP сервера. Держать включённым только на время сбоя.
-fanvue-games.myapps.agency {
+fanvue-games.prozorov.site {
 	encode zstd gzip
 
 	header {

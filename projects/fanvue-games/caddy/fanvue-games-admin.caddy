@@ -2,7 +2,7 @@
 # Как и основной сайт, слушает только 127.0.0.1 (порт 18090), к нему ходит туннель cloudflared. Перед админкой стоит
 # Cloudflare Access (вход по почте), потом логин самой админки.
 # Куда идёт трафик (blue или green), решает файл /etc/caddy/upstreams/fanvue-games-admin.caddy, его меняет скрипт деплоя.
-http://admin.fanvue-games.myapps.agency:18090 {
+http://admin.fanvue-games.prozorov.site:18090 {
 	bind 127.0.0.1
 
 	encode zstd gzip
