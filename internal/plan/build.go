@@ -3,6 +3,7 @@ package plan
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -10,13 +11,17 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/actions"
 	"github.com/toxic-sunflower/lite-deploy/internal/project"
 	"github.com/toxic-sunflower/lite-deploy/internal/schema"
+	"github.com/toxic-sunflower/lite-deploy/internal/secrets"
 )
+
+var armorRe = regexp.MustCompile(secrets.ArmorPattern)
 
 // Коды ошибок построения плана (SPEC-v0.md, 6.3).
 const (
 	CodeInvalidProject           = "invalid_project"
 	CodeSecretMissing            = "secret_missing"
 	CodeUnusedSecret             = "unused_secret"
+	CodeInvalidSecret            = "invalid_secret"
 	CodeUnmanaged                = "project_exists_unmanaged"
 	CodeAdoptPassword            = "adopt_password_unknown"
 	CodePrecondition             = "precondition_failed"
@@ -268,6 +273,11 @@ func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) (
 		have[n] = true
 	}
 
+	for _, n := range sortedKeys(st.Ciphertexts) {
+		if !secrets.ValidName(n) || !armorRe.MatchString(st.Ciphertexts[n]) || len(st.Ciphertexts[n]) > secrets.MaxCiphertextSize {
+			return nil, &BuildError{Code: CodeInvalidSecret, Message: "шифртекст секрета " + n + " не похож на вывод `secret encrypt` (age armor)"}
+		}
+	}
 	var steps []actions.SetSecret
 	var missing, unused []string
 	for _, n := range sortedKeys(st.Ciphertexts) {

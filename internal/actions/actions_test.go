@@ -2,8 +2,11 @@ package actions
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/toxic-sunflower/lite-deploy/internal/secrets"
 )
 
 const goodKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDtqJ7zOtqQtYqOo0CpvDXNlMhV3HeJDpjrASKGLWdop github-actions"
@@ -12,7 +15,7 @@ var goodParams = map[string]string{
 	"verify_host":         `{}`,
 	"create_project_user": `{"project":"shop"}`,
 	"provision_postgres":  `{"project":"shop","connection_format":"url"}`,
-	"set_secret":          `{"project":"shop","name":"api_key","ciphertext":"x"}`,
+	"set_secret":          `{"project":"shop","name":"api_key","ciphertext":"-----BEGIN AGE ENCRYPTED FILE-----\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldY\n-----END AGE ENCRYPTED FILE-----"}`,
 	"registry_login":      `{"project":"shop","registry":"ghcr.io","username":"me","secret":"tok"}`,
 	"write_service_env":   `{"project":"shop","service":"api","env":[{"name":"A","kind":"literal","value":"1"},{"name":"B","kind":"secret","secret":"b_secret"},{"name":"C","kind":"database","value":"url"}]}`,
 	"install_quadlet":     `{"project":"shop","service":"api","slot":"blue","host_port":18001,"container_port":8080,"memory":"512m","pids":256,"database_socket":true}`,
@@ -71,9 +74,10 @@ func TestParamsRejected(t *testing.T) {
 		{"create_project_user", `{"project":"shop\n"}`},
 		{"create_project_user", `{"project":"shop","path":"/etc"}`},
 		{"provision_postgres", `{"project":"shop","connection_format":"x"}`},
-		{"set_secret", `{"project":"shop","name":"Bad","ciphertext":"x"}`},
+		{"set_secret", `{"project":"shop","name":"Bad","ciphertext":"-----BEGIN AGE ENCRYPTED FILE-----\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldY\n-----END AGE ENCRYPTED FILE-----"}`},
 		{"set_secret", `{"project":"shop","name":"ok_name"}`},
-		{"set_secret", `{"project":"shop","name":"ok_name","ciphertext":"` + strings.Repeat("a", 16385) + `"}`},
+		{"set_secret", `{"project":"shop","name":"ok_name","ciphertext":"plain-text-value"}`},
+		{"set_secret", `{"project":"shop","name":"ok_name","ciphertext":"-----BEGIN AGE ENCRYPTED FILE-----\n` + strings.Repeat("a", 16385) + `\n-----END AGE ENCRYPTED FILE-----"}`},
 		{"registry_login", `{"project":"shop","registry":"ghcr.io/x","username":"me","secret":"tok"}`},
 		{"write_service_env", `{"project":"shop","service":"api","env":[{"name":"A-B","kind":"literal"}]}`},
 		{"write_service_env", `{"project":"shop","service":"api","env":[{"name":"A","kind":"secret"}]}`},
@@ -100,6 +104,13 @@ func TestParamsRejected(t *testing.T) {
 		if _, issues := Decode(c.action, json.RawMessage(c.raw)); len(issues) == 0 {
 			t.Errorf("%s %s: ожидали отказ", c.action, c.raw)
 		}
+	}
+}
+
+func TestCiphertextPatternMatchesSecretsPackage(t *testing.T) {
+	f, _ := reflect.TypeOf(SetSecret{}).FieldByName("Ciphertext")
+	if f.Tag.Get("pattern") != secrets.ArmorPattern {
+		t.Fatalf("шаблон в actions.SetSecret расходится с secrets.ArmorPattern:\n%s\n%s", f.Tag.Get("pattern"), secrets.ArmorPattern)
 	}
 }
 

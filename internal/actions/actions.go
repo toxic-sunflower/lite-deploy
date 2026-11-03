@@ -113,7 +113,7 @@ type ProvisionPostgres struct {
 type SetSecret struct {
 	Project    string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	Name       string `json:"name" pattern:"^_?[a-z][a-z0-9_]{1,63}$"`
-	Ciphertext string `json:"ciphertext" maxLen:"16384"`
+	Ciphertext string `json:"ciphertext" pattern:"^-----BEGIN AGE ENCRYPTED FILE-----\\n[A-Za-z0-9+/=\\n]{20,}-----END AGE ENCRYPTED FILE-----$" maxLen:"16384" doc:"шифртекст age (armor)"`
 }
 
 // RegistryLogin входит в реестр образов от имени проектного пользователя.

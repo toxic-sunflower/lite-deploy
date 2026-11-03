@@ -24,7 +24,7 @@ func testEnv(t *testing.T) (Env, *bytes.Buffer, *bytes.Buffer) {
 	m.Files["/etc/machine-id"] = []byte("test-machine\n")
 	m.Files["/etc/passwd"] = []byte("root:x:0:0::/root:/bin/bash\n")
 	var out, errb bytes.Buffer
-	return Env{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errb, FS: m, Paths: plan.DefaultPaths(), Now: func() time.Time { return now }}, &out, &errb
+	return Env{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errb, FS: m, Paths: plan.DefaultPaths(), Now: func() time.Time { return now }, IsRoot: func() bool { return true }}, &out, &errb
 }
 
 func run(t *testing.T, env Env, args ...string) int { t.Helper(); return RunEnv(args, env) }
@@ -53,7 +53,7 @@ func ciphertextArgs(t *testing.T) []string {
 	var args []string
 	for _, n := range []string{"ghcr_read_token", "auth_session_secret", "fanvue_webhook_secret", "admin_username", "admin_password", "_db_password"} {
 		p := filepath.Join(dir, n)
-		if err := os.WriteFile(p, []byte("CIPHERTEXT-"+n+"\n"), 0o600); err != nil {
+		if err := os.WriteFile(p, []byte("-----BEGIN AGE ENCRYPTED FILE-----\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldY\n-----END AGE ENCRYPTED FILE-----\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		args = append(args, "--ciphertext", n+"="+p)
@@ -229,7 +229,6 @@ func TestUsageAndUnimplemented(t *testing.T) {
 		{[]string{"deploy", "p", "x"}, 1, "not_implemented"},
 		{[]string{"rollback", "p"}, 1, "not_implemented"},
 		{[]string{"status"}, 1, "not_implemented"},
-		{[]string{"secret", "list", "p"}, 1, "not_implemented"},
 		{[]string{"gate", "--project", "p"}, 1, "not_implemented"},
 	}
 	for _, c := range cases {
@@ -285,7 +284,7 @@ func TestEnvelopeDoesNotLeakCiphertextToStdoutInTextMode(t *testing.T) {
 	if c := RunEnv(args, env); c != 0 {
 		t.Fatal(c)
 	}
-	if strings.Contains(out.String(), "CIPHERTEXT-") {
+	if strings.Contains(out.String(), "AGE ENCRYPTED") {
 		t.Error("читаемый вывод плана не должен печатать шифртексты")
 	}
 }

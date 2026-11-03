@@ -75,6 +75,10 @@ func (ExecRunner) Run(ctx context.Context, c Cmd) (Result, error) {
 type FS interface {
 	ReadFile(path string) ([]byte, error)
 	ReadDir(path string) ([]string, error) // имена записей по алфавиту
+	// WriteFile атомарно записывает файл (временный файл и rename) с точными правами perm, независимо от umask.
+	WriteFile(path string, data []byte, perm fs.FileMode) error
+	MkdirAll(path string, perm fs.FileMode) error
+	ModTime(path string) (time.Time, error)
 }
 
 // OSFS настоящая файловая система.
@@ -96,11 +100,95 @@ func (OSFS) ReadDir(p string) ([]string, error) {
 	return out, nil
 }
 
-// MemFS файловая система в памяти для тестов.
-type MemFS struct{ Files map[string][]byte }
+// WriteFile атомарно записывает файл с правами perm.
+func (OSFS) WriteFile(p string, data []byte, perm fs.FileMode) error {
+	dir := filepath.Dir(p)
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	ok := false
+	defer func() {
+		if !ok {
+			_ = os.Remove(name)
+		}
+	}()
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(name, p); err != nil {
+		return err
+	}
+	ok = true
+	return nil
+}
+
+// MkdirAll создаёт каталог с правами perm (для вновь созданных каталогов, независимо от umask).
+func (OSFS) MkdirAll(p string, perm fs.FileMode) error {
+	if err := os.MkdirAll(p, perm); err != nil {
+		return err
+	}
+	return os.Chmod(p, perm)
+}
+
+// ModTime время изменения файла.
+func (OSFS) ModTime(p string) (time.Time, error) {
+	st, err := os.Stat(p)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return st.ModTime(), nil
+}
+
+// MemFS файловая система в памяти для тестов; права и время записей хранятся отдельно.
+type MemFS struct {
+	Files map[string][]byte
+	Perms map[string]fs.FileMode
+	Times map[string]time.Time
+	Dirs  map[string]fs.FileMode
+	Now   func() time.Time
+}
 
 // NewMemFS создаёт пустую MemFS.
-func NewMemFS() *MemFS { return &MemFS{Files: map[string][]byte{}} }
+func NewMemFS() *MemFS {
+	return &MemFS{Files: map[string][]byte{}, Perms: map[string]fs.FileMode{}, Times: map[string]time.Time{}, Dirs: map[string]fs.FileMode{}, Now: time.Now}
+}
+
+// WriteFile записывает файл.
+func (m *MemFS) WriteFile(p string, data []byte, perm fs.FileMode) error {
+	p = filepath.Clean(p)
+	m.Files[p] = append([]byte(nil), data...)
+	m.Perms[p] = perm
+	m.Times[p] = m.Now()
+	return nil
+}
+
+// MkdirAll запоминает каталог.
+func (m *MemFS) MkdirAll(p string, perm fs.FileMode) error {
+	m.Dirs[filepath.Clean(p)] = perm
+	return nil
+}
+
+// ModTime возвращает время записи.
+func (m *MemFS) ModTime(p string) (time.Time, error) {
+	t, ok := m.Times[filepath.Clean(p)]
+	if !ok {
+		if _, has := m.Files[filepath.Clean(p)]; has {
+			return time.Time{}, nil
+		}
+		return time.Time{}, &fs.PathError{Op: "stat", Path: p, Err: fs.ErrNotExist}
+	}
+	return t, nil
+}
 
 // ReadFile читает файл.
 func (m *MemFS) ReadFile(p string) ([]byte, error) {

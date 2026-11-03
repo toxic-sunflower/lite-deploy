@@ -30,7 +30,7 @@ func fanvue(t *testing.T) *project.Project {
 func ct(names ...string) map[string]string {
 	m := map[string]string{}
 	for _, n := range names {
-		m[n] = "-----BEGIN TEST CIPHERTEXT-----\n" + n + "\n-----END TEST CIPHERTEXT-----"
+		m[n] = "-----BEGIN AGE ENCRYPTED FILE-----\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldY\n-----END AGE ENCRYPTED FILE-----"
 	}
 	return m
 }
@@ -128,7 +128,7 @@ func TestBuildIsDeterministic(t *testing.T) {
 func TestPlanContainsNoSecretValues(t *testing.T) {
 	// шифртекст в плане есть, но открытых значений нет: в этом тесте «значения» это маркеры
 	st := baseState()
-	st.Ciphertexts["admin_password"] = "CIPHERTEXT-ONLY"
+	st.Ciphertexts["admin_password"] = ct("x")["x"]
 	pl := build(t, fanvue(t), st)
 	raw, _ := json.Marshal(pl)
 	for _, bad := range []string{"PLAINTEXT", "password=", "Password="} {
@@ -247,7 +247,7 @@ func TestExistingSecretIsNotResent(t *testing.T) {
 
 func TestUnusedCiphertextRejected(t *testing.T) {
 	st := baseState()
-	st.Ciphertexts["stray"] = "x"
+	st.Ciphertexts["stray"] = ct("x")["x"]
 	if _, err := Build(fanvue(t), st); err == nil || err.Code != CodeUnusedSecret {
 		t.Fatalf("ожидали unused_secret: %v", err)
 	}
@@ -287,7 +287,7 @@ func TestUnmanagedExistingUser(t *testing.T) {
 		t.Fatalf("ожидали project_exists_unmanaged: %v", err)
 	}
 	p.Adopt = true
-	st.Ciphertexts["_db_password"] = "x"
+	st.Ciphertexts["_db_password"] = ct("x")["x"]
 	build(t, p, st)
 }
 
@@ -350,6 +350,16 @@ func TestDatabaseSocketOnlyWithDatabaseEnv(t *testing.T) {
 	for _, s := range pl.Steps {
 		if s.Action == "install_quadlet" && !strings.Contains(string(s.Params), `"database_socket":true`) {
 			t.Errorf("database_socket: %s", s.Params)
+		}
+	}
+}
+
+func TestInvalidCiphertextRejected(t *testing.T) {
+	for _, bad := range []string{"plain-text-value", "", "-----BEGIN AGE ENCRYPTED FILE-----\n!!!\n-----END AGE ENCRYPTED FILE-----"} {
+		st := baseState()
+		st.Ciphertexts["admin_password"] = bad
+		if _, err := Build(fanvue(t), st); err == nil || err.Code != CodeInvalidSecret {
+			t.Errorf("%q: ожидали invalid_secret: %v", bad, err)
 		}
 	}
 }

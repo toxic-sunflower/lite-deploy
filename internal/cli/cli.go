@@ -33,12 +33,15 @@ type Env struct {
 	FS     host.FS
 	Paths  plan.Paths
 	Config string // путь config.json; пусто: config.DefaultPath
-	Now    func() time.Time
+	// пути ключа исполнителя и хранилища секретов; пусто: значения по умолчанию из пакета secrets
+	KeyPath, PubPath, SecretsDir string
+	IsRoot                       func() bool
+	Now                          func() time.Time
 }
 
 // Run выполняет команду в настоящем окружении и возвращает код выхода.
 func Run(args []string, stdout, stderr io.Writer) int {
-	return RunEnv(args, Env{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr, FS: host.OSFS{}, Paths: plan.DefaultPaths(), Config: config.DefaultPath, Now: time.Now})
+	return RunEnv(args, Env{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr, FS: host.OSFS{}, Paths: plan.DefaultPaths(), Config: config.DefaultPath, Now: time.Now, IsRoot: func() bool { return os.Geteuid() == 0 }})
 }
 
 // result итог команды: данные или ошибка, плюс текст для людей.
@@ -116,7 +119,11 @@ func dispatch(args []string, env Env) result {
 		return fail("project", CodeUsage, "неизвестная подкоманда project: "+args[1])
 	case "apply":
 		return cmdApply(args[1:], env)
-	case "secret", "deploy", "rollback", "status", "gate", "init":
+	case "init":
+		return cmdInit(env)
+	case "secret":
+		return cmdSecret(args[1:], env)
+	case "deploy", "rollback", "status", "gate":
 		return fail(args[0], CodeNotImplemented, "команда "+args[0]+" появится в следующих сессиях (см. PLAN.md)")
 	}
 	return fail("usage", CodeUsage, "неизвестная команда: "+args[0])

@@ -45,7 +45,7 @@ const (
 
 var exitCodes = map[string]int{
 	"internal": 1, "caddy_reload_failed": 1, "io_error": 1, "not_implemented": 1,
-	"invalid_project": 2, "invalid_plan": 2, "unknown_action": 2, "usage": 2, "command_not_allowed": 2, "invalid_sha": 2, "unused_secret": 2,
+	"invalid_project": 2, "invalid_plan": 2, "unknown_action": 2, "usage": 2, "command_not_allowed": 2, "invalid_sha": 2, "unused_secret": 2, "invalid_secret": 2,
 	"precondition_failed": 3, "secret_missing": 3, "project_exists_unmanaged": 3, "adopt_password_unknown": 3,
 	"permission_denied": 4, "confirmation_required": 4,
 	"step_failed":        5,
