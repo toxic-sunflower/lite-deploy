@@ -11,9 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/toxic-sunflower/lite-deploy/internal/config"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/plan"
 	"github.com/toxic-sunflower/lite-deploy/internal/project"
+	"github.com/toxic-sunflower/lite-deploy/internal/schema"
 )
 
 // Версия и идентификаторы схем.
@@ -30,12 +32,13 @@ type Env struct {
 	Stderr io.Writer
 	FS     host.FS
 	Paths  plan.Paths
+	Config string // путь config.json; пусто: config.DefaultPath
 	Now    func() time.Time
 }
 
 // Run выполняет команду в настоящем окружении и возвращает код выхода.
 func Run(args []string, stdout, stderr io.Writer) int {
-	return RunEnv(args, Env{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr, FS: host.OSFS{}, Paths: plan.DefaultPaths(), Now: time.Now})
+	return RunEnv(args, Env{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr, FS: host.OSFS{}, Paths: plan.DefaultPaths(), Config: config.DefaultPath, Now: time.Now})
 }
 
 // result итог команды: данные или ошибка, плюс текст для людей.
@@ -142,6 +145,24 @@ func parseArgs(fs *flag.FlagSet, args []string) ([]string, error) {
 	return pos, nil
 }
 
+// loadConfig читает config.json; ошибки файла превращаются в precondition_failed.
+func loadConfig(env Env, command string) (config.Config, *result) {
+	path := env.Config
+	if path == "" {
+		path = config.DefaultPath
+	}
+	c, issues, err := config.Load(env.FS, path)
+	if err != nil {
+		r := fail(command, plan.CodePrecondition, err.Error())
+		return c, &r
+	}
+	if len(issues) > 0 {
+		r := result{command: command, err: &ErrorBody{Code: plan.CodePrecondition, Message: "файл " + path + " не прошёл проверку", Details: issues}}
+		return c, &r
+	}
+	return c, nil
+}
+
 func readInput(env Env, path string) ([]byte, error) {
 	if path == "-" {
 		return io.ReadAll(io.LimitReader(env.Stdin, 4*1024*1024))
@@ -178,7 +199,17 @@ func loadProject(env Env, command string, args []string) (*project.Project, []st
 		r := fail(command, CodeIO, "не удалось прочитать описание проекта: "+err.Error())
 		return nil, nil, &r
 	}
-	p, issues := project.Parse(data)
+	cfg, bad := loadConfig(env, command)
+	if bad != nil {
+		return nil, nil, bad
+	}
+	var p *project.Project
+	var issues []schema.Issue
+	if len(data) > cfg.Limits.ProjectBytes {
+		issues = []schema.Issue{{Path: "/", Code: "too_large", Message: fmt.Sprintf("файл больше %d байт", cfg.Limits.ProjectBytes)}}
+	} else {
+		p, issues = project.Parse(data)
+	}
 	if len(issues) == 0 {
 		issues = project.Validate(p)
 	}
@@ -218,7 +249,14 @@ func cmdPlan(args []string, env Env) result {
 	if err != nil {
 		return fail("project.plan", plan.CodePrecondition, err.Error())
 	}
+	cfg, badCfg := loadConfig(env, "project.plan")
+	if badCfg != nil {
+		return *badCfg
+	}
 	st.Now = env.Now()
+	st.TTL = time.Duration(cfg.Limits.PlanTTLHours) * time.Hour
+	st.PortRange = [2]int{cfg.Limits.PortRange[0], cfg.Limits.PortRange[1]}
+	st.MaxProjects = cfg.Limits.Projects
 	st.RotatePassword = rotate
 	st.Ciphertexts = map[string]string{}
 	for _, c := range cts {
@@ -275,7 +313,13 @@ func cmdApply(args []string, env Env) result {
 	if err != nil {
 		return fail("apply", plan.CodePrecondition, err.Error())
 	}
-	pl, verr := plan.Verify(data, plan.VerifyOptions{Now: env.Now(), ServerID: st.ServerID})
+	cfg, badCfg := loadConfig(env, "apply")
+	if badCfg != nil {
+		return *badCfg
+	}
+	lim := plan.DefaultLimits()
+	lim.PlanBytes, lim.PlanSteps = cfg.Limits.PlanBytes, cfg.Limits.PlanSteps
+	pl, verr := plan.Verify(data, plan.VerifyOptions{Now: env.Now(), ServerID: st.ServerID, Limits: lim})
 	if verr != nil {
 		return result{command: "apply", err: &ErrorBody{Code: verr.Code, Message: verr.Message, Details: verr.Issues}}
 	}

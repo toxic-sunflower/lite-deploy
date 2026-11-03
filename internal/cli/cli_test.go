@@ -289,3 +289,29 @@ func TestEnvelopeDoesNotLeakCiphertextToStdoutInTextMode(t *testing.T) {
 		t.Error("читаемый вывод плана не должен печатать шифртексты")
 	}
 }
+
+func TestConfigAffectsPlan(t *testing.T) {
+	env, out, _ := testEnv(t)
+	env.FS.(*host.MemFS).Files["/etc/lite-deploy/config.json"] = []byte(`{"limits":{"projects":1}}`)
+	env.FS.(*host.MemFS).Files["/var/lib/lite-deploy/state/projects/other.json"] = []byte(`{}`)
+	args := append([]string{"project", "plan", projectFile, "--json"}, ciphertextArgs(t)...)
+	if c := RunEnv(args, env); c != 6 || decode(t, out).Error.Code != "quota_exceeded" {
+		t.Fatalf("лимит проектов из config.json: %d %s", c, out.String())
+	}
+}
+
+func TestConfigInvalid(t *testing.T) {
+	env, out, _ := testEnv(t)
+	env.FS.(*host.MemFS).Files["/etc/lite-deploy/config.json"] = []byte(`{"limits":{"plan_steps":99999}}`)
+	if c := run(t, env, "project", "validate", projectFile, "--json"); c != 3 || decode(t, out).Error.Code != "precondition_failed" {
+		t.Fatalf("%d %s", c, out.String())
+	}
+}
+
+func TestProjectBytesLimit(t *testing.T) {
+	env, out, _ := testEnv(t)
+	env.FS.(*host.MemFS).Files["/etc/lite-deploy/config.json"] = []byte(`{"limits":{"project_bytes":1024}}`)
+	if c := run(t, env, "project", "validate", projectFile, "--json"); c != 2 || decode(t, out).Error.Details[0].Code != "too_large" {
+		t.Fatalf("%d %s", c, out.String())
+	}
+}
