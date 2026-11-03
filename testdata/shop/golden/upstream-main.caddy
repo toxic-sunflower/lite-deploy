@@ -1,0 +1,4 @@
+reverse_proxy 127.0.0.1:18081 {
+	header_up X-Forwarded-For {header.CF-Connecting-IP}
+	header_up X-Forwarded-Proto https
+}

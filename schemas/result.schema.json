@@ -1,0 +1,100 @@
+{
+  "$id": "lite-deploy/result/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "enum": [
+        "v1"
+      ],
+      "type": "string"
+    },
+    "command": {
+      "pattern": "^[a-z_.]{1,64}$",
+      "type": "string"
+    },
+    "data": {},
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "pattern": "^[a-z_]{1,64}$",
+          "type": "string"
+        },
+        "details": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "description": "код ошибки",
+                "maxLength": 32,
+                "type": "string"
+              },
+              "message": {
+                "description": "описание для человека",
+                "maxLength": 1024,
+                "type": "string"
+              },
+              "path": {
+                "description": "JSON Pointer к полю; «/» для документа целиком",
+                "maxLength": 512,
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "hint": {
+          "maxLength": 1024,
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 2048,
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "warnings": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 1024,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "ok",
+    "api_version",
+    "command"
+  ],
+  "title": "Конверт ответа CLI и API (успех или ошибка)",
+  "type": "object"
+}
