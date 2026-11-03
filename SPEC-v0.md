@@ -391,6 +391,7 @@ reverse_proxy 127.0.0.1:<порт слота сервиса> {
 | `lite-deploy apply <plan.json или -> [--dry-run] [--yes]` | root | normal | применяет план |
 | `lite-deploy project create <файл> [--yes]` | root | normal | `plan` + dry-run + `apply` одной командой (то же, что три команды выше) |
 | `lite-deploy project list` | владелец | safe | проекты из `state/projects/` |
+| `lite-deploy init` | root | normal | создаёт ключ исполнителя и каталоги; существующий ключ не трогает (D-52) |
 | `lite-deploy secret pubkey` | любой | safe | открытый ключ исполнителя (`age1…`) |
 | `lite-deploy secret encrypt <проект> <имя>` | любой | safe | читает значение со стандартного ввода или скрыто с терминала, печатает шифртекст (можно на машине владельца, без доступа к серверу, с `--pubkey`) |
 | `lite-deploy secret set <проект> <имя>` | root | normal | то же, что encrypt + запись на месте (для `_db_password` и разовых случаев) |
@@ -439,7 +440,7 @@ reverse_proxy 127.0.0.1:<порт слота сервиса> {
 |---|---|---|
 | 0 | успех | |
 | 1 | общая ошибка | `internal`, `caddy_reload_failed`, `io_error` |
-| 2 | неверный ввод | `invalid_project`, `invalid_plan`, `unknown_action`, `usage`, `command_not_allowed`, `invalid_sha` |
+| 2 | неверный ввод | `invalid_project`, `invalid_plan`, `unknown_action`, `usage`, `command_not_allowed`, `invalid_sha`, `invalid_secret`, `unused_secret` |
 | 3 | не выполнено предусловие | `precondition_failed`, `secret_missing`, `project_exists_unmanaged`, `adopt_password_unknown` |
 | 4 | нет прав | `permission_denied`, `confirmation_required` (зарезервирован для режима Б) |
 | 5 | шаг плана завершился ошибкой (применено частично) | `step_failed` |
@@ -567,6 +568,6 @@ S4 добавляет проверки на тестовом сервере: `ap
 
 ## 14. Решения
 
-D-39…D-46 приняты (S2). Уточнения при реализации S3, D-48…D-51, предложены: порядок `_db_password` при `adopt`, поля состояния проекта, флаг `--ciphertext`, порядок проверки плана. Реализация S3 расходится с текстом выше только там, где это сказано в этих решениях и в сноске ниже.
+D-39…D-46 приняты (S2). Уточнения при реализации S3, D-48…D-51, предложены: порядок `_db_password` при `adopt`, поля состояния проекта, флаг `--ciphertext`, порядок проверки плана. Реализация S3 расходится с текстом выше только там, где это сказано в этих решениях (D-48…D-52) и в сноске ниже.
 
-Состояние реализации на конец S3: `apply --dry-run` только проверяет план (статус шага `pending`), `apply`, `project create`, `secret`, `deploy`, `rollback`, `status`, `gate`, `init` возвращают `not_implemented`; `config.json` не читается (действуют значения по умолчанию); ошибки разбора корня документа имеют `path` равный `/`.
+Состояние реализации на конец S3: `apply --dry-run` только проверяет план (статус шага `pending`), `apply` без `--dry-run`, `project create`, `deploy`, `rollback`, `status`, `gate` возвращают `not_implemented` (S4, S5); `init`, `secret pubkey|encrypt|set|list` и чтение `config.json` реализованы; ошибки разбора корня документа имеют `path` равный `/`.
