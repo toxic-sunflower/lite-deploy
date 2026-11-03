@@ -1,0 +1,25 @@
+[Unit]
+Description=fanvue-games admin (слот green)
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=fanvue-games-admin-green
+Image=localhost/fanvue-games-admin:green
+PublishPort=127.0.0.1:18092:8080
+EnvironmentFile=%h/.config/lite-deploy/env/admin.env
+Volume=/var/run/postgresql:/var/run/postgresql
+ReadOnly=true
+Tmpfs=/tmp
+NoNewPrivileges=true
+DropCapability=ALL
+PidsLimit=256
+Memory=384m
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target
