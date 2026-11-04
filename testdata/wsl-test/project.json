@@ -1,0 +1,19 @@
+{
+  "schema": "lite-deploy/project/v1",
+  "name": "demo-app",
+  "description": "Тестовый проект для проверки S4 в WSL (без реестра и ключа CI)",
+  "database": { "engine": "postgres", "connection_format": "url" },
+  "services": {
+    "web": {
+      "image": "localhost/demo-app-web",
+      "container_port": 8080,
+      "limits": { "memory": "256m", "pids": 128 },
+      "env": { "APP_ENV": "test" },
+      "secrets": { "APP_SECRET": "secret://app_secret" },
+      "database_env": "DATABASE_URL"
+    }
+  },
+  "sites": [
+    { "name": "main", "host": "demo.example.com", "service": "web", "trusted_proxy": "none", "max_body": "5MB" }
+  ]
+}
