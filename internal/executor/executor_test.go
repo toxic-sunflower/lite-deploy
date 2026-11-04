@@ -18,16 +18,17 @@ var now = time.Date(2026, 11, 4, 10, 0, 0, 0, time.UTC)
 
 // world подмена сервера: файловая система в памяти и список команд, на которые отвечает «система».
 type world struct {
-	t        *testing.T
-	fsys     *host.MemFS
-	runner   *host.FakeRunner
-	http     *host.FakeHTTP
-	users    map[string]bool
-	role, db bool
-	rolePw   string
-	validOK  bool
-	cmds     []string
-	pubkey   string
+	t         *testing.T
+	fsys      *host.MemFS
+	runner    *host.FakeRunner
+	http      *host.FakeHTTP
+	users     map[string]bool
+	role, db  bool
+	rolePw    string
+	validOK   bool
+	podmanVer string
+	cmds      []string
+	pubkey    string
 }
 
 func newWorld(t *testing.T) *world {
