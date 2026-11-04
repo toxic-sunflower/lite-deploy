@@ -1,0 +1,276 @@
+{
+  "$id": "lite-deploy/project/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "adopt": {
+      "description": "взять под управление проект, настроенный вручную",
+      "type": "boolean"
+    },
+    "database": {
+      "additionalProperties": false,
+      "properties": {
+        "connection_format": {
+          "description": "формат строки подключения, по умолчанию url",
+          "enum": [
+            "npgsql",
+            "url",
+            "libpq"
+          ],
+          "type": "string"
+        },
+        "engine": {
+          "enum": [
+            "postgres"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "engine"
+      ],
+      "type": "object"
+    },
+    "deploy_key": {
+      "additionalProperties": false,
+      "properties": {
+        "public_key": {
+          "description": "один ключ ed25519 без опций",
+          "pattern": "^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5[A-Za-z0-9+/]{48}( [^\\r\\n]{1,100})?$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "public_key"
+      ],
+      "type": "object"
+    },
+    "description": {
+      "maxLength": 200,
+      "type": "string"
+    },
+    "name": {
+      "description": "имя проекта; совпадает с именем системного пользователя",
+      "pattern": "^[a-z][a-z0-9-]{1,30}$",
+      "type": "string"
+    },
+    "registry": {
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "maxLength": 255,
+          "pattern": "^[a-z0-9.-]+(:[0-9]{2,5})?$",
+          "type": "string"
+        },
+        "token_secret": {
+          "description": "ссылка secret://имя; токен только на чтение",
+          "pattern": "^secret://[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        },
+        "username": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "host",
+        "username",
+        "token_secret"
+      ],
+      "type": "object"
+    },
+    "schema": {
+      "description": "версия схемы",
+      "enum": [
+        "lite-deploy/project/v1"
+      ],
+      "type": "string"
+    },
+    "services": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "container_port": {
+            "maximum": 65535,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "database_env": {
+            "description": "переменная со строкой подключения к базе",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "type": "string"
+          },
+          "env": {
+            "additionalProperties": {
+              "maxLength": 1024,
+              "pattern": "^[^\\r\\n]*$",
+              "type": "string"
+            },
+            "maxProperties": 128,
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "health": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "maxLength": 256,
+                "pattern": "^/[^\\s]*$",
+                "type": "string"
+              },
+              "timeout_seconds": {
+                "maximum": 600,
+                "minimum": 5,
+                "type": "integer"
+              },
+              "version_field": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "host_ports": {
+            "description": "порты слотов blue и green",
+            "items": {
+              "maximum": 18999,
+              "minimum": 18000,
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "image": {
+            "description": "образ без тега",
+            "maxLength": 255,
+            "pattern": "^[a-z0-9]+([._-][a-z0-9]+)*(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)+$",
+            "type": "string"
+          },
+          "limits": {
+            "additionalProperties": false,
+            "properties": {
+              "memory": {
+                "pattern": "^[1-9][0-9]*[mg]$",
+                "type": "string"
+              },
+              "pids": {
+                "maximum": 4096,
+                "minimum": 16,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "secrets": {
+            "additionalProperties": {
+              "pattern": "^secret://[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            "maxProperties": 128,
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "image",
+          "container_port"
+        ],
+        "type": "object"
+      },
+      "maxProperties": 8,
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]{0,15}$"
+      },
+      "type": "object"
+    },
+    "sites": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "maxLength": 253,
+            "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$",
+            "type": "string"
+          },
+          "listen_port": {
+            "description": "порт Caddy на 127.0.0.1; если нет, выбирается свободный",
+            "maximum": 18999,
+            "minimum": 18000,
+            "type": "integer"
+          },
+          "max_body": {
+            "pattern": "^[1-9][0-9]*(KB|MB)$",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,15}$",
+            "type": "string"
+          },
+          "publish": {
+            "enum": [
+              "tunnel"
+            ],
+            "type": "string"
+          },
+          "routes": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "max_body": {
+                  "pattern": "^[1-9][0-9]*(KB|MB)$",
+                  "type": "string"
+                },
+                "path": {
+                  "maxLength": 256,
+                  "pattern": "^/[^\\s{}]*$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "max_body"
+              ],
+              "type": "object"
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "service": {
+            "pattern": "^[a-z][a-z0-9-]{0,15}$",
+            "type": "string"
+          },
+          "trusted_proxy": {
+            "enum": [
+              "cloudflare",
+              "none"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "host",
+          "service"
+        ],
+        "type": "object"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema",
+    "name",
+    "services",
+    "sites"
+  ],
+  "title": "Описание проекта lite-deploy",
+  "type": "object"
+}

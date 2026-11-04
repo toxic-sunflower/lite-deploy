@@ -6,3 +6,11 @@ id_*
 *.env.*
 .env*
 secrets*
+
+# сборка Go
+/lite-deploy
+*.test
+*.out
+# исходники пакета internal/secrets это код, не секреты
+!/internal/secrets/
+!/internal/secrets/**
