@@ -1,0 +1,1 @@
+fanvue-games ALL=(root) NOPASSWD: /usr/bin/systemctl reload caddy

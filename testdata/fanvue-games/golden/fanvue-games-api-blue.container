@@ -1,0 +1,25 @@
+[Unit]
+Description=fanvue-games api (слот blue)
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=fanvue-games-api-blue
+Image=localhost/fanvue-games-api:blue
+PublishPort=127.0.0.1:18081:8080
+EnvironmentFile=%h/.config/lite-deploy/env/api.env
+Volume=/var/run/postgresql:/var/run/postgresql
+ReadOnly=true
+Tmpfs=/tmp
+NoNewPrivileges=true
+DropCapability=ALL
+PidsLimit=512
+Memory=768m
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

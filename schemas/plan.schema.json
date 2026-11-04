@@ -1,0 +1,102 @@
+{
+  "$id": "lite-deploy/plan/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "created_at": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "type": "string"
+    },
+    "expires_at": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "type": "string"
+    },
+    "hash": {
+      "description": "sha256 от канонического JSON плана без поля hash",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "id": {
+      "description": "ULID",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "project.create"
+      ],
+      "type": "string"
+    },
+    "project": {
+      "pattern": "^[a-z][a-z0-9-]{1,30}$",
+      "type": "string"
+    },
+    "project_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schema": {
+      "enum": [
+        "lite-deploy/plan/v1"
+      ],
+      "type": "string"
+    },
+    "server_id": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "pattern": "^[a-z_]{1,64}$",
+            "type": "string"
+          },
+          "class": {
+            "enum": [
+              "safe",
+              "normal",
+              "dangerous"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^s[0-9]{2,3}$",
+            "type": "string"
+          },
+          "params": {},
+          "summary": {
+            "maxLength": 500,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "class",
+          "params",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "maxItems": 200,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "created_at",
+    "expires_at",
+    "server_id",
+    "kind",
+    "project",
+    "project_hash",
+    "steps",
+    "hash"
+  ],
+  "title": "План lite-deploy",
+  "type": "object"
+}

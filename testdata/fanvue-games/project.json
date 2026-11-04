@@ -1,0 +1,45 @@
+{
+  "schema": "lite-deploy/project/v1",
+  "name": "fanvue-games",
+  "adopt": true,
+  "database": { "engine": "postgres", "connection_format": "npgsql" },
+  "registry": { "host": "ghcr.io", "username": "toxic-sunflower", "token_secret": "secret://ghcr_read_token" },
+  "services": {
+    "api": {
+      "image": "ghcr.io/toxic-sunflower/fanvue-games-api",
+      "container_port": 8080,
+      "host_ports": [18081, 18082],
+      "limits": { "memory": "768m", "pids": 512 },
+      "env": { "ASPNETCORE_ENVIRONMENT": "Production", "Fanvue__UseMock": "false" },
+      "secrets": {
+        "Auth__SessionSecret": "secret://auth_session_secret",
+        "Fanvue__WebhookSecret": "secret://fanvue_webhook_secret"
+      },
+      "database_env": "ConnectionStrings__Default"
+    },
+    "admin": {
+      "image": "ghcr.io/toxic-sunflower/fanvue-games-admin",
+      "container_port": 8080,
+      "host_ports": [18091, 18092],
+      "limits": { "memory": "384m", "pids": 256 },
+      "env": { "ASPNETCORE_ENVIRONMENT": "Production" },
+      "secrets": {
+        "Admin__Username": "secret://admin_username",
+        "Admin__Password": "secret://admin_password"
+      },
+      "database_env": "ConnectionStrings__Default"
+    }
+  },
+  "sites": [
+    {
+      "name": "main", "host": "fanvue-games.prozorov.site", "service": "api",
+      "listen_port": 18080, "publish": "tunnel", "trusted_proxy": "cloudflare",
+      "max_body": "5MB", "routes": [ { "path": "/api/vault/upload", "max_body": "100MB" } ]
+    },
+    {
+      "name": "admin", "host": "admin.fanvue-games.prozorov.site", "service": "admin",
+      "listen_port": 18090, "publish": "tunnel", "trusted_proxy": "cloudflare", "max_body": "5MB"
+    }
+  ],
+  "deploy_key": { "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDtqJ7zOtqQtYqOo0CpvDXNlMhV3HeJDpjrASKGLWdop github-actions" }
+}

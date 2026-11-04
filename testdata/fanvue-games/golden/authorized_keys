@@ -1,0 +1,1 @@
+command="/usr/local/bin/lite-deploy gate --project fanvue-games",restrict ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDtqJ7zOtqQtYqOo0CpvDXNlMhV3HeJDpjrASKGLWdop lite-deploy:fanvue-games
