@@ -11,8 +11,11 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"syscall"
 	"time"
 )
 
@@ -79,6 +82,22 @@ type FS interface {
 	WriteFile(path string, data []byte, perm fs.FileMode) error
 	MkdirAll(path string, perm fs.FileMode) error
 	ModTime(path string) (time.Time, error)
+	// Stat описывает файл или каталог; для отсутствующего возвращает ошибку, совместимую с fs.ErrNotExist.
+	Stat(path string) (Info, error)
+	// Chown меняет владельца и группу по именам (пустая группа: группа не меняется).
+	Chown(path, owner, group string) error
+	Chmod(path string, perm fs.FileMode) error
+	Remove(path string) error
+	// Append дописывает в файл; если файла нет, создаёт его с правами perm.
+	Append(path string, data []byte, perm fs.FileMode) error
+}
+
+// Info описание записи файловой системы.
+type Info struct {
+	Mode  fs.FileMode // только права доступа
+	IsDir bool
+	Owner string
+	Group string
 }
 
 // OSFS настоящая файловая система.
@@ -155,12 +174,14 @@ type MemFS struct {
 	Perms map[string]fs.FileMode
 	Times map[string]time.Time
 	Dirs  map[string]fs.FileMode
-	Now   func() time.Time
+	// Owners владельцы и группы; нет записи означает root:root. Запись файла сбрасывает владельца, как rename настоящего WriteFile.
+	Owners map[string][2]string
+	Now    func() time.Time
 }
 
 // NewMemFS создаёт пустую MemFS.
 func NewMemFS() *MemFS {
-	return &MemFS{Files: map[string][]byte{}, Perms: map[string]fs.FileMode{}, Times: map[string]time.Time{}, Dirs: map[string]fs.FileMode{}, Now: time.Now}
+	return &MemFS{Files: map[string][]byte{}, Perms: map[string]fs.FileMode{}, Times: map[string]time.Time{}, Dirs: map[string]fs.FileMode{}, Owners: map[string][2]string{}, Now: time.Now}
 }
 
 // WriteFile записывает файл.
@@ -169,12 +190,19 @@ func (m *MemFS) WriteFile(p string, data []byte, perm fs.FileMode) error {
 	m.Files[p] = append([]byte(nil), data...)
 	m.Perms[p] = perm
 	m.Times[p] = m.Now()
+	delete(m.Owners, p)
 	return nil
 }
 
-// MkdirAll запоминает каталог.
+// MkdirAll запоминает каталог и недостающие родительские.
 func (m *MemFS) MkdirAll(p string, perm fs.FileMode) error {
-	m.Dirs[filepath.Clean(p)] = perm
+	p = filepath.Clean(p)
+	m.Dirs[p] = perm
+	for d := filepath.Dir(p); d != "/" && d != "."; d = filepath.Dir(d) {
+		if _, ok := m.Dirs[d]; !ok {
+			m.Dirs[d] = 0o755
+		}
+	}
 	return nil
 }
 
@@ -243,4 +271,133 @@ func (f *FakeRunner) Run(_ context.Context, c Cmd) (Result, error) {
 		return Result{}, fmt.Errorf("FakeRunner: нет обработчика для %s", c.Name)
 	}
 	return f.Handler(c)
+}
+
+// Stat описывает запись.
+func (OSFS) Stat(p string) (Info, error) {
+	st, err := os.Stat(p)
+	if err != nil {
+		return Info{}, err
+	}
+	info := Info{Mode: st.Mode().Perm(), IsDir: st.IsDir()}
+	if sys, ok := st.Sys().(*syscall.Stat_t); ok {
+		info.Owner, info.Group = strconv.FormatUint(uint64(sys.Uid), 10), strconv.FormatUint(uint64(sys.Gid), 10)
+		if u, err := user.LookupId(info.Owner); err == nil {
+			info.Owner = u.Username
+		}
+		if g, err := user.LookupGroupId(info.Group); err == nil {
+			info.Group = g.Name
+		}
+	}
+	return info, nil
+}
+
+// Chown меняет владельца и группу по именам.
+func (OSFS) Chown(p, owner, group string) error {
+	u, err := user.Lookup(owner)
+	if err != nil {
+		return err
+	}
+	uid, _ := strconv.Atoi(u.Uid)
+	gid := -1
+	if group != "" {
+		g, err := user.LookupGroup(group)
+		if err != nil {
+			return err
+		}
+		gid, _ = strconv.Atoi(g.Gid)
+	}
+	return os.Lchown(p, uid, gid)
+}
+
+// Chmod меняет права.
+func (OSFS) Chmod(p string, perm fs.FileMode) error { return os.Chmod(p, perm) }
+
+// Remove удаляет файл или пустой каталог.
+func (OSFS) Remove(p string) error { return os.Remove(p) }
+
+// Append дописывает данные в файл.
+func (OSFS) Append(p string, data []byte, perm fs.FileMode) error {
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, perm)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+// Stat описывает запись.
+func (m *MemFS) Stat(p string) (Info, error) {
+	p = filepath.Clean(p)
+	own := m.Owners[p]
+	if own == [2]string{} {
+		own = [2]string{"root", "root"}
+	}
+	if _, ok := m.Files[p]; ok {
+		return Info{Mode: m.Perms[p], Owner: own[0], Group: own[1]}, nil
+	}
+	if perm, ok := m.Dirs[p]; ok {
+		return Info{Mode: perm, IsDir: true, Owner: own[0], Group: own[1]}, nil
+	}
+	return Info{}, &fs.PathError{Op: "stat", Path: p, Err: fs.ErrNotExist}
+}
+
+// Chown запоминает владельца.
+func (m *MemFS) Chown(p, owner, group string) error {
+	p = filepath.Clean(p)
+	if _, err := m.Stat(p); err != nil {
+		return err
+	}
+	cur := m.Owners[p]
+	if cur == [2]string{} {
+		cur = [2]string{"root", "root"}
+	}
+	cur[0] = owner
+	if group != "" {
+		cur[1] = group
+	}
+	m.Owners[p] = cur
+	return nil
+}
+
+// Chmod меняет права.
+func (m *MemFS) Chmod(p string, perm fs.FileMode) error {
+	p = filepath.Clean(p)
+	if _, ok := m.Files[p]; ok {
+		m.Perms[p] = perm
+		return nil
+	}
+	if _, ok := m.Dirs[p]; ok {
+		m.Dirs[p] = perm
+		return nil
+	}
+	return &fs.PathError{Op: "chmod", Path: p, Err: fs.ErrNotExist}
+}
+
+// Remove удаляет запись.
+func (m *MemFS) Remove(p string) error {
+	p = filepath.Clean(p)
+	if _, err := m.Stat(p); err != nil {
+		return err
+	}
+	delete(m.Files, p)
+	delete(m.Perms, p)
+	delete(m.Times, p)
+	delete(m.Dirs, p)
+	delete(m.Owners, p)
+	return nil
+}
+
+// Append дописывает данные.
+func (m *MemFS) Append(p string, data []byte, perm fs.FileMode) error {
+	p = filepath.Clean(p)
+	if old, ok := m.Files[p]; ok {
+		m.Files[p] = append(append([]byte(nil), old...), data...)
+		m.Times[p] = m.Now()
+		return nil
+	}
+	return m.WriteFile(p, data, perm)
 }
