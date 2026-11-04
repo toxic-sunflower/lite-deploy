@@ -31,7 +31,7 @@ type world struct {
 }
 
 func newWorld(t *testing.T) *world {
-	w := &world{t: t, fsys: host.NewMemFS(), users: map[string]bool{}, validOK: true}
+	w := &world{t: t, fsys: host.NewMemFS(), users: map[string]bool{}, validOK: true, podmanVer: "5.0.3"}
 	w.fsys.Now = func() time.Time { return now }
 	f := w.fsys
 	_ = f.WriteFile(OSRelease, []byte("ID=ubuntu\nVERSION_ID=\"24.04\"\n"), 0o644)
@@ -78,7 +78,7 @@ func (w *world) handle(c host.Cmd) (host.Result, error) {
 		}
 		return out("loginctl 255")
 	case "podman":
-		return out("podman version 5.0.3")
+		return out("podman version " + w.podmanVer)
 	case "caddy":
 		return out("v2.8.4")
 	case "visudo":
@@ -493,4 +493,25 @@ func cipherOf(p []byte) string {
 	i := strings.Index(s, `"ciphertext":"`) + len(`"ciphertext":"`)
 	j := strings.Index(s[i:], `"`)
 	return s[i : i+j]
+}
+
+func TestPodmanVersionPolicy(t *testing.T) {
+	cases := []struct {
+		ver        string
+		wantFail   bool
+		wantWarned bool
+	}{{"5.7.0", false, false}, {"4.9.3", false, true}, {"4.4.1", false, true}, {"4.3.1", true, false}, {"3.4.4", true, false}}
+	for _, c := range cases {
+		w := newWorld(t)
+		w.podmanVer = c.ver
+		pl := w.buildPlan(false, nil)
+		rep := w.apply(&plan.Plan{ID: pl.ID, Hash: pl.Hash, Project: pl.Project, Steps: stepsOnly(pl, "verify_host")}, true)
+		s := rep.Steps[0]
+		if failed := s.State == StateWouldFail; failed != c.wantFail {
+			t.Errorf("podman %s: состояние %s (%s)", c.ver, s.State, s.Error)
+		}
+		if warned := strings.Contains(s.Detail, "проверено только на 5.x"); warned != c.wantWarned {
+			t.Errorf("podman %s: предупреждение=%v, detail %q", c.ver, warned, s.Detail)
+		}
+	}
 }

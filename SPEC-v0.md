@@ -249,7 +249,7 @@ lite-deploy/
 
 Таблица: имя, параметры (все обязательны, если не сказано иное), что делает, повторный запуск.
 
-**`verify_host`**: `{}`. Только чтение. Проверяет: Ubuntu 24.04 или новее; установлены `podman` (5.x), `caddy`, `postgresql` (если в плане есть база), `loginctl`, `visudo`; `ufw` активен (предупреждение, не ошибка); главный `Caddyfile` содержит `import /etc/caddy/conf.d/*`; существует `/etc/caddy/conf.d`; Caddy слушает API на `localhost:2019` (нужен для reload, `DEPLOY-PATTERN.md`). Ошибка: `precondition_failed` со списком.
+**`verify_host`**: `{}`. Только чтение. Проверяет: Ubuntu 24.04 или новее; установлены `podman` (4.4 или новее; ниже 5.0 предупреждение «проверено только на 5.x»), `caddy`, `postgresql` (если в плане есть база), `loginctl`, `visudo`; `ufw` активен (предупреждение, не ошибка); главный `Caddyfile` содержит `import /etc/caddy/conf.d/*`; существует `/etc/caddy/conf.d`; Caddy слушает API на `localhost:2019` (нужен для reload, `DEPLOY-PATTERN.md`). Ошибка: `precondition_failed` со списком.
 
 **`create_project_user`**: `{project}`.
 1. Пользователь `U` без пароля и без `sudo`: `adduser --disabled-password --gecos "" U` (нет, если есть).
