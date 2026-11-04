@@ -98,7 +98,7 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 		}
 	}
 
-	projHash, err := projectHash(p)
+	projHash, err := ProjectHash(p)
 	if err != nil {
 		return nil, &BuildError{Code: CodePrecondition, Message: err.Error()}
 	}
@@ -216,7 +216,8 @@ func (b *builder) add(action string, params any, summary string) {
 	b.steps = append(b.steps, Step{ID: fmt.Sprintf("s%02d", len(b.steps)+1), Action: action, Class: def.Class, Params: raw, Summary: summary})
 }
 
-func projectHash(p *project.Project) (string, error) {
+// ProjectHash хэш канонического описания проекта.
+func ProjectHash(p *project.Project) (string, error) {
 	c, err := CanonicalValue(p)
 	if err != nil {
 		return "", err

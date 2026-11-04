@@ -24,7 +24,12 @@ func testEnv(t *testing.T) (Env, *bytes.Buffer, *bytes.Buffer) {
 	m.Files["/etc/machine-id"] = []byte("test-machine\n")
 	m.Files["/etc/passwd"] = []byte("root:x:0:0::/root:/bin/bash\n")
 	var out, errb bytes.Buffer
-	return Env{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errb, FS: m, Paths: plan.DefaultPaths(), Now: func() time.Time { return now }, IsRoot: func() bool { return true }}, &out, &errb
+	return Env{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errb, FS: m, Paths: plan.DefaultPaths(), Now: func() time.Time { return now }, IsRoot: func() bool { return true },
+		Runner: &host.FakeRunner{Handler: func(host.Cmd) (host.Result, error) {
+			return host.Result{ExitCode: 127, Stderr: []byte("not found")}, nil
+		}},
+		HTTP:        &host.FakeHTTP{Handler: func(string, string) (host.HTTPResponse, error) { return host.HTTPResponse{}, os.ErrNotExist }},
+		Interactive: func() bool { return false }}, &out, &errb
 }
 
 func run(t *testing.T, env Env, args ...string) int { t.Helper(); return RunEnv(args, env) }
@@ -131,11 +136,29 @@ func TestPlanThenApplyDryRun(t *testing.T) {
 	if data["dry_run"] != true || len(data["steps"].([]any)) == 0 || data["plan_hash"] == "" {
 		t.Fatalf("%v", data)
 	}
+	// на «сервере» нет ни podman, ни caddy: dry-run сообщает would_fail и не меняет систему
+	first := data["steps"].([]any)[0].(map[string]any)
+	if first["state"] != "would_fail" || len(e.Warnings) == 0 || e.Warnings[0].Code != "would_fail" {
+		t.Fatalf("verify_host должен дать would_fail: %v %v", first, e.Warnings)
+	}
 
-	// без --dry-run применение ещё не реализовано
+	// без --yes и без терминала применение не начинается
 	env, out, _ = testEnv(t)
-	if c := run(t, env, "apply", planFile, "--json"); c != 1 || decode(t, out).Error.Code != "not_implemented" {
-		t.Fatalf("apply без --dry-run: %d %s", c, out.String())
+	if c := run(t, env, "apply", planFile, "--json"); c != 4 || decode(t, out).Error.Code != "confirmation_required" {
+		t.Fatalf("apply без --yes: %d %s", c, out.String())
+	}
+	// не root
+	env, out, _ = testEnv(t)
+	env.IsRoot = func() bool { return false }
+	if c := run(t, env, "apply", planFile, "--dry-run", "--json"); c != 4 || decode(t, out).Error.Code != "permission_denied" {
+		t.Fatalf("не root: %d %s", c, out.String())
+	}
+	// первая же ошибка шага: step_failed, остальные пропущены
+	env, out, _ = testEnv(t)
+	if c := run(t, env, "apply", planFile, "--yes", "--json"); c != 5 {
+		t.Fatalf("apply --yes: %d %s", c, out.String())
+	} else if e := decode(t, out); e.Error.Code != "step_failed" || len(e.Error.Details) != 1 {
+		t.Fatalf("%+v", e.Error)
 	}
 
 	// план для другого сервера
@@ -225,7 +248,7 @@ func TestUsageAndUnimplemented(t *testing.T) {
 		{[]string{"project", "bogus"}, 2, "usage"},
 		{[]string{"project", "validate"}, 2, "usage"},
 		{[]string{"apply"}, 2, "usage"},
-		{[]string{"project", "create", "x"}, 1, "not_implemented"},
+		{[]string{"project", "create"}, 2, "usage"},
 		{[]string{"deploy", "p", "x"}, 1, "not_implemented"},
 		{[]string{"rollback", "p"}, 1, "not_implemented"},
 		{[]string{"status"}, 1, "not_implemented"},

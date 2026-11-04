@@ -12,7 +12,7 @@
 | `cmd/`, `internal/` | Код (Go): `project`, `plan`, `actions`, `render`, `host`, `deploy` (пока разбор привратника), `cli`, `schema`, `secrets` (age, хранилище), `config`, `lint` (проверки правил репозитория) |
 | `schemas/` | JSON Schema, генерируются из Go-типов (`go test ./internal/cli -update`) |
 | `testdata/fanvue-games/` | `project.json` и golden-файлы юнитов, сайтов, sudoers (`go test ./internal/render -update`) |
-| `DECISIONS.md` | Что решили, почему, статус (D-01…D-52) |
+| `DECISIONS.md` | Что решили, почему, статус (D-01…D-56) |
 | `PLAN.md` | Этот файл: очередь сессий |
 | `COMPARISON-PLAN.md` | План сравнения с аналогами (выполнен частично) |
 | `WALKTHROUGH.md`, `DEPLOY-PATTERN.md` | Ручной проход и схема деплоя, эталон поведения |
@@ -28,7 +28,7 @@
 6. Решения не пересматривать без причины: они в `DECISIONS.md`. Если что-то нужно изменить, предложить изменение и записать новое решение.
 7. В конце: обновить файлы, закоммитить, запушить, написать итог в три-пять строк.
 
-Перед S4: подтвердить предложенные D-48…D-52. Проверки перед пушем: `go vet ./...`, `go test -race ./...`, `golangci-lint run ./...`.
+Проверки перед пушем: `go vet ./...`, `go test -race ./...`, `golangci-lint run ./...`.
 
 Заготовка первого сообщения для новой сессии:
 
@@ -66,6 +66,8 @@
 - Не делаем: применение плана.
 
 ### S4. Применение плана (режим А), команда `project create`
+- Сделано (2026-11-04): пакет `internal/executor` с обработчиками всех 14 действий, `apply` и `apply --dry-run` (`would_change`/`unchanged`/`would_fail`), `project create`, журнал, `adopt`, откат файлов Caddy при неудачной проверке; 5 сценариев на подменах (с нуля, повтор без изменений, остановка на ошибке, adopt, утечки секретов). Решения D-53…D-56.
+- Осталось: прогнать на тестовом сервере (с нуля, повторный `apply` = `unchanged`, `adopt` на копии боевой настройки FanVue Games) и поправить расхождения. Особенно проверить: `systemd-run --machine`, формат `list-unit-files` для Quadlet, `runuser -u postgres psql`, `visudo -cf`. Не сделано: предупреждение о правилах `pg_hba` с `all` выше общего (4.3, `provision_postgres`), квота `apply_per_hour`.
 - Старт: S3 даёт `plan.Build/Verify`, `actions.Decode`, `render.*`, `host.Runner`/`FS` (+`FakeRunner`, `MemFS` для тестов). В S4 добавить `Apply`/`DryRun` на каждое действие, `config.json`, `init` (ключ и каталоги), заменить `pending` в `apply --dry-run` на `would_change`/`unchanged`.
 - Цель: исполнитель и плагины `base` (проверки), `postgres` (роль и база через unix-сокет), `caddy` (файлы сайта, проверка от пользователя `caddy`, reload), движок `podman` (пользователь, linger, юниты), `lite-deploy apply plan.json`, режим `adopt`.
 - Вход: S3, готовые скрипты `01..04`, `verify.sh`.
@@ -120,6 +122,7 @@
 | S1 | выполнена (2026-11-03) |
 | S2 | выполнена (2026-11-03), `SPEC-v0.md`, D-39…D-46 приняты |
 | S3 | выполнена (2026-11-03) |
-| S4 – S11 | не начаты, следующая S4 |
+| S4 | код и тесты на подменах готовы (2026-11-04); **осталась проверка на тестовом сервере** (D-53) |
+| S5 – S11 | не начаты, следующая S5 |
 | C1 | частично (Coolify, Dokploy, Kamal: основное) |
 | C4 | не сделана |

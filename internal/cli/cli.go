@@ -2,6 +2,9 @@
 package cli
 
 import (
+	"bufio"
+	"context"
+	"crypto/rand"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -11,11 +14,15 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/toxic-sunflower/lite-deploy/internal/config"
+	"github.com/toxic-sunflower/lite-deploy/internal/executor"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/plan"
 	"github.com/toxic-sunflower/lite-deploy/internal/project"
 	"github.com/toxic-sunflower/lite-deploy/internal/schema"
+	"github.com/toxic-sunflower/lite-deploy/internal/secrets"
 )
 
 // Версия и идентификаторы схем.
@@ -37,11 +44,19 @@ type Env struct {
 	KeyPath, PubPath, SecretsDir string
 	IsRoot                       func() bool
 	Now                          func() time.Time
+	// для apply и project create: запуск команд, HTTP-проверки, случайность, признак интерактивного терминала, uid
+	Runner      host.Runner
+	HTTP        host.HTTPClient
+	Rand        io.Reader
+	Interactive func() bool
+	UID         int
 }
 
 // Run выполняет команду в настоящем окружении и возвращает код выхода.
 func Run(args []string, stdout, stderr io.Writer) int {
-	return RunEnv(args, Env{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr, FS: host.OSFS{}, Paths: plan.DefaultPaths(), Config: config.DefaultPath, Now: time.Now, IsRoot: func() bool { return os.Geteuid() == 0 }})
+	return RunEnv(args, Env{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr, FS: host.OSFS{}, Paths: plan.DefaultPaths(), Config: config.DefaultPath, Now: time.Now, IsRoot: func() bool { return os.Geteuid() == 0 },
+		Runner: host.ExecRunner{}, HTTP: host.NetHTTP{}, Rand: rand.Reader, UID: os.Geteuid(),
+		Interactive: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }}) //nolint:gosec // дескриптор терминала помещается в int
 }
 
 // result итог команды: данные или ошибка, плюс текст для людей.
@@ -114,7 +129,7 @@ func dispatch(args []string, env Env) result {
 		case "list":
 			return cmdList(env)
 		case "create":
-			return fail("project.create", CodeNotImplemented, "project create появится в S4 (применение плана)")
+			return cmdProjectCreate(args[2:], env)
 		}
 		return fail("project", CodeUsage, "неизвестная подкоманда project: "+args[1])
 	case "apply":
@@ -245,20 +260,29 @@ type stepView struct {
 	Summary string `json:"summary,omitempty"`
 }
 
-func cmdPlan(args []string, env Env) result {
-	p, extra, bad := loadProject(env, "project.plan", args)
+// prepared построенный план и всё, что нужно для его применения.
+type prepared struct {
+	pl      *plan.Plan
+	project *project.Project
+	out     string
+}
+
+// preparePlan разбирает аргументы `project plan` и `project create` и строит план (без записи на диск).
+func preparePlan(command string, args []string, env Env) (*prepared, *result) {
+	p, extra, bad := loadProject(env, command, args)
 	if bad != nil {
-		return *bad
+		return nil, bad
 	}
 	out, rotate, cts := extra[0], extra[1] == "true", extra[2:]
 
 	st, err := plan.LoadState(env.FS, env.Paths)
 	if err != nil {
-		return fail("project.plan", plan.CodePrecondition, err.Error())
+		r := fail(command, plan.CodePrecondition, err.Error())
+		return nil, &r
 	}
-	cfg, badCfg := loadConfig(env, "project.plan")
+	cfg, badCfg := loadConfig(env, command)
 	if badCfg != nil {
-		return *badCfg
+		return nil, badCfg
 	}
 	st.Now = env.Now()
 	st.TTL = time.Duration(cfg.Limits.PlanTTLHours) * time.Hour
@@ -269,19 +293,31 @@ func cmdPlan(args []string, env Env) result {
 	for _, c := range cts {
 		name, path, ok := strings.Cut(c, "=")
 		if !ok || name == "" || path == "" {
-			return fail("project.plan", CodeUsage, "--ciphertext ожидает имя=файл")
+			r := fail(command, CodeUsage, "--ciphertext ожидает имя=файл")
+			return nil, &r
 		}
 		b, err := os.ReadFile(path)
 		if err != nil {
-			return fail("project.plan", CodeIO, "не удалось прочитать шифртекст "+name+": "+err.Error())
+			r := fail(command, CodeIO, "не удалось прочитать шифртекст "+name+": "+err.Error())
+			return nil, &r
 		}
 		st.Ciphertexts[name] = strings.TrimSpace(string(b))
 	}
 
 	pl, berr := plan.Build(p, st)
 	if berr != nil {
-		return result{command: "project.plan", err: &ErrorBody{Code: berr.Code, Message: berr.Message, Details: berr.Issues, Hint: berr.Hint}}
+		r := result{command: command, err: &ErrorBody{Code: berr.Code, Message: berr.Message, Details: berr.Issues, Hint: berr.Hint}}
+		return nil, &r
 	}
+	return &prepared{pl: pl, project: p, out: out}, nil
+}
+
+func cmdPlan(args []string, env Env) result {
+	pr, bad := preparePlan("project.plan", args, env)
+	if bad != nil {
+		return *bad
+	}
+	pl, out := pr.pl, pr.out
 	if out != "" {
 		b, _ := json.MarshalIndent(pl, "", "  ")
 		if err := os.WriteFile(out, append(b, '\n'), 0o600); err != nil {
@@ -304,40 +340,155 @@ func cmdPlan(args []string, env Env) result {
 func cmdApply(args []string, env Env) result {
 	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
 	dry := fs.Bool("dry-run", false, "")
-	fs.Bool("yes", false, "")
+	yes := fs.Bool("yes", false, "")
+	projFile := fs.String("project-file", "", "")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 1 {
-		return fail("apply", CodeUsage, "использование: lite-deploy apply <plan.json|-> [--dry-run] [--yes]")
+		return fail("apply", CodeUsage, "использование: lite-deploy apply <plan.json|-> [--dry-run] [--yes] [--project-file project.json]")
 	}
-	if !*dry {
-		return fail("apply", CodeNotImplemented, "применение плана появится в S4; сейчас доступен только --dry-run (проверка плана)")
+	if !env.root() {
+		return fail("apply", "permission_denied", "apply выполняется от root: sudo lite-deploy apply …")
 	}
 	data, err := readInput(env, pos[0])
 	if err != nil {
 		return fail("apply", CodeIO, "не удалось прочитать план: "+err.Error())
 	}
+	var projJSON []byte
+	if *projFile != "" {
+		if projJSON, err = os.ReadFile(*projFile); err != nil {
+			return fail("apply", CodeIO, "не удалось прочитать описание проекта: "+err.Error())
+		}
+	}
+	return applyPlan("apply", env, data, *dry, *yes, projJSON)
+}
+
+// applyPlan общий путь apply и project create: проверка плана, dry-run, подтверждение, применение.
+func applyPlan(command string, env Env, data []byte, dry, yes bool, projJSON []byte) result {
 	st, err := plan.LoadState(env.FS, env.Paths)
 	if err != nil {
-		return fail("apply", plan.CodePrecondition, err.Error())
+		return fail(command, plan.CodePrecondition, err.Error())
 	}
-	cfg, badCfg := loadConfig(env, "apply")
+	cfg, badCfg := loadConfig(env, command)
 	if badCfg != nil {
 		return *badCfg
 	}
 	lim := plan.DefaultLimits()
-	lim.PlanBytes, lim.PlanSteps = cfg.Limits.PlanBytes, cfg.Limits.PlanSteps
+	lim.PlanBytes, lim.PlanSteps, lim.PlanTTLHours = cfg.Limits.PlanBytes, cfg.Limits.PlanSteps, cfg.Limits.PlanTTLHours
 	pl, verr := plan.Verify(data, plan.VerifyOptions{Now: env.Now(), ServerID: st.ServerID, Limits: lim})
 	if verr != nil {
-		return result{command: "apply", err: &ErrorBody{Code: verr.Code, Message: verr.Message, Details: verr.Issues}}
+		return result{command: command, err: &ErrorBody{Code: verr.Code, Message: verr.Message, Details: verr.Issues}}
 	}
-	steps := make([]stepView, 0, len(pl.Steps))
+	if len(projJSON) > 0 {
+		// Копия описания в /etc/lite-deploy/projects пишется только если оно совпадает с планом.
+		if p, issues := project.Parse(projJSON); len(issues) == 0 {
+			if h, herr := plan.ProjectHash(p); herr != nil || h != pl.ProjectHash {
+				projJSON = nil
+			}
+		} else {
+			projJSON = nil
+		}
+	}
+	ex := executor.Env{Runner: env.Runner, FS: env.FS, HTTP: env.HTTP, Secrets: secrets.NewStoreAt(env.FS, env.secretsDir()),
+		KeyPath: env.keyPath(), StateDir: env.Paths.StateDir, Rand: env.Rand, Now: env.Now, UID: env.UID, ProjectJSON: projJSON}
+	ctx := context.Background()
+
+	if !dry {
+		if !yes {
+			if env.Interactive == nil || !env.Interactive() {
+				return fail(command, "confirmation_required", "без терминала применение требует флага --yes")
+			}
+			preview, err := executor.Apply(ctx, ex, pl, true)
+			if err != nil {
+				return fail(command, CodeInternal, err.Error())
+			}
+			_, _ = fmt.Fprint(env.Stderr, renderReport(preview, "Предпросмотр (ничего не изменено):"))
+			_, _ = fmt.Fprint(env.Stderr, "\nВведите yes, чтобы применить: ")
+			line, _ := bufio.NewReader(env.Stdin).ReadString('\n')
+			if strings.TrimSpace(line) != "yes" {
+				return fail(command, "confirmation_required", "применение отменено: подтверждение не получено")
+			}
+		}
+	}
+	rep, err := executor.Apply(ctx, ex, pl, dry)
+	if err != nil {
+		return fail(command, plan.CodePrecondition, err.Error())
+	}
+	text := renderReport(rep, "")
+	data2 := map[string]any{"plan_id": rep.PlanID, "plan_hash": rep.PlanHash, "dry_run": dry, "steps": rep.Steps}
+	if rep.Failed != "" && !dry {
+		details := []schema.Issue{}
+		for _, s := range rep.Steps {
+			if s.State == executor.StateFailed {
+				details = append(details, schema.Issue{Path: "/steps/" + s.ID, Code: s.Action, Message: s.Error})
+			}
+		}
+		return result{command: command, text: text, err: &ErrorBody{Code: "step_failed", Message: "шаг " + rep.Failed + " завершился ошибкой; уже выполненные шаги остались, повторный apply продолжит", Details: details,
+			Hint: "исправьте причину и запустите apply с тем же планом (пока он не истёк)"}, data: data2}
+	}
+	r := result{command: command, data: data2, text: text}
+	if rep.Failed != "" {
+		r.warn = append(r.warn, Warning{Code: "would_fail", Message: "шаг " + rep.Failed + " завершился бы ошибкой"})
+	}
+	return r
+}
+
+func renderReport(rep *executor.Report, title string) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "План %s проверен: хэш %s, шагов %d.\nСравнение с системой (would_change/unchanged) добавит S4; здесь шаги только проверены.\n\n", pl.ID, pl.Hash, len(pl.Steps))
-	for _, s := range pl.Steps {
-		steps = append(steps, stepView{ID: s.ID, Action: s.Action, State: "pending", Summary: s.Summary})
-		fmt.Fprintf(&sb, "  %s  %-20s %s\n", s.ID, s.Action, s.Summary)
+	if title != "" {
+		sb.WriteString(title + "\n")
 	}
-	return result{command: "apply", data: map[string]any{"plan_id": pl.ID, "plan_hash": pl.Hash, "dry_run": true, "steps": steps}, text: sb.String()}
+	fmt.Fprintf(&sb, "План %s, хэш %s\n\n", rep.PlanID, rep.PlanHash)
+	for _, s := range rep.Steps {
+		fmt.Fprintf(&sb, "  %s  %-20s %-13s %s\n", s.ID, s.Action, s.State, joinNonEmpty(s.Detail, s.Error))
+	}
+	return sb.String()
+}
+
+func joinNonEmpty(a, b string) string {
+	switch {
+	case a != "" && b != "":
+		return a + "; " + b
+	case a != "":
+		return a
+	}
+	return b
+}
+
+// cmdProjectCreate: plan, dry-run и apply одной командой (SPEC-v0.md, 6.1).
+func cmdProjectCreate(args []string, env Env) result {
+	fs := flag.NewFlagSet("project.create", flag.ContinueOnError)
+	yes := fs.Bool("yes", false, "")
+	fs.String("out", "", "")
+	fs.Bool("rotate-password", false, "")
+	var cts listFlag
+	fs.Var(&cts, "ciphertext", "")
+	pos, err := parseArgs(fs, args)
+	if err != nil || len(pos) != 1 {
+		return fail("project.create", CodeUsage, "использование: lite-deploy project create <project.json|-> [--yes] [--ciphertext имя=файл] [--rotate-password]")
+	}
+	if !env.root() {
+		return fail("project.create", "permission_denied", "project create выполняется от root: sudo lite-deploy project create …")
+	}
+	// stdin читается один раз: "-" нельзя использовать и для описания, и для подтверждения
+	var rest []string
+	for _, a := range args {
+		if a != "--yes" {
+			rest = append(rest, a)
+		}
+	}
+	pr, bad := preparePlan("project.create", rest, env)
+	if bad != nil {
+		return *bad
+	}
+	planBytes, err := json.Marshal(pr.pl)
+	if err != nil {
+		return fail("project.create", CodeInternal, err.Error())
+	}
+	var projJSON []byte
+	if pos[0] != "-" {
+		projJSON, _ = os.ReadFile(pos[0])
+	}
+	return applyPlan("project.create", env, planBytes, false, *yes, projJSON)
 }
 
 func cmdList(env Env) result {
