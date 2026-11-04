@@ -41,8 +41,14 @@ func verifyHost(ctx context.Context, r *run, _ any) (outcome, error) {
 			continue
 		}
 		if t[0] == "podman" {
-			if m := regexp.MustCompile(`version (\d+)\.`).FindStringSubmatch(string(res.Stdout)); m == nil || atoi(m[1]) < 5 {
-				problems = append(problems, "нужен podman 5.x: "+strings.TrimSpace(string(res.Stdout)))
+			m := regexp.MustCompile(`version (\d+)\.(\d+)`).FindStringSubmatch(string(res.Stdout))
+			switch {
+			case m == nil:
+				problems = append(problems, "не удалось определить версию podman: "+strings.TrimSpace(string(res.Stdout)))
+			case atoi(m[1]) < 4 || atoi(m[1]) == 4 && atoi(m[2]) < 4:
+				problems = append(problems, "нужен podman 4.4 или новее (Quadlet): "+strings.TrimSpace(string(res.Stdout)))
+			case atoi(m[1]) < 5:
+				warns = append(warns, "podman "+m[1]+"."+m[2]+": проверено только на 5.x")
 			}
 		}
 	}

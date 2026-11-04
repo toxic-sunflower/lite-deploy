@@ -10,7 +10,7 @@
 |---|---|---|
 | systemd включён | `cat /etc/wsl.conf` содержит `[boot]` и `systemd=true`; `systemctl is-system-running` отвечает `running` или `degraded` | добавить в `/etc/wsl.conf`, затем в PowerShell `wsl --shutdown` |
 | Ubuntu 24.04+ | `lsb_release -rs` | |
-| podman 5.x | `podman --version` | в Ubuntu 24.04 из репозитория 4.9: `verify_host` упадёт (см. вопрос в сессии) |
+| podman 4.4 или новее | `podman --version` | 4.9 из репозитория Ubuntu 24.04 подходит: будет только предупреждение «проверено только на 5.x». Если юнит Quadlet окажется несовместим, это проявится на шаге `reload_user_units`: пришлите вывод |
 | Caddy с API на `localhost:2019` | `curl -s localhost:2019/config/ \| head -c 50` | `sudo bash install.sh --only caddy` |
 | `Caddyfile` с импортом | `grep conf.d /etc/caddy/Caddyfile` показывает `import /etc/caddy/conf.d/*.caddy` | то же |
 | PostgreSQL | `sudo -u postgres psql -c 'select 1'` | `sudo bash install.sh --only postgres` |
