@@ -66,7 +66,7 @@
 - Не делаем: применение плана.
 
 ### S4. Применение плана (режим А), команда `project create`
-- Старт: S3 даёт `plan.Build/Verify`, `actions.Decode`, `render.*`, `host.Runner`/`FS` (+`FakeRunner`, `MemFS` для тестов). В S4 добавить `Apply`/`DryRun` на каждое действие, `config.json`, `init` (ключ и каталоги), заменить `pending` в `apply --dry-run` на `would_change`/`unchanged`.
+- Старт: S3 даёт `plan.Build/Verify`, `actions.Decode`, `render.*`, `host.Runner`/`FS` (+`FakeRunner`, `MemFS` для тестов). В S4 добавить `Apply`/`DryRun` на каждое действие (`config.json`, `init`, `secret *` и `secrets.Store` уже готовы в S3; `set_secret` расшифровывает ключом `/etc/lite-deploy/exec.age` и пишет в `Store`), заменить `pending` в `apply --dry-run` на `would_change`/`unchanged`.
 - Цель: исполнитель и плагины `base` (проверки), `postgres` (роль и база через unix-сокет), `caddy` (файлы сайта, проверка от пользователя `caddy`, reload), движок `podman` (пользователь, linger, юниты), `lite-deploy apply plan.json`, режим `adopt`.
 - Вход: S3, готовые скрипты `01..04`, `verify.sh`.
 - Результат: работающая команда на тестовом сервере (отдельный сервер или WSL, не боевой).
