@@ -19,7 +19,6 @@ curl -fsSL https://toxic-sunflower.github.io/lite-deploy/install.sh | sh
 
 ### Выпуск релиза (владельцу)
 
-1. Один раз: `minisign -G -p minisign.pub -s minisign.key`; закрытый ключ не коммитить, положить в секреты репозитория `MINISIGN_KEY` (содержимое файла) и `MINISIGN_PASSWORD`.
-2. Вписать открытый ключ (вторая строка `minisign.pub`) в `MINISIGN_PUBKEY` в `site/install.sh`, закоммитить `minisign.pub`.
+1. Ключ создан (без пароля): закрытый `~/.config/lite-deploy/minisign.key` (не коммитить, копия в секрете репозитория `MINISIGN_KEY`), открытый `minisign.pub` в репозитории и в `MINISIGN_PUBKEY` в `site/install.sh`. Сменить: `minisign -G -W -p minisign.pub -s minisign.key -f`, затем обновить секрет и ключ в скрипте.
 3. В настройках репозитория включить Pages (источник: GitHub Actions). Репозиторий должен быть публичным, иначе скачивание без входа не работает.
 4. `git tag v0.1.0 && git push origin v0.1.0`.
