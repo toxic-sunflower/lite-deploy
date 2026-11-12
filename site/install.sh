@@ -2,8 +2,8 @@
 # Установщик lite-deploy: скачивает бинарник из GitHub Releases, проверяет SHA256 и подпись minisign,
 # кладёт в /usr/local/bin. Ничего больше на сервере не меняет.
 #
-#   curl -fsSL https://toxic-sunflower.github.io/lite-deploy/install.sh | sh
-#   curl -fsSL https://toxic-sunflower.github.io/lite-deploy/install.sh | sh -s -- --version v0.1.0
+#   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sh
+#   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sh -s -- --version v0.1.0
 #
 # Параметры (или переменные окружения):
 #   --version <тег>       LITE_DEPLOY_VERSION   версия (по умолчанию последняя)

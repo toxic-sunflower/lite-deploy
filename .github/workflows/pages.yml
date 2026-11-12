@@ -1,6 +1,6 @@
 name: pages
 
-# Отдаёт site/install.sh по адресу https://toxic-sunflower.github.io/lite-deploy/install.sh
+# Отдаёт site/install.sh по адресу https://lite-deploy.prozorov.me/install.sh
 on:
   push:
     branches: [main]
