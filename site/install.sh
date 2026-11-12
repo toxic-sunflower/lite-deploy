@@ -1,6 +1,6 @@
 #!/bin/sh
 # Установщик lite-deploy: скачивает бинарник из GitHub Releases, проверяет SHA256 и подпись minisign,
-# кладёт в /usr/local/bin. Ничего больше на сервере не меняет.
+# кладёт в /usr/local/bin. Если нет minisign, ставит его через apt (Debian/Ubuntu). Больше ничего не меняет.
 #
 #   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sh
 #   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sh -s -- --version v0.1.0
@@ -66,7 +66,18 @@ command -v sha256sum >/dev/null 2>&1 || die "нужен sha256sum"
 
 if [ "$skip_sig" != 1 ]; then
   [ "$MINISIGN_PUBKEY" != "REPLACE_WITH_MINISIGN_PUBLIC_KEY" ] || die "в установщик не вписан ключ подписи (проблема релиза, сообщите автору)"
-  command -v minisign >/dev/null 2>&1 || die "нужен minisign для проверки подписи: sudo apt install minisign (или --skip-sig, только SHA256, небезопасно)"
+  if ! command -v minisign >/dev/null 2>&1; then
+    command -v apt-get >/dev/null 2>&1 || die "нужен minisign для проверки подписи, поставьте его вручную (или --skip-sig, только SHA256, небезопасно)"
+    say "Ставлю minisign для проверки подписи (apt)..."
+    if [ "$(id -u)" -eq 0 ]; then
+      apt-get update -qq && apt-get install -y -qq minisign >/dev/null
+    elif command -v sudo >/dev/null 2>&1; then
+      sudo apt-get update -qq && sudo apt-get install -y -qq minisign >/dev/null
+    else
+      die "для установки minisign нужен root или sudo (или поставьте minisign вручную)"
+    fi
+    command -v minisign >/dev/null 2>&1 || die "не удалось поставить minisign: поставьте вручную (или --skip-sig, только SHA256, небезопасно)"
+  fi
 else
   say "ВНИМАНИЕ: подпись не проверяется, только SHA256 с того же адреса."
 fi
