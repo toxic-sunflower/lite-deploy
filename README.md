@@ -34,3 +34,7 @@ lite-deploy version
 ```
 
 Скрипт короткий, перед запуском его можно прочитать: [site/install.sh](site/install.sh).
+
+## Лицензия
+
+MIT, см. [LICENSE](LICENSE).
