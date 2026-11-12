@@ -14,7 +14,7 @@
 
 ```sh
 sudo apt install minisign
-curl -fsSL https://toxic-sunflower.github.io/lite-deploy/install.sh | sh
+curl -fsSL https://lite-deploy.prozorov.me/install.sh | sh
 ```
 
 Команда каждый раз берёт **самую свежую выпущенную версию**, номер указывать не нужно. Когда выйдет новая версия, повторный запуск этой же команды обновит `lite-deploy`.
@@ -24,7 +24,7 @@ curl -fsSL https://toxic-sunflower.github.io/lite-deploy/install.sh | sh
 Нужна не последняя, а конкретная версия (например, чтобы на всех серверах стояла одна и та же)? Укажите её после `--version`, номера есть на странице [Releases](https://github.com/toxic-sunflower/lite-deploy/releases):
 
 ```sh
-curl -fsSL https://toxic-sunflower.github.io/lite-deploy/install.sh | sh -s -- --version vX.Y.Z
+curl -fsSL https://lite-deploy.prozorov.me/install.sh | sh -s -- --version vX.Y.Z
 ```
 
 Проверить, что встало:
