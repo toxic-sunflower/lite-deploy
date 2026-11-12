@@ -14,7 +14,7 @@ import (
 var update = flag.Bool("update", false, "перезаписать golden-файлы")
 
 const golden = "../../testdata/shop/golden/"
-const legacy = "../../projects/shop/"
+const legacy = "../../testdata/shop/legacy/"
 
 func checkGolden(t *testing.T, name, got string) {
 	t.Helper()

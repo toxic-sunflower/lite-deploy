@@ -1,0 +1,29 @@
+# Слот green сервиса the example project. Лежит в ~/.config/containers/systemd/ пользователя shop.
+# Копия слота blue, отличаются только имя, образ и порт.
+[Unit]
+Description=the example project API (слот green)
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=shop-api-green
+Image=localhost/shop-api:green
+PublishPort=127.0.0.1:18082:8080
+EnvironmentFile=%h/.config/shop/app.env
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=Shop__UseMock=false
+Volume=/var/run/postgresql:/var/run/postgresql
+ReadOnly=true
+Tmpfs=/tmp
+NoNewPrivileges=true
+DropCapability=ALL
+PidsLimit=512
+Memory=768m
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

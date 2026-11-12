@@ -20,7 +20,7 @@ func TestExecOnlyInHostPackage(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			if n := d.Name(); n == ".git" || n == "projects" || n == "testdata" {
+			if n := d.Name(); n == ".git" || n == "testdata" {
 				return fs.SkipDir
 			}
 			return nil
