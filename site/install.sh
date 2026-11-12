@@ -12,7 +12,7 @@
 #   LITE_DEPLOY_BASE_URL  откуда качать (для проверки установщика; по умолчанию GitHub Releases)
 #
 # Открытый ключ minisign, которым подписаны релизы. Совпадает с minisign.pub в репозитории.
-MINISIGN_PUBKEY="REPLACE_WITH_MINISIGN_PUBLIC_KEY"
+MINISIGN_PUBKEY="RWQXkl8IozvEWfo230NRtIvfuO4KI+SiT2s0p+Qynna/9WSATC/JDcyJ"
 REPO="toxic-sunflower/lite-deploy"
 
 set -eu
