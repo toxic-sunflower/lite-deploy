@@ -25,9 +25,11 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/secrets"
 )
 
-// Версия и идентификаторы схем.
+// Version подставляется при релизной сборке: -ldflags "-X .../internal/cli.Version=v1.2.3".
+var Version = "0.0.0-dev"
+
+// Идентификаторы схем.
 const (
-	Version       = "0.0.0-dev"
 	ProjectSchema = project.SchemaID
 	PlanSchema    = plan.SchemaID
 )

@@ -1,0 +1,34 @@
+name: pages
+
+# Отдаёт site/install.sh по адресу https://toxic-sunflower.github.io/lite-deploy/install.sh
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "minisign.pub"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ключ в установщике совпадает с minisign.pub
+        run: |
+          key=$(sed -n '2p' minisign.pub)
+          grep -qF "MINISIGN_PUBKEY=\"$key\"" site/install.sh
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4

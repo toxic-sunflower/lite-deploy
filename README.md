@@ -7,3 +7,19 @@
 - `cmd/`, `internal/`, `schemas/`, `testdata/`: код на Go. Проверки: `go vet ./...`, `go test -race ./...`, `golangci-lint run ./...`.
 
 Инструкция по настройке сервера FanvueGames, скрипты установки ПО и журнал ручной настройки лежат в соседнем репозитории `../server-setup`. Эталонные файлы из него скопированы в `testdata/fanvue-games/legacy/` для сверки с генерацией.
+
+## Установка
+
+```sh
+sudo apt install minisign
+curl -fsSL https://toxic-sunflower.github.io/lite-deploy/install.sh | sh
+```
+
+Скрипт (`site/install.sh`) скачивает бинарник из GitHub Releases, проверяет подпись `SHA256SUMS` ключом minisign и SHA256, ставит только `/usr/local/bin/lite-deploy`. Версия: `--version v0.1.0`; без проверки подписи (небезопасно): `--skip-sig`.
+
+### Выпуск релиза (владельцу)
+
+1. Один раз: `minisign -G -p minisign.pub -s minisign.key`; закрытый ключ не коммитить, положить в секреты репозитория `MINISIGN_KEY` (содержимое файла) и `MINISIGN_PASSWORD`.
+2. Вписать открытый ключ (вторая строка `minisign.pub`) в `MINISIGN_PUBKEY` в `site/install.sh`, закоммитить `minisign.pub`.
+3. В настройках репозитория включить Pages (источник: GitHub Actions). Репозиторий должен быть публичным, иначе скачивание без входа не работает.
+4. `git tag v0.1.0 && git push origin v0.1.0`.

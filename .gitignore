@@ -14,3 +14,6 @@ secrets*
 # исходники пакета internal/secrets это код, не секреты
 !/internal/secrets/
 !/internal/secrets/**
+
+# закрытый ключ подписи релизов
+minisign.key
