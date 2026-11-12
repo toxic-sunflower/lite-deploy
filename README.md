@@ -17,7 +17,15 @@ sudo apt install minisign
 curl -fsSL https://toxic-sunflower.github.io/lite-deploy/install.sh | sh
 ```
 
-Всегда ставится последняя версия. Установщик скачивает бинарник из GitHub Releases, проверяет подпись и контрольную сумму и кладёт `lite-deploy` в `/usr/local/bin`. Больше на сервере он ничего не меняет.
+Команда каждый раз берёт **самую свежую выпущенную версию**, номер указывать не нужно. Когда выйдет новая версия, повторный запуск этой же команды обновит `lite-deploy`.
+
+Установщик скачивает бинарник из GitHub Releases, проверяет подпись и контрольную сумму и кладёт `lite-deploy` в `/usr/local/bin`. Больше на сервере он ничего не меняет.
+
+Нужна не последняя, а конкретная версия (например, чтобы на всех серверах стояла одна и та же)? Укажите её после `--version`, номера есть на странице [Releases](https://github.com/toxic-sunflower/lite-deploy/releases):
+
+```sh
+curl -fsSL https://toxic-sunflower.github.io/lite-deploy/install.sh | sh -s -- --version vX.Y.Z
+```
 
 Проверить, что встало:
 
