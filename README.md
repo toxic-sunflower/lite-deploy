@@ -10,15 +10,19 @@
 
 ## Установка
 
+Нужен Linux (amd64 или arm64) и `minisign` для проверки подписи:
+
 ```sh
 sudo apt install minisign
 curl -fsSL https://toxic-sunflower.github.io/lite-deploy/install.sh | sh
 ```
 
-Скрипт (`site/install.sh`) скачивает бинарник из GitHub Releases, проверяет подпись `SHA256SUMS` ключом minisign и SHA256, ставит только `/usr/local/bin/lite-deploy`. Версия: `--version v0.1.0`; без проверки подписи (небезопасно): `--skip-sig`.
+Всегда ставится последняя версия. Установщик скачивает бинарник из GitHub Releases, проверяет подпись и контрольную сумму и кладёт `lite-deploy` в `/usr/local/bin`. Больше на сервере он ничего не меняет.
 
-### Выпуск релиза (владельцу)
+Проверить, что встало:
 
-1. Ключ создан (без пароля): закрытый `~/.config/lite-deploy/minisign.key` (не коммитить, копия в секрете репозитория `MINISIGN_KEY`), открытый `minisign.pub` в репозитории и в `MINISIGN_PUBKEY` в `site/install.sh`. Сменить: `minisign -G -W -p minisign.pub -s minisign.key -f`, затем обновить секрет и ключ в скрипте.
-3. В настройках репозитория включить Pages (источник: GitHub Actions). Репозиторий должен быть публичным, иначе скачивание без входа не работает.
-4. `git tag v0.1.0 && git push origin v0.1.0`.
+```sh
+lite-deploy version
+```
+
+Скрипт короткий, перед запуском его можно прочитать: [site/install.sh](site/install.sh).
