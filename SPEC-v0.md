@@ -400,6 +400,10 @@ reverse_proxy 127.0.0.1:<порт слота сервиса> {
 | `lite-deploy rollback <проект>` | то же | normal | раздел 5.3 |
 | `lite-deploy status [проект]` | то же | safe | раздел 5.4 |
 | `lite-deploy gate --project <P>` | SSH (ключ CI) | — | раздел 5.5 |
+| `lite-deploy agent install [--admin <пользователь>]…` | root | normal | создаёт пользователя `lite-deploy`, группу `lite-deploy-admins`, unit-файлы (`lite-deploy-agent.socket`, `lite-deploy-agent.service`, `lite-deploy-exec.socket`, `lite-deploy-exec@.service`), включает сокеты |
+| `lite-deploy agent serve [--socket <путь>]` | systemd | — | агент без прав: HTTP/JSON поверх unix-сокета `/run/lite-deploy/api.sock`, `/v1/status`, `/v1/deploy`, `/v1/rollback`, `/v1/firewall[/allow\|/remove\|/enable]`, `/v1/info`; доступ по группе `lite-deploy-admins` и `SO_PEERCRED` |
+| `lite-deploy exec` | systemd (root) | — | исполнитель: одно соединение на сокете `/run/lite-deploy/exec.sock` (доступен только пользователю агента), один запрос `{"cmd","args","caller"}` из фиксированного списка, ответ в формате `--json` |
+| `lite-deploy call GET\|POST /v1/<путь>` | пользователь группы `lite-deploy-admins` | — | клиент агента: тело POST со стандартного ввода, ответ агента выводится как есть |
 | `lite-deploy firewall status` | root на сервере | safe | состояние `ufw`: включён ли, порт SSH, правила (порт, протокол, действие, источник, признак защиты) |
 | `lite-deploy firewall allow <порт>/<tcp\|udp> [--from <адрес или сеть>] --yes` | root | normal | открыть порт; без `--yes` ошибка `confirmation_required` |
 | `lite-deploy firewall remove <порт>/<tcp\|udp> [--from <адрес или сеть>] [--action allow\|limit\|deny] --yes` | root | normal | закрыть порт; порты SSH, 80 и 443 защищены (`protected_rule`), нет такого правила: `rule_not_found` |
