@@ -121,7 +121,7 @@ func (a *Agent) Handler() http.Handler {
 			var body []byte
 			switch {
 			case !ok:
-				status, body = 403, ErrorJSON("api", "permission_denied", "нет доступа: пользователь должен быть в группе lite-deploy-admins")
+				status, body = 403, ErrorJSON("api", "permission_denied", "нет доступа: пользователь должен быть администратором системы (группа sudo или wheel)")
 			case r.Method != method:
 				status, body = 405, ErrorJSON("api", "usage", "метод не разрешён")
 			default:

@@ -8,7 +8,7 @@ import (
 func TestAgentCommands(t *testing.T) {
 	env, _, _ := testEnv(t)
 	env.IsRoot = func() bool { return false }
-	if c := run(t, env, "agent", "install", "--admin", "anna"); c != 4 {
+	if c := run(t, env, "agent", "install"); c != 4 {
 		t.Fatalf("install без root: код %d", c)
 	}
 	if c := run(t, env, "exec"); c != 4 {
@@ -41,7 +41,7 @@ func TestCallWithoutAgent(t *testing.T) {
 		t.Fatalf("код %d", c)
 	}
 	e := decode(t, out)
-	if e.Error == nil || e.Error.Code != "precondition_failed" || !strings.Contains(e.Error.Hint, "agent install") {
+	if e.Error == nil || e.Error.Code != "precondition_failed" || !strings.Contains(e.Error.Hint, "--server") {
 		t.Fatalf("%+v %s", e, errb.String())
 	}
 }

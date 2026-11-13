@@ -198,36 +198,49 @@ func TestGroupAllowed(t *testing.T) {
 }
 
 func TestInstall(t *testing.T) {
-	m := host.NewMemFS()
-	var calls []string
-	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
-		line := c.Name + " " + strings.Join(c.Args, " ")
-		calls = append(calls, line)
-		if c.Name == "getent" || (c.Name == "id" && strings.Contains(line, ServiceUser)) {
-			return host.Result{ExitCode: 2}, nil // нет группы и пользователя службы
+	for _, tc := range []struct{ has, want string }{{"sudo", "sudo"}, {"wheel", "wheel"}} {
+		m := host.NewMemFS()
+		var calls []string
+		r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+			line := c.Name + " " + strings.Join(c.Args, " ")
+			calls = append(calls, line)
+			if c.Name == "getent" && !strings.HasSuffix(line, " "+tc.has) {
+				return host.Result{ExitCode: 2}, nil
+			}
+			if c.Name == "id" {
+				return host.Result{ExitCode: 1}, nil // пользователя службы ещё нет
+			}
+			return host.Result{}, nil
+		}}
+		group, err := Install(context.Background(), r, m, "/usr/local/bin/lite-deploy")
+		if err != nil || group != tc.want {
+			t.Fatalf("%s: %q %v", tc.has, group, err)
 		}
-		return host.Result{}, nil
-	}}
-	if err := Install(context.Background(), r, m, "/usr/local/bin/lite-deploy", []string{"anna"}); err != nil {
-		t.Fatal(err)
-	}
-	joined := strings.Join(calls, "\n")
-	for _, want := range []string{"groupadd --system " + AdminGroup, "useradd --system", "usermod -aG " + AdminGroup + " anna", "systemctl daemon-reload", "systemctl enable --now lite-deploy-agent.socket lite-deploy-exec.socket"} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("нет вызова %q в\n%s", want, joined)
+		joined := strings.Join(calls, "\n")
+		for _, want := range []string{"useradd --system", "systemctl daemon-reload", "systemctl enable --now lite-deploy-agent.socket lite-deploy-exec.socket"} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("нет вызова %q в\n%s", want, joined)
+			}
+		}
+		if strings.Contains(joined, "groupadd") || strings.Contains(joined, "usermod") {
+			t.Errorf("новых групп и правки пользователей быть не должно:\n%s", joined)
+		}
+		for name, body := range Units("/usr/local/bin/lite-deploy", tc.want) {
+			if got, ok := m.Files[UnitDir+"/"+name]; !ok || string(got) != body {
+				t.Errorf("unit %s не записан", name)
+			}
+		}
+		if !strings.Contains(string(m.Files[UnitDir+"/lite-deploy-exec.socket"]), "SocketMode=0600") ||
+			!strings.Contains(string(m.Files[UnitDir+"/lite-deploy-agent.socket"]), "SocketGroup="+tc.want) ||
+			!strings.Contains(string(m.Files[UnitDir+"/lite-deploy-agent.service"]), "agent serve --group "+tc.want) {
+			t.Fatal("права сокетов и группа")
 		}
 	}
-	for name, body := range Units("/usr/local/bin/lite-deploy") {
-		got, ok := m.Files[UnitDir+"/"+name]
-		if !ok || string(got) != body {
-			t.Errorf("unit %s не записан", name)
-		}
-	}
-	if !strings.Contains(string(m.Files[UnitDir+"/lite-deploy-exec.socket"]), "SocketMode=0600") ||
-		!strings.Contains(string(m.Files[UnitDir+"/lite-deploy-agent.socket"]), "SocketGroup="+AdminGroup) {
-		t.Fatal("права сокетов")
-	}
-	if err := Install(context.Background(), r, m, "/x", []string{"bad name; rm"}); err == nil {
-		t.Fatal("неверное имя администратора должно отклоняться")
+}
+
+func TestInstallNoAdminGroup(t *testing.T) {
+	r := &host.FakeRunner{Handler: func(host.Cmd) (host.Result, error) { return host.Result{ExitCode: 2}, nil }}
+	if _, err := Install(context.Background(), r, host.NewMemFS(), "/x"); err == nil {
+		t.Fatal("без группы sudo и wheel установка должна отказать")
 	}
 }
