@@ -105,7 +105,7 @@ func doStatus(pos []string, env Env) result {
 		}
 		sort.Strings(names)
 	}
-	var all []*deploy.StatusResult
+	all := []*deploy.StatusResult{}
 	var sb strings.Builder
 	for _, n := range names {
 		m, r := openProject("status", n, env)

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lite-deploy</title>
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --muted:#6a6a6a; --line:#e6e6e6; --card:#fafaf9; --ok:#0b6b57; --bad:#b3261e; --btn:#1a1a1a; --btnfg:#fff; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#131313; --fg:#e6e6e3; --muted:#9a9a95; --line:#2a2a28; --card:#1a1a19; --ok:#5cc8a6; --bad:#f2837b; --btn:#e6e6e3; --btnfg:#131313; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom: 20px; }
+  h1 { font: 600 18px ui-monospace,SFMono-Regular,Menlo,monospace; margin:0; }
+  .srv { color:var(--muted); font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 18px; margin-bottom:16px; }
+  .card h2 { margin:0 0 4px; font-size:18px; }
+  .meta { color:var(--muted); font-size:14px; margin-bottom:12px; }
+  table { border-collapse:collapse; width:100%; font-size:14px; margin-bottom:12px; }
+  th,td { text-align:left; padding:6px 10px 6px 0; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; }
+  code { font:13px ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .up { color:var(--ok); } .down { color:var(--bad); }
+  .act { font-weight:600; }
+  form { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 0; }
+  input[type=text] { flex:1 1 280px; min-width:0; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); font:13px ui-monospace,SFMono-Regular,Menlo,monospace; }
+  button { padding:8px 14px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); font:inherit; cursor:pointer; }
+  button.primary { background:var(--btn); color:var(--btnfg); border-color:var(--btn); }
+  button:disabled { opacity:.5; cursor:default; }
+  .hist { color:var(--muted); font-size:13px; margin-top:10px; }
+  .hist div { padding:1px 0; }
+  #msg { position:sticky; top:0; margin-bottom:12px; padding:10px 14px; border-radius:6px; font-size:14px; white-space:pre-wrap; display:none; }
+  #msg.ok { display:block; border:1px solid var(--ok); color:var(--ok); background:var(--bg); }
+  #msg.err { display:block; border:1px solid var(--bad); color:var(--bad); background:var(--bg); }
+  .empty { color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>lite-deploy</h1><span class="srv" id="srv"></span></header>
+  <div id="msg"></div>
+  <div id="list"><p class="empty">Загрузка…</p></div>
+</div>
+<script>
+(function () {
+  var token = new URLSearchParams(location.search).get('t') || sessionStorage.getItem('t') || '';
+  if (token) { sessionStorage.setItem('t', token); history.replaceState(null, '', location.pathname); }
+  var busy = false;
+
+  function api(path, body) {
+    var opt = { headers: { 'X-Token': token } };
+    if (body) { opt.method = 'POST'; opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+    return fetch(path, opt).then(function (r) { return r.json(); });
+  }
+  function msg(kind, text) { var m = document.getElementById('msg'); m.className = kind; m.textContent = text; }
+  function clearMsg() { document.getElementById('msg').className = ''; }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+  function short(s) { return s && s.length > 12 ? s.slice(0, 12) : (s || ''); }
+
+  function card(p) {
+    var c = el('div', 'card');
+    c.appendChild(el('h2', null, p.project));
+    var active = p.active === 'none' ? 'ещё не выкатывали' : 'активный слот: ' + p.active;
+    c.appendChild(el('div', 'meta', active));
+    var t = el('table'), h = el('tr');
+    ['Слот', 'Сервис', 'Порт', 'Состояние'].forEach(function (x) { h.appendChild(el('th', null, x)); });
+    t.appendChild(h);
+    ['blue', 'green'].forEach(function (slot) {
+      Object.keys(p.slots[slot] || {}).sort().forEach(function (svc) {
+        var s = p.slots[slot][svc], r = el('tr');
+        r.appendChild(el('td', slot === p.active ? 'act' : null, slot + (slot === p.active ? ' (активный)' : '')));
+        r.appendChild(el('td', null, svc));
+        r.appendChild(el('td', null, String(s.port)));
+        r.appendChild(el('td', s.up ? 'up' : 'down', s.up ? 'работает' + (s.version ? ', версия ' + short(s.version) : '') : 'не отвечает'));
+        t.appendChild(r);
+      });
+    });
+    c.appendChild(t);
+
+    var f = el('form'), inp = el('input'), go = el('button', 'primary', 'Выкатить'), rb = el('button', null, 'Откатить');
+    inp.type = 'text'; inp.placeholder = 'хэш коммита (40 символов)'; inp.maxLength = 40; inp.spellcheck = false; inp.autocomplete = 'off';
+    go.type = 'submit'; rb.type = 'button';
+    f.appendChild(inp); f.appendChild(go); f.appendChild(rb);
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var sha = inp.value.trim().toLowerCase();
+      if (!/^[0-9a-f]{40}$/.test(sha)) { msg('err', 'Нужен полный хэш коммита: 40 символов 0-9a-f.'); return; }
+      if (!confirm('Выкатить ' + sha.slice(0, 12) + ' в проект ' + p.project + '?')) return;
+      run('Выкатка идёт, это может занять несколько минут…', '/api/deploy', { project: p.project, sha: sha }, function (d) {
+        return 'Выкачено ' + short(d.version) + ', слот ' + d.slot + '. Трафик переключён.';
+      });
+    });
+    rb.addEventListener('click', function () {
+      if (!confirm('Откатить проект ' + p.project + ' на прежнюю версию?')) return;
+      run('Откат…', '/api/rollback', { project: p.project }, function (d) {
+        return 'Откат выполнен: слот ' + d.slot + ', версия ' + short(d.version) + '.';
+      });
+    });
+    c.appendChild(f);
+
+    if (p.history && p.history.length) {
+      var hist = el('div', 'hist');
+      p.history.slice().reverse().forEach(function (x) { hist.appendChild(el('div', null, x.time + '  ' + x.event + '  ' + short(x.version) + '  слот ' + x.slot)); });
+      c.appendChild(hist);
+    }
+    return c;
+  }
+
+  function setBusy(b) { busy = b; document.querySelectorAll('button').forEach(function (x) { x.disabled = b; }); }
+
+  function run(wait, path, body, okText) {
+    if (busy) return;
+    setBusy(true); msg('ok', wait);
+    api(path, body).then(function (r) {
+      if (r.ok) { msg('ok', okText(r.data)); }
+      else { msg('err', r.error.message + (r.error.hint ? '\n' + r.error.hint : '')); }
+    }).catch(function (e) { msg('err', 'Нет связи: ' + e); }).then(function () { setBusy(false); load(); });
+  }
+
+  function load() {
+    api('/api/status').then(function (r) {
+      var list = document.getElementById('list');
+      list.textContent = '';
+      if (!r.ok) {
+        if (r.error.code === 'permission_denied') { list.appendChild(el('p', 'empty', r.error.message)); return; }
+        if (r.error.code === 'project_not_found') { list.appendChild(el('p', 'empty', 'Проектов ещё нет. Создайте проект: lite-deploy project create.')); return; }
+        list.appendChild(el('p', 'down', r.error.message)); return;
+      }
+      var ps = ('projects' in r.data) ? (r.data.projects || []) : [r.data];
+      if (!ps.length) { list.appendChild(el('p', 'empty', 'Проектов ещё нет.')); return; }
+      ps.forEach(function (p) { list.appendChild(card(p)); });
+      if (busy) setBusy(true);
+    }).catch(function (e) { document.getElementById('list').textContent = 'Нет связи: ' + e; });
+  }
+
+  api('/api/info').then(function (i) { document.getElementById('srv').textContent = i.host ? 'сервер: ' + i.host : 'этот компьютер'; }).catch(function () {});
+  load();
+  setInterval(function () { if (!busy && document.activeElement.tagName !== 'INPUT') load(); }, 10000);
+})();
+</script>
+</body>
+</html>

@@ -400,6 +400,7 @@ reverse_proxy 127.0.0.1:<порт слота сервиса> {
 | `lite-deploy rollback <проект>` | то же | normal | раздел 5.3 |
 | `lite-deploy status [проект]` | то же | safe | раздел 5.4 |
 | `lite-deploy gate --project <P>` | SSH (ключ CI) | — | раздел 5.5 |
+| `lite-deploy ui [--host <пользователь@сервер>] [--listen 127.0.0.1:8787]` | владелец | normal | локальный веб-интерфейс: состояние, выкатка, откат (поверх CLI, слушает только loopback, токен в адресе) |
 | `lite-deploy version` | любой | safe | версия, версии схем |
 
 Общие флаги: `--json` (машинный вывод), `--host <пользователь@адрес>` (клиентский режим: команда выполняется на сервере через `ssh <host> lite-deploy <аргументы> --json`, вход и вывод пробрасываются; так работают UI и MCP, D-28), `--quiet`. Права берутся от пользователя ОС: для `apply` при `--host` используется `ssh -t <host> sudo lite-deploy apply …`.
@@ -446,7 +447,7 @@ reverse_proxy 127.0.0.1:<порт слота сервиса> {
 | 5 | шаг плана завершился ошибкой (применено частично) | `step_failed` |
 | 6 | конфликт | `plan_hash_mismatch`, `plan_expired`, `plan_wrong_server`, `deploy_in_progress` |
 | 7 | не найдено | `project_not_found`, `secret_not_found` |
-| 10 | выкатка не прошла проверку здоровья, трафик не менялся | `deploy_unhealthy`, `rollback_unavailable`, `nothing_deployed` |
+| 10 | выкатка не прошла, трафик не менялся | `deploy_unhealthy`, `deploy_failed` (не скачался образ или не запустился юнит), `rollback_unavailable`, `nothing_deployed` |
 
 ## 7. Секреты (D-10, D-38)
 
