@@ -9,7 +9,6 @@ import (
 	_ "embed" // страница интерфейса
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -53,23 +52,27 @@ func (s *Server) Validate() error {
 	return nil
 }
 
-// cli запускает lite-deploy с проверенными аргументами и возвращает одну строку JSON-ответа.
-func (s *Server) cli(ctx context.Context, args ...string) []byte {
-	args = append(args, "--json")
+// call обращается к агенту на сервере: `lite-deploy call МЕТОД ПУТЬ` (тело запроса со стандартного ввода).
+// Для сервера по SSH команда выполняется там же, без sudo: доступ к сокету агента даёт группа lite-deploy-admins.
+func (s *Server) call(ctx context.Context, method, path string, body any) []byte {
+	var in []byte
+	if body != nil {
+		in, _ = json.Marshal(body)
+	}
 	var cmd host.Cmd
 	if s.Host != "" {
-		a := append([]string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=10", s.Host, "sudo", "-n", "lite-deploy"}, args...)
-		cmd = host.Cmd{Name: "ssh", Args: a}
+		cmd = host.Cmd{Name: "ssh", Args: []string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=10", s.Host, "lite-deploy", "call", method, path}}
 	} else {
 		bin := s.Bin
 		if bin == "" {
 			bin = "lite-deploy"
 		}
-		cmd = host.Cmd{Name: bin, Args: args}
+		cmd = host.Cmd{Name: bin, Args: []string{"call", method, path}}
 	}
+	cmd.Stdin = in
 	cmd.Timeout = s.Timeout
 	if cmd.Timeout == 0 {
-		cmd.Timeout = 15 * time.Minute
+		cmd.Timeout = 30 * time.Minute
 	}
 	res, err := s.Runner.Run(ctx, cmd)
 	out := strings.TrimSpace(string(res.Stdout))
@@ -84,7 +87,7 @@ func (s *Server) cli(ctx context.Context, args ...string) []byte {
 		msg = "команда не вернула ответа"
 	}
 	b, _ := json.Marshal(map[string]any{"ok": false, "api_version": "v1", "command": "ui",
-		"error": map[string]string{"code": "internal", "message": msg}})
+		"error": map[string]string{"code": "internal", "message": msg, "hint": "на сервере должен работать агент: sudo lite-deploy agent install --admin ВАШ_ПОЛЬЗОВАТЕЛЬ"}})
 	return b
 }
 
@@ -105,7 +108,7 @@ func (s *Server) Handler() http.Handler {
 		return b, 200
 	}))
 	mux.HandleFunc("/api/status", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
-		return s.cli(r.Context(), "status"), 200
+		return s.call(r.Context(), "GET", "/v1/status", nil), 200
 	}))
 	mux.HandleFunc("/api/deploy", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		var in struct{ Project, SHA string }
@@ -118,7 +121,7 @@ func (s *Server) Handler() http.Handler {
 		if !shaRe.MatchString(in.SHA) {
 			return errBody("invalid_sha", "нужен полный хэш коммита: 40 символов 0-9a-f"), 400
 		}
-		return s.cli(r.Context(), "deploy", in.Project, in.SHA), 200
+		return s.call(r.Context(), "POST", "/v1/deploy", map[string]string{"project": in.Project, "sha": in.SHA}), 200
 	}))
 	mux.HandleFunc("/api/rollback", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		var in struct{ Project string }
@@ -128,21 +131,17 @@ func (s *Server) Handler() http.Handler {
 		if !projectRe.MatchString(in.Project) {
 			return errBody("usage", "неверное имя проекта"), 400
 		}
-		return s.cli(r.Context(), "rollback", in.Project), 200
+		return s.call(r.Context(), "POST", "/v1/rollback", map[string]string{"project": in.Project}), 200
 	}))
 	mux.HandleFunc("/api/firewall", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
-		return s.cli(r.Context(), "firewall", "status"), 200
+		return s.call(r.Context(), "GET", "/v1/firewall", nil), 200
 	}))
 	mux.HandleFunc("/api/firewall/allow", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		in, code := fwRule(r)
 		if code != 0 {
 			return errBody("usage", "неверное правило: порт 1-65535, протокол tcp или udp, источник адрес или сеть"), code
 		}
-		args := []string{"firewall", "allow", fmt.Sprintf("%d/%s", in.Port, in.Proto)}
-		if in.From != "" {
-			args = append(args, "--from", in.From)
-		}
-		return s.cli(r.Context(), append(args, "--yes")...), 200
+		return s.call(r.Context(), "POST", "/v1/firewall/allow", in), 200
 	}))
 	mux.HandleFunc("/api/firewall/remove", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		in, code := fwRule(r)
@@ -152,18 +151,14 @@ func (s *Server) Handler() http.Handler {
 		if in.Action != "allow" && in.Action != "limit" && in.Action != "deny" {
 			return errBody("usage", "неверное действие правила"), 400
 		}
-		args := []string{"firewall", "remove", fmt.Sprintf("%d/%s", in.Port, in.Proto), "--action", in.Action}
-		if in.From != "" && in.From != "any" {
-			args = append(args, "--from", in.From)
-		}
-		return s.cli(r.Context(), append(args, "--yes")...), 200
+		return s.call(r.Context(), "POST", "/v1/firewall/remove", in), 200
 	}))
 	mux.HandleFunc("/api/firewall/enable", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		var in struct{}
 		if code := readBody(r, &in); code != 0 {
 			return errBody("usage", "неверный запрос"), code
 		}
-		return s.cli(r.Context(), "firewall", "enable", "--yes"), 200
+		return s.call(r.Context(), "POST", "/v1/firewall/enable", struct{}{}), 200
 	}))
 	return s.guard(mux)
 }

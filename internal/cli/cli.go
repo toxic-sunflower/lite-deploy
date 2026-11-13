@@ -60,9 +60,14 @@ type Env struct {
 
 // Run выполняет команду в настоящем окружении и возвращает код выхода.
 func Run(args []string, stdout, stderr io.Writer) int {
-	return RunEnv(args, Env{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr, FS: host.OSFS{}, Paths: plan.DefaultPaths(), Config: config.DefaultPath, Now: time.Now, IsRoot: func() bool { return os.Geteuid() == 0 },
+	return RunEnv(args, realEnv(stdout, stderr))
+}
+
+// realEnv настоящее окружение процесса.
+func realEnv(stdout, stderr io.Writer) Env {
+	return Env{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr, FS: host.OSFS{}, Paths: plan.DefaultPaths(), Config: config.DefaultPath, Now: time.Now, IsRoot: func() bool { return os.Geteuid() == 0 },
 		Runner: host.ExecRunner{}, HTTP: host.NetHTTP{}, Rand: rand.Reader, UID: os.Geteuid(), Lock: host.OSLocker{}, Sleep: time.Sleep, Getenv: os.Getenv,
-		Interactive: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }}) //nolint:gosec // дескриптор терминала помещается в int
+		Interactive: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }} //nolint:gosec // дескриптор терминала помещается в int
 }
 
 // result итог команды: данные или ошибка, плюс текст для людей.
@@ -72,6 +77,8 @@ type result struct {
 	text    string
 	warn    []Warning
 	err     *ErrorBody
+	// raw готовый конверт JSON (ответ агента): выводится как есть, код выхода берётся из него
+	raw []byte
 }
 
 func fail(command, code, msg string) result {
@@ -94,6 +101,14 @@ func RunEnv(args []string, env Env) int {
 		jsonOut = true
 	}
 	r := dispatch(rest, env)
+	if r.raw != nil {
+		_, _ = env.Stdout.Write(append(r.raw, '\n'))
+		var e Envelope
+		if json.Unmarshal(r.raw, &e) == nil && e.Error != nil {
+			return ExitCode(e.Error.Code)
+		}
+		return 0
+	}
 	if jsonOut {
 		writeJSON(env.Stdout, Envelope{OK: r.err == nil, APIVersion: APIVersion, Command: r.command, Data: r.data, Warnings: r.warn, Error: r.err})
 	} else if r.err != nil {
@@ -160,6 +175,12 @@ func dispatch(args []string, env Env) result {
 		return cmdUI(args[1:], env)
 	case "firewall":
 		return cmdFirewall(args[1:], env)
+	case "agent":
+		return cmdAgent(args[1:], env)
+	case "exec":
+		return cmdExec(env)
+	case "call":
+		return cmdCall(args[1:], env)
 	}
 	return fail("usage", CodeUsage, "неизвестная команда: "+args[0])
 }

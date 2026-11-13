@@ -57,12 +57,12 @@ func TestDeployRunsCLI(t *testing.T) {
 		t.Fatalf("%d %v", w.Code, r.Calls)
 	}
 	c := r.Calls[0]
-	if c.Name != "/bin/lite-deploy" || strings.Join(c.Args, " ") != "deploy shop "+sha+" --json" {
-		t.Fatalf("%s %v", c.Name, c.Args)
+	if c.Name != "/bin/lite-deploy" || strings.Join(c.Args, " ") != "call POST /v1/deploy" || string(c.Stdin) != `{"project":"shop","sha":"`+sha+`"}` {
+		t.Fatalf("%s %v %s", c.Name, c.Args, c.Stdin)
 	}
 	do(h, "POST", "/api/rollback", `{"project":"shop"}`, tok)
-	if got := strings.Join(r.Calls[1].Args, " "); got != "rollback shop --json" {
-		t.Fatal(got)
+	if got := strings.Join(r.Calls[1].Args, " "); got != "call POST /v1/rollback" || string(r.Calls[1].Stdin) != `{"project":"shop"}` {
+		t.Fatal(got, string(r.Calls[1].Stdin))
 	}
 }
 
@@ -70,7 +70,7 @@ func TestRemoteUsesSSH(t *testing.T) {
 	s, r := newServer("admin@203.0.113.5")
 	do(s.Handler(), "GET", "/api/status", "", tok)
 	c := r.Calls[0]
-	if c.Name != "ssh" || strings.Join(c.Args, " ") != "-o BatchMode=yes -o ConnectTimeout=10 admin@203.0.113.5 sudo -n lite-deploy status --json" {
+	if c.Name != "ssh" || strings.Join(c.Args, " ") != "-o BatchMode=yes -o ConnectTimeout=10 admin@203.0.113.5 lite-deploy call GET /v1/status" {
 		t.Fatalf("%s %v", c.Name, c.Args)
 	}
 }
@@ -146,10 +146,10 @@ func TestFirewallAPI(t *testing.T) {
 	do(h, "POST", "/api/firewall/remove", `{"port":8080,"proto":"tcp","from":"","action":"allow"}`, tok)
 	do(h, "POST", "/api/firewall/enable", `{}`, tok)
 	want := []string{
-		"firewall status --json",
-		"firewall allow 8080/tcp --from 10.0.0.0/8 --yes --json",
-		"firewall remove 8080/tcp --action allow --yes --json",
-		"firewall enable --yes --json",
+		"call GET /v1/firewall",
+		"call POST /v1/firewall/allow",
+		"call POST /v1/firewall/remove",
+		"call POST /v1/firewall/enable",
 	}
 	if len(r.Calls) != len(want) {
 		t.Fatalf("вызовов %d: %v", len(r.Calls), r.Calls)
@@ -158,6 +158,9 @@ func TestFirewallAPI(t *testing.T) {
 		if got := strings.Join(r.Calls[i].Args, " "); got != w {
 			t.Errorf("%d: %q, ожидалось %q", i, got, w)
 		}
+	}
+	if got := string(r.Calls[1].Stdin); !strings.Contains(got, `"port":8080`) || !strings.Contains(got, `"from":"10.0.0.0/8"`) {
+		t.Errorf("тело allow: %s", got)
 	}
 }
 
