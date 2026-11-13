@@ -9,6 +9,7 @@ import (
 	_ "embed" // страница интерфейса
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/toxic-sunflower/lite-deploy/internal/firewall"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
@@ -128,7 +130,61 @@ func (s *Server) Handler() http.Handler {
 		}
 		return s.cli(r.Context(), "rollback", in.Project), 200
 	}))
+	mux.HandleFunc("/api/firewall", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
+		return s.cli(r.Context(), "firewall", "status"), 200
+	}))
+	mux.HandleFunc("/api/firewall/allow", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		in, code := fwRule(r)
+		if code != 0 {
+			return errBody("usage", "неверное правило: порт 1-65535, протокол tcp или udp, источник адрес или сеть"), code
+		}
+		args := []string{"firewall", "allow", fmt.Sprintf("%d/%s", in.Port, in.Proto)}
+		if in.From != "" {
+			args = append(args, "--from", in.From)
+		}
+		return s.cli(r.Context(), append(args, "--yes")...), 200
+	}))
+	mux.HandleFunc("/api/firewall/remove", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		in, code := fwRule(r)
+		if code != 0 {
+			return errBody("usage", "неверное правило: порт 1-65535, протокол tcp или udp, источник адрес или сеть"), code
+		}
+		if in.Action != "allow" && in.Action != "limit" && in.Action != "deny" {
+			return errBody("usage", "неверное действие правила"), 400
+		}
+		args := []string{"firewall", "remove", fmt.Sprintf("%d/%s", in.Port, in.Proto), "--action", in.Action}
+		if in.From != "" && in.From != "any" {
+			args = append(args, "--from", in.From)
+		}
+		return s.cli(r.Context(), append(args, "--yes")...), 200
+	}))
+	mux.HandleFunc("/api/firewall/enable", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		var in struct{}
+		if code := readBody(r, &in); code != 0 {
+			return errBody("usage", "неверный запрос"), code
+		}
+		return s.cli(r.Context(), "firewall", "enable", "--yes"), 200
+	}))
 	return s.guard(mux)
+}
+
+type fwIn struct {
+	Port   int    `json:"port"`
+	Proto  string `json:"proto"`
+	From   string `json:"from"`
+	Action string `json:"action"`
+}
+
+// fwRule читает и проверяет правило брандмауэра из тела запроса.
+func fwRule(r *http.Request) (fwIn, int) {
+	var in fwIn
+	if code := readBody(r, &in); code != 0 {
+		return in, code
+	}
+	if e := firewall.ValidateRule(in.Port, in.Proto, in.From); e != nil {
+		return in, 400
+	}
+	return in, 0
 }
 
 func errBody(code, msg string) []byte {

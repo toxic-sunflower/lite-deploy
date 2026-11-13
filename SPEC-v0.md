@@ -400,7 +400,11 @@ reverse_proxy 127.0.0.1:<порт слота сервиса> {
 | `lite-deploy rollback <проект>` | то же | normal | раздел 5.3 |
 | `lite-deploy status [проект]` | то же | safe | раздел 5.4 |
 | `lite-deploy gate --project <P>` | SSH (ключ CI) | — | раздел 5.5 |
-| `lite-deploy ui [--host <пользователь@сервер>] [--listen 127.0.0.1:8787]` | владелец | normal | локальный веб-интерфейс: состояние, выкатка, откат (поверх CLI, слушает только loopback, токен в адресе) |
+| `lite-deploy firewall status` | root на сервере | safe | состояние `ufw`: включён ли, порт SSH, правила (порт, протокол, действие, источник, признак защиты) |
+| `lite-deploy firewall allow <порт>/<tcp\|udp> [--from <адрес или сеть>] --yes` | root | normal | открыть порт; без `--yes` ошибка `confirmation_required` |
+| `lite-deploy firewall remove <порт>/<tcp\|udp> [--from <адрес или сеть>] [--action allow\|limit\|deny] --yes` | root | normal | закрыть порт; порты SSH, 80 и 443 защищены (`protected_rule`), нет такого правила: `rule_not_found` |
+| `lite-deploy firewall enable --yes` | root | normal | сначала `default deny incoming`, `default allow outgoing`, правила SSH (`limit`), 80/tcp, 443/tcp, 443/udp, затем включение |
+| `lite-deploy ui [--host <пользователь@сервер>] [--listen 127.0.0.1:8787]` | владелец | normal | локальный веб-интерфейс: состояние, выкатка, откат, файервол (поверх CLI, слушает только loopback, токен в адресе) |
 | `lite-deploy version` | любой | safe | версия, версии схем |
 
 Общие флаги: `--json` (машинный вывод), `--host <пользователь@адрес>` (клиентский режим: команда выполняется на сервере через `ssh <host> lite-deploy <аргументы> --json`, вход и вывод пробрасываются; так работают UI и MCP, D-28), `--quiet`. Права берутся от пользователя ОС: для `apply` при `--host` используется `ssh -t <host> sudo lite-deploy apply …`.
@@ -443,10 +447,10 @@ reverse_proxy 127.0.0.1:<порт слота сервиса> {
 | 1 | общая ошибка | `internal`, `caddy_reload_failed`, `io_error` |
 | 2 | неверный ввод | `invalid_project`, `invalid_plan`, `unknown_action`, `usage`, `command_not_allowed`, `invalid_sha`, `invalid_secret`, `unused_secret` |
 | 3 | не выполнено предусловие | `precondition_failed`, `secret_missing`, `project_exists_unmanaged`, `adopt_password_unknown` |
-| 4 | нет прав | `permission_denied`, `confirmation_required` (зарезервирован для режима Б) |
+| 4 | нет прав | `permission_denied`, `confirmation_required` (режим Б и команды `firewall` без `--yes`), `protected_rule` |
 | 5 | шаг плана завершился ошибкой (применено частично) | `step_failed` |
 | 6 | конфликт | `plan_hash_mismatch`, `plan_expired`, `plan_wrong_server`, `deploy_in_progress` |
-| 7 | не найдено | `project_not_found`, `secret_not_found` |
+| 7 | не найдено | `project_not_found`, `secret_not_found`, `rule_not_found` |
 | 10 | выкатка не прошла, трафик не менялся | `deploy_unhealthy`, `deploy_failed` (не скачался образ или не запустился юнит), `rollback_unavailable`, `nothing_deployed` |
 
 ## 7. Секреты (D-10, D-38)

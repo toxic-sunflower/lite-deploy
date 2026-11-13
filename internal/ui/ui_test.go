@@ -134,3 +134,49 @@ func TestCLIFailureBecomesJSONError(t *testing.T) {
 		t.Fatal(w.Body.String())
 	}
 }
+
+func TestFirewallAPI(t *testing.T) {
+	s, r := newServer("")
+	h := s.Handler()
+	if w := do(h, "GET", "/api/firewall", "", ""); w.Code != 401 {
+		t.Fatalf("без токена: %d", w.Code)
+	}
+	do(h, "GET", "/api/firewall", "", tok)
+	do(h, "POST", "/api/firewall/allow", `{"port":8080,"proto":"tcp","from":"10.0.0.0/8"}`, tok)
+	do(h, "POST", "/api/firewall/remove", `{"port":8080,"proto":"tcp","from":"","action":"allow"}`, tok)
+	do(h, "POST", "/api/firewall/enable", `{}`, tok)
+	want := []string{
+		"firewall status --json",
+		"firewall allow 8080/tcp --from 10.0.0.0/8 --yes --json",
+		"firewall remove 8080/tcp --action allow --yes --json",
+		"firewall enable --yes --json",
+	}
+	if len(r.Calls) != len(want) {
+		t.Fatalf("вызовов %d: %v", len(r.Calls), r.Calls)
+	}
+	for i, w := range want {
+		if got := strings.Join(r.Calls[i].Args, " "); got != w {
+			t.Errorf("%d: %q, ожидалось %q", i, got, w)
+		}
+	}
+}
+
+func TestFirewallValidation(t *testing.T) {
+	s, r := newServer("")
+	h := s.Handler()
+	for _, body := range []string{
+		`{"port":0,"proto":"tcp"}`, `{"port":70000,"proto":"tcp"}`, `{"port":80,"proto":"sctp"}`,
+		`{"port":80,"proto":"tcp","from":"--force"}`, `{"port":80,"proto":"tcp","from":"1.2.3.4; reboot"}`,
+		`{"port":80,"proto":"tcp","extra":1}`, `not json`,
+	} {
+		if w := do(h, "POST", "/api/firewall/allow", body, tok); w.Code != 400 {
+			t.Errorf("%s: код %d", body, w.Code)
+		}
+	}
+	if w := do(h, "POST", "/api/firewall/remove", `{"port":8080,"proto":"tcp","action":"drop"}`, tok); w.Code != 400 {
+		t.Errorf("действие: код %d", w.Code)
+	}
+	if len(r.Calls) != 0 {
+		t.Fatalf("при неверном вводе ничего не запускается: %v", r.Calls)
+	}
+}
