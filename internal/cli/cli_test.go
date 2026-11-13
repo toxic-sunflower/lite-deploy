@@ -249,10 +249,12 @@ func TestUsageAndUnimplemented(t *testing.T) {
 		{[]string{"project", "validate"}, 2, "usage"},
 		{[]string{"apply"}, 2, "usage"},
 		{[]string{"project", "create"}, 2, "usage"},
-		{[]string{"deploy", "p", "x"}, 1, "not_implemented"},
-		{[]string{"rollback", "p"}, 1, "not_implemented"},
-		{[]string{"status"}, 1, "not_implemented"},
-		{[]string{"gate", "--project", "p"}, 1, "not_implemented"},
+		{[]string{"deploy", "p"}, 2, "usage"},
+		{[]string{"deploy", "shop", "xyz"}, 7, "project_not_found"},
+		{[]string{"rollback", "shop"}, 7, "project_not_found"},
+		{[]string{"rollback"}, 2, "usage"},
+		{[]string{"status", "shop"}, 7, "project_not_found"},
+		{[]string{"gate"}, 2, "usage"},
 	}
 	for _, c := range cases {
 		env, out, _ := testEnv(t)
@@ -274,7 +276,7 @@ func TestExitCodeTable(t *testing.T) {
 		5:  {"step_failed"},
 		6:  {"plan_hash_mismatch", "plan_expired", "plan_wrong_server", "deploy_in_progress", "quota_exceeded"},
 		7:  {"project_not_found", "secret_not_found"},
-		10: {"deploy_unhealthy", "rollback_unavailable", "nothing_deployed"},
+		10: {"deploy_unhealthy", "deploy_failed", "rollback_unavailable", "nothing_deployed"},
 	}
 	for code, names := range want {
 		for _, n := range names {
@@ -335,5 +337,31 @@ func TestProjectBytesLimit(t *testing.T) {
 	env.FS.(*host.MemFS).Files["/etc/lite-deploy/config.json"] = []byte(`{"limits":{"project_bytes":1024}}`)
 	if c := run(t, env, "project", "validate", projectFile, "--json"); c != 2 || decode(t, out).Error.Details[0].Code != "too_large" {
 		t.Fatalf("%d %s", c, out.String())
+	}
+}
+
+func TestGate(t *testing.T) {
+	env, out, _ := testEnv(t)
+	env.Getenv = func(k string) string {
+		if k == "SSH_ORIGINAL_COMMAND" {
+			return "rm -rf /"
+		}
+		return ""
+	}
+	if c := run(t, env, "gate", "--project", "shop", "--json"); c != 2 {
+		t.Fatalf("код %d", c)
+	}
+	if e := decode(t, out); e.Error == nil || e.Error.Code != "command_not_allowed" {
+		t.Fatalf("%+v", e)
+	}
+
+	// формат ответа задаёт команда ключа: `status --json` даёт JSON без аргумента --json у gate
+	env, out, _ = testEnv(t)
+	env.Getenv = func(string) string { return "status --json" }
+	if c := run(t, env, "gate", "--project", "shop"); c != 7 {
+		t.Fatalf("код %d", c)
+	}
+	if e := decode(t, out); e.Error == nil || e.Error.Code != "project_not_found" {
+		t.Fatalf("%+v", e)
 	}
 }

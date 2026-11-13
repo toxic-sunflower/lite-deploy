@@ -51,7 +51,7 @@ var exitCodes = map[string]int{
 	"step_failed":        5,
 	"plan_hash_mismatch": 6, "plan_expired": 6, "plan_wrong_server": 6, "deploy_in_progress": 6, "quota_exceeded": 6,
 	"project_not_found": 7, "secret_not_found": 7,
-	"deploy_unhealthy": 10, "rollback_unavailable": 10, "nothing_deployed": 10,
+	"deploy_unhealthy": 10, "deploy_failed": 10, "rollback_unavailable": 10, "nothing_deployed": 10,
 }
 
 // ExitCode код выхода процесса для кода ошибки (SPEC-v0.md, 6.3). Неизвестный код это общая ошибка 1.
