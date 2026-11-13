@@ -15,7 +15,8 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
-const agentUsage = "использование: lite-deploy agent install [--admin пользователь]… | agent serve (запускает systemd)"
+// Служебные команды: их запускают install.sh и systemd, вручную они не нужны.
+const agentUsage = "использование: lite-deploy agent install (служебная, вызывается install.sh --server) | agent serve (запускает systemd)"
 
 func cmdAgent(args []string, env Env) result {
 	if len(args) == 0 {
@@ -32,29 +33,27 @@ func cmdAgent(args []string, env Env) result {
 
 func agentInstall(args []string, env Env) result {
 	fs := flag.NewFlagSet("agent install", flag.ContinueOnError)
-	var admins listFlag
-	fs.Var(&admins, "admin", "пользователь, которому разрешено управлять через агента (можно повторять)")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 0 {
 		return fail("agent.install", CodeUsage, agentUsage)
 	}
 	if !env.root() {
-		return fail("agent.install", "permission_denied", "установка агента требует root (sudo lite-deploy agent install --admin ВАШ_ПОЛЬЗОВАТЕЛЬ)")
+		return fail("agent.install", "permission_denied", "установка агента требует root; она входит в установку сервера: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh -s -- --server")
 	}
 	bin, _ := os.Executable()
-	if err := agent.Install(context.Background(), env.Runner, env.FS, bin, admins); err != nil {
+	group, err := agent.Install(context.Background(), env.Runner, env.FS, bin)
+	if err != nil {
 		return fail("agent.install", CodeIO, err.Error())
 	}
-	return result{command: "agent.install", data: map[string]any{"admins": []string(admins), "socket": agent.APISocket},
-		text: fmt.Sprintf("Агент установлен и запущен (сокет %s).\nАдминистраторы: %s. Новой группе нужен новый вход в систему (выйдите и зайдите по SSH заново).\n",
-			agent.APISocket, strings.Join(admins, ", "))}
+	return result{command: "agent.install", data: map[string]any{"group": group, "socket": agent.APISocket},
+		text: fmt.Sprintf("Агент установлен и запущен (сокет %s). Управлять могут администраторы системы (группа %s).\n", agent.APISocket, group)}
 }
 
 func agentServe(args []string, env Env) result {
 	fs := flag.NewFlagSet("agent serve", flag.ContinueOnError)
 	sock := fs.String("socket", "", "путь сокета (режим разработки без systemd)")
 	execSock := fs.String("exec-socket", agent.ExecSocket, "сокет исполнителя")
-	group := fs.String("group", agent.AdminGroup, "группа, которой разрешён доступ")
+	group := fs.String("group", agent.DefaultGroup, "группа, которой разрешён доступ")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 0 {
 		return fail("agent.serve", CodeUsage, agentUsage)
@@ -127,7 +126,7 @@ func cmdCall(args []string, env Env) result {
 	out, err := agent.Call(context.Background(), sock, pos[0], pos[1], body)
 	if err != nil {
 		return result{command: "call", err: &ErrorBody{Code: "precondition_failed", Message: err.Error(),
-			Hint: "агент не установлен или не запущен: sudo lite-deploy agent install --admin ВАШ_ПОЛЬЗОВАТЕЛЬ"}}
+			Hint: "агент ставится при установке сервера: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh -s -- --server; пользователь должен быть администратором (sudo или wheel)"}}
 	}
 	out = bytes.TrimSpace(out)
 	if len(out) == 0 || out[0] != '{' {

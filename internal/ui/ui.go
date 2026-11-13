@@ -53,7 +53,7 @@ func (s *Server) Validate() error {
 }
 
 // call обращается к агенту на сервере: `lite-deploy call МЕТОД ПУТЬ` (тело запроса со стандартного ввода).
-// Для сервера по SSH команда выполняется там же, без sudo: доступ к сокету агента даёт группа lite-deploy-admins.
+// Для сервера по SSH команда выполняется там же, без sudo: доступ к сокету агента у администраторов системы (группа sudo или wheel).
 func (s *Server) call(ctx context.Context, method, path string, body any) []byte {
 	var in []byte
 	if body != nil {
@@ -87,7 +87,7 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 		msg = "команда не вернула ответа"
 	}
 	b, _ := json.Marshal(map[string]any{"ok": false, "api_version": "v1", "command": "ui",
-		"error": map[string]string{"code": "internal", "message": msg, "hint": "на сервере должен работать агент: sudo lite-deploy agent install --admin ВАШ_ПОЛЬЗОВАТЕЛЬ"}})
+		"error": map[string]string{"code": "internal", "message": msg, "hint": "на сервере должен работать агент: он ставится при установке сервера (install.sh --server), а пользователь должен быть администратором (sudo или wheel)"}})
 	return b
 }
 

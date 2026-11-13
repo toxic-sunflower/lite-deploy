@@ -12,7 +12,7 @@ import (
 // Имена, пути и группы агента.
 const (
 	ServiceUser  = "lite-deploy"
-	AdminGroup   = "lite-deploy-admins"
+	DefaultGroup = "sudo" // группа администраторов системы; на RHEL и Fedora это wheel
 	APISocket    = "/run/lite-deploy/api.sock"
 	ExecSocket   = "/run/lite-deploy/exec.sock"
 	UnitDir      = "/etc/systemd/system"
@@ -20,7 +20,7 @@ const (
 )
 
 // Units возвращает файлы unit systemd (имя → содержимое) для бинарника bin.
-func Units(bin string) map[string]string {
+func Units(bin, group string) map[string]string {
 	return map[string]string{
 		"lite-deploy-agent.socket": `[Unit]
 Description=lite-deploy: API агента
@@ -28,7 +28,7 @@ Description=lite-deploy: API агента
 [Socket]
 ListenStream=` + APISocket + `
 SocketUser=` + ServiceUser + `
-SocketGroup=` + AdminGroup + `
+SocketGroup=` + group + `
 SocketMode=0660
 DirectoryMode=0755
 
@@ -43,7 +43,7 @@ After=lite-deploy-agent.socket
 [Service]
 User=` + ServiceUser + `
 Group=` + ServiceUser + `
-ExecStart=` + bin + ` agent serve
+ExecStart=` + bin + ` agent serve --group ` + group + `
 StateDirectory=lite-deploy-agent
 NoNewPrivileges=yes
 ProtectSystem=strict
@@ -85,13 +85,26 @@ PrivateTmp=yes
 	}
 }
 
-// Install создаёт пользователя и группу агента, записывает unit-файлы и включает сокеты.
-// admins: пользователи, которым разрешено управлять через агента (добавляются в AdminGroup).
-func Install(ctx context.Context, r host.Runner, fsys host.FS, bin string, admins []string) error {
-	for _, a := range admins {
-		if !userRe.MatchString(a) {
-			return fmt.Errorf("неверное имя пользователя: %q", a)
+// AdminGroup определяет группу администраторов системы: sudo (Debian, Ubuntu) или wheel (RHEL, Fedora, Arch).
+func AdminGroup(ctx context.Context, r host.Runner) (string, error) {
+	for _, g := range []string{"sudo", "wheel"} {
+		res, err := r.Run(ctx, host.Cmd{Name: "getent", Args: []string{"group", g}})
+		if err != nil {
+			return "", err
 		}
+		if res.ExitCode == 0 {
+			return g, nil
+		}
+	}
+	return "", fmt.Errorf("в системе нет группы администраторов (sudo или wheel)")
+}
+
+// Install создаёт пользователя службы агента, записывает unit-файлы и включает сокеты.
+// К агенту допускаются члены группы администраторов системы (sudo или wheel).
+func Install(ctx context.Context, r host.Runner, fsys host.FS, bin string) (group string, err error) {
+	group, err = AdminGroup(ctx, r)
+	if err != nil {
+		return "", err
 	}
 	run := func(name string, args ...string) (host.Result, error) {
 		return r.Run(ctx, host.Cmd{Name: name, Args: args})
@@ -106,39 +119,25 @@ func Install(ctx context.Context, r host.Runner, fsys host.FS, bin string, admin
 		}
 		return nil
 	}
-	if res, err := run("getent", "group", AdminGroup); err != nil {
-		return err
-	} else if res.ExitCode != 0 {
-		if err := must("groupadd", "--system", AdminGroup); err != nil {
-			return err
-		}
-	}
 	if res, err := run("id", "-u", ServiceUser); err != nil {
-		return err
+		return "", err
 	} else if res.ExitCode != 0 {
 		if err := must("useradd", "--system", "--no-create-home", "--shell", "/usr/sbin/nologin", "--user-group", ServiceUser); err != nil {
-			return err
+			return "", err
 		}
 	}
-	for _, a := range admins {
-		if res, err := run("id", "-u", a); err != nil {
-			return err
-		} else if res.ExitCode != 0 {
-			return fmt.Errorf("пользователя %s нет", a)
-		}
-		if err := must("usermod", "-aG", AdminGroup, a); err != nil {
-			return err
-		}
-	}
-	for name, body := range Units(bin) {
+	for name, body := range Units(bin, group) {
 		if err := fsys.WriteFile(UnitDir+"/"+name, []byte(body), fs.FileMode(0o644)); err != nil {
-			return err
+			return "", err
 		}
 	}
 	if err := must("systemctl", "daemon-reload"); err != nil {
-		return err
+		return "", err
 	}
-	return must("systemctl", "enable", "--now", "lite-deploy-agent.socket", "lite-deploy-exec.socket")
+	if err := must("systemctl", "enable", "--now", "lite-deploy-agent.socket", "lite-deploy-exec.socket"); err != nil {
+		return "", err
+	}
+	return group, nil
 }
 
 // AuditPath путь журнала агента в каталоге состояния службы.
