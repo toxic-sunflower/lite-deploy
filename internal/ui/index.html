@@ -33,6 +33,10 @@
   #msg.ok { display:block; border:1px solid var(--ok); color:var(--ok); background:var(--bg); }
   #msg.err { display:block; border:1px solid var(--bad); color:var(--bad); background:var(--bg); }
   .empty { color:var(--muted); }
+  h3 { font-size:15px; margin:24px 0 8px; color:var(--muted); font-weight:500; text-transform:uppercase; letter-spacing:.04em; }
+  input.num { flex:0 0 90px; } input.src { flex:1 1 180px; }
+  select { padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); font:inherit; }
+  .tag { color:var(--muted); font-size:12px; }
 </style>
 </head>
 <body>
@@ -40,6 +44,8 @@
   <header><h1>lite-deploy</h1><span class="srv" id="srv"></span></header>
   <div id="msg"></div>
   <div id="list"><p class="empty">Загрузка…</p></div>
+  <h3>Файервол</h3>
+  <div id="fw"><p class="empty">Загрузка…</p></div>
 </div>
 <script>
 (function () {
@@ -108,13 +114,74 @@
 
   function setBusy(b) { busy = b; document.querySelectorAll('button').forEach(function (x) { x.disabled = b; }); }
 
-  function run(wait, path, body, okText) {
+  function run(wait, path, body, okText, reload) {
     if (busy) return;
     setBusy(true); msg('ok', wait);
     api(path, body).then(function (r) {
       if (r.ok) { msg('ok', okText(r.data)); }
       else { msg('err', r.error.message + (r.error.hint ? '\n' + r.error.hint : '')); }
-    }).catch(function (e) { msg('err', 'Нет связи: ' + e); }).then(function () { setBusy(false); load(); });
+    }).catch(function (e) { msg('err', 'Нет связи: ' + e); }).then(function () { setBusy(false); (reload || load)(); });
+  }
+
+  function fwCard(st) {
+    var c = el('div', 'card');
+    c.appendChild(el('div', 'meta', (st.active ? 'Включён' : 'Выключен') + ', порт SSH: ' + st.ssh_port));
+    if (!st.active) {
+      var eb = el('button', 'primary', 'Включить');
+      eb.addEventListener('click', function () {
+        if (!confirm('Включить файервол? Будут открыты SSH (порт ' + st.ssh_port + '), 80 и 443, остальное входящее закроется.')) return;
+        run('Включаю…', '/api/firewall/enable', {}, function () { return 'Файервол включён.'; }, loadFw);
+      });
+      c.appendChild(eb);
+    }
+    var t = el('table'), h = el('tr');
+    ['Порт', 'Действие', 'Откуда', ''].forEach(function (x) { h.appendChild(el('th', null, x)); });
+    t.appendChild(h);
+    (st.rules || []).forEach(function (r) {
+      var row = el('tr');
+      row.appendChild(el('td', null, r.port ? r.port + (r.proto ? '/' + r.proto : '') : r.raw));
+      row.appendChild(el('td', null, r.action));
+      row.appendChild(el('td', null, r.from));
+      var cell = el('td');
+      if (r.protected) cell.appendChild(el('span', 'tag', 'защищено'));
+      else if (r.port) {
+        var del = el('button', null, 'Закрыть');
+        del.addEventListener('click', function () {
+          if (!confirm('Закрыть ' + r.port + '/' + r.proto + (r.from !== 'any' ? ' для ' + r.from : '') + '?')) return;
+          run('Закрываю…', '/api/firewall/remove', { port: r.port, proto: r.proto, from: r.from === 'any' ? '' : r.from, action: r.action }, function () { return 'Порт ' + r.port + ' закрыт.'; }, loadFw);
+        });
+        cell.appendChild(del);
+      }
+      row.appendChild(cell);
+      t.appendChild(row);
+    });
+    c.appendChild(t);
+    var f = el('form'), port = el('input', 'num'), proto = el('select'), src = el('input', 'src'), add = el('button', 'primary', 'Открыть порт');
+    port.type = 'text'; port.placeholder = 'порт'; port.maxLength = 5; port.inputMode = 'numeric'; port.autocomplete = 'off';
+    ['tcp', 'udp'].forEach(function (x) { var o = el('option', null, x); o.value = x; proto.appendChild(o); });
+    src.type = 'text'; src.placeholder = 'только с адреса (необязательно)'; src.autocomplete = 'off'; src.spellcheck = false;
+    add.type = 'submit';
+    f.appendChild(port); f.appendChild(proto); f.appendChild(src); f.appendChild(add);
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var n = parseInt(port.value, 10);
+      if (!(n >= 1 && n <= 65535)) { msg('err', 'Порт: число от 1 до 65535.'); return; }
+      var from = src.value.trim();
+      if (!confirm('Открыть ' + n + '/' + proto.value + (from ? ' для ' + from : ' для всех') + '?')) return;
+      run('Открываю…', '/api/firewall/allow', { port: n, proto: proto.value, from: from }, function () { return 'Порт ' + n + '/' + proto.value + ' открыт.'; }, loadFw);
+    });
+    c.appendChild(f);
+    return c;
+  }
+
+  function loadFw() {
+    api('/api/firewall').then(function (r) {
+      var box = document.getElementById('fw');
+      box.textContent = '';
+      if (!r.ok) { box.appendChild(el('p', r.error.code === 'permission_denied' ? 'empty' : 'down', r.error.message)); return; }
+      box.appendChild(fwCard(r.data));
+      if (busy) setBusy(true);
+    }).catch(function (e) { document.getElementById('fw').textContent = 'Нет связи: ' + e; });
   }
 
   function load() {
@@ -134,8 +201,8 @@
   }
 
   api('/api/info').then(function (i) { document.getElementById('srv').textContent = i.host ? 'сервер: ' + i.host : 'этот компьютер'; }).catch(function () {});
-  load();
-  setInterval(function () { if (!busy && document.activeElement.tagName !== 'INPUT') load(); }, 10000);
+  load(); loadFw();
+  setInterval(function () { if (!busy && document.activeElement.tagName !== 'INPUT') { load(); loadFw(); } }, 10000);
 })();
 </script>
 </body>

@@ -47,10 +47,10 @@ var exitCodes = map[string]int{
 	"internal": 1, "caddy_reload_failed": 1, "io_error": 1, "not_implemented": 1,
 	"invalid_project": 2, "invalid_plan": 2, "unknown_action": 2, "usage": 2, "command_not_allowed": 2, "invalid_sha": 2, "unused_secret": 2, "invalid_secret": 2,
 	"precondition_failed": 3, "secret_missing": 3, "project_exists_unmanaged": 3, "adopt_password_unknown": 3,
-	"permission_denied": 4, "confirmation_required": 4,
+	"permission_denied": 4, "confirmation_required": 4, "protected_rule": 4,
 	"step_failed":        5,
 	"plan_hash_mismatch": 6, "plan_expired": 6, "plan_wrong_server": 6, "deploy_in_progress": 6, "quota_exceeded": 6,
-	"project_not_found": 7, "secret_not_found": 7,
+	"project_not_found": 7, "secret_not_found": 7, "rule_not_found": 7,
 	"deploy_unhealthy": 10, "deploy_failed": 10, "rollback_unavailable": 10, "nothing_deployed": 10,
 }
 

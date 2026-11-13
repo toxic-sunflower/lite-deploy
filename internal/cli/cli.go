@@ -118,7 +118,7 @@ func RunEnv(args []string, env Env) int {
 
 func dispatch(args []string, env Env) result {
 	if len(args) == 0 {
-		return fail("usage", CodeUsage, "использование: lite-deploy <команда>; команды: version, schema, project validate|plan|create|list, apply, deploy, rollback, status, ui")
+		return fail("usage", CodeUsage, "использование: lite-deploy <команда>; команды: version, schema, project validate|plan|create|list, apply, deploy, rollback, status, firewall, ui")
 	}
 	switch args[0] {
 	case "version":
@@ -158,6 +158,8 @@ func dispatch(args []string, env Env) result {
 		return cmdGate(args[1:], env)
 	case "ui":
 		return cmdUI(args[1:], env)
+	case "firewall":
+		return cmdFirewall(args[1:], env)
 	}
 	return fail("usage", CodeUsage, "неизвестная команда: "+args[0])
 }
