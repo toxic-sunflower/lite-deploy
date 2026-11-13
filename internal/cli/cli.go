@@ -52,12 +52,16 @@ type Env struct {
 	Rand        io.Reader
 	Interactive func() bool
 	UID         int
+	// для deploy, rollback, status, gate
+	Lock   host.Locker
+	Sleep  func(time.Duration)
+	Getenv func(string) string
 }
 
 // Run выполняет команду в настоящем окружении и возвращает код выхода.
 func Run(args []string, stdout, stderr io.Writer) int {
 	return RunEnv(args, Env{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr, FS: host.OSFS{}, Paths: plan.DefaultPaths(), Config: config.DefaultPath, Now: time.Now, IsRoot: func() bool { return os.Geteuid() == 0 },
-		Runner: host.ExecRunner{}, HTTP: host.NetHTTP{}, Rand: rand.Reader, UID: os.Geteuid(),
+		Runner: host.ExecRunner{}, HTTP: host.NetHTTP{}, Rand: rand.Reader, UID: os.Geteuid(), Lock: host.OSLocker{}, Sleep: time.Sleep, Getenv: os.Getenv,
 		Interactive: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }}) //nolint:gosec // дескриптор терминала помещается в int
 }
 
@@ -85,6 +89,10 @@ func RunEnv(args []string, env Env) int {
 		}
 		rest = append(rest, a)
 	}
+	// привратник: формат ответа задаёт команда ключа CI (`status --json`), а не аргументы принудительной команды
+	if len(rest) > 0 && rest[0] == "gate" && env.Getenv != nil && strings.HasSuffix(env.Getenv("SSH_ORIGINAL_COMMAND"), " --json") {
+		jsonOut = true
+	}
 	r := dispatch(rest, env)
 	if jsonOut {
 		writeJSON(env.Stdout, Envelope{OK: r.err == nil, APIVersion: APIVersion, Command: r.command, Data: r.data, Warnings: r.warn, Error: r.err})
@@ -110,7 +118,7 @@ func RunEnv(args []string, env Env) int {
 
 func dispatch(args []string, env Env) result {
 	if len(args) == 0 {
-		return fail("usage", CodeUsage, "использование: lite-deploy <команда>; команды: version, schema, project validate|plan|list, apply")
+		return fail("usage", CodeUsage, "использование: lite-deploy <команда>; команды: version, schema, project validate|plan|create|list, apply, deploy, rollback, status")
 	}
 	switch args[0] {
 	case "version":
@@ -140,8 +148,14 @@ func dispatch(args []string, env Env) result {
 		return cmdInit(env)
 	case "secret":
 		return cmdSecret(args[1:], env)
-	case "deploy", "rollback", "status", "gate":
-		return fail(args[0], CodeNotImplemented, "команда "+args[0]+" появится в следующих сессиях (см. PLAN.md)")
+	case "deploy":
+		return cmdDeploy(args[1:], env)
+	case "rollback":
+		return cmdRollback(args[1:], env)
+	case "status":
+		return cmdStatus(args[1:], env)
+	case "gate":
+		return cmdGate(args[1:], env)
 	}
 	return fail("usage", CodeUsage, "неизвестная команда: "+args[0])
 }

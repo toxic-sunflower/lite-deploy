@@ -90,6 +90,8 @@ type FS interface {
 	Remove(path string) error
 	// Append дописывает в файл; если файла нет, создаёт его с правами perm.
 	Append(path string, data []byte, perm fs.FileMode) error
+	// Overwrite записывает существующий файл на месте, сохраняя владельца и права.
+	Overwrite(path string, data []byte) error
 }
 
 // Info описание записи файловой системы.
