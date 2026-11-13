@@ -52,6 +52,30 @@ lite-deploy ui --host admin@ваш-сервер
 
 Команда печатает адрес вида `http://127.0.0.1:8787/?t=…`, его нужно открыть в браузере. Интерфейс слушает только `127.0.0.1`. На сервере у пользователя должен работать `sudo -n lite-deploy` (без пароля).
 
+### Интерфейс постоянно запущенным сервисом
+
+Чтобы интерфейс был доступен всегда, запустите его пользовательским сервисом systemd на своём компьютере (или на сервере, тогда без `--host`). Токен хранится в файле и не меняется при перезапусках, поэтому закладка в браузере продолжает работать.
+
+```sh
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/lite-deploy-ui.service <<'EOF'
+[Unit]
+Description=lite-deploy UI
+
+[Service]
+ExecStart=%h/.local/bin/lite-deploy ui --host admin@ваш-сервер --token-file %h/.config/lite-deploy/ui-token
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now lite-deploy-ui
+cat ~/.config/lite-deploy/ui-token
+```
+
+Адрес: `http://127.0.0.1:8787/?t=<содержимое файла ui-token>`. Путь в `ExecStart` замените на тот, куда установлен `lite-deploy` (`command -v lite-deploy`). Чтобы сервис работал и без открытого сеанса, выполните `loginctl enable-linger $USER`. Для доступа по SSH нужен ключ без пароля или запущенный агент.
+
 ## Лицензия
 
 MIT, см. [LICENSE](LICENSE).

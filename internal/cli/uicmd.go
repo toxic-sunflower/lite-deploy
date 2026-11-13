@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/ui"
 )
@@ -18,9 +19,10 @@ func cmdUI(args []string, env Env) result {
 	fs := flag.NewFlagSet("ui", flag.ContinueOnError)
 	hostFlag := fs.String("host", "", "пользователь@сервер: управлять сервером по SSH (без флага: этот компьютер)")
 	listen := fs.String("listen", "127.0.0.1:8787", "адрес, только loopback")
+	tokenFile := fs.String("token-file", "", "файл с постоянным токеном (создаётся с правами 0600); для запуска сервисом")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 0 {
-		return fail("ui", CodeUsage, "использование: lite-deploy ui [--host пользователь@сервер] [--listen 127.0.0.1:8787]")
+		return fail("ui", CodeUsage, "использование: lite-deploy ui [--host пользователь@сервер] [--listen 127.0.0.1:8787] [--token-file путь]")
 	}
 	h, _, err := net.SplitHostPort(*listen)
 	if err != nil || (h != "127.0.0.1" && h != "localhost" && h != "::1") {
@@ -30,12 +32,26 @@ func cmdUI(args []string, env Env) result {
 	if rnd == nil {
 		return fail("ui", CodeInternal, "нет источника случайных чисел")
 	}
-	raw := make([]byte, 16)
-	if _, err := io.ReadFull(rnd, raw); err != nil {
-		return fail("ui", CodeInternal, err.Error())
+	token := ""
+	if *tokenFile != "" {
+		if b, err := os.ReadFile(*tokenFile); err == nil {
+			token = strings.TrimSpace(string(b))
+		}
+	}
+	if token == "" {
+		raw := make([]byte, 16)
+		if _, err := io.ReadFull(rnd, raw); err != nil {
+			return fail("ui", CodeInternal, err.Error())
+		}
+		token = hex.EncodeToString(raw)
+		if *tokenFile != "" {
+			if err := os.WriteFile(*tokenFile, []byte(token+"\n"), 0o600); err != nil {
+				return fail("ui", CodeIO, "не удалось записать токен: "+err.Error())
+			}
+		}
 	}
 	bin, _ := os.Executable()
-	srv := &ui.Server{Runner: env.Runner, Host: *hostFlag, Bin: bin, Token: hex.EncodeToString(raw)}
+	srv := &ui.Server{Runner: env.Runner, Host: *hostFlag, Bin: bin, Token: token}
 	if err := srv.Validate(); err != nil {
 		return fail("ui", CodeUsage, err.Error())
 	}
