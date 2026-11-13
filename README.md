@@ -63,7 +63,7 @@ cat > ~/.config/systemd/user/lite-deploy-ui.service <<'EOF'
 Description=lite-deploy UI
 
 [Service]
-ExecStart=%h/.local/bin/lite-deploy ui --host admin@ваш-сервер --token-file %h/.config/lite-deploy/ui-token
+ExecStart=/usr/local/bin/lite-deploy ui --host admin@ваш-сервер --token-file %h/.config/lite-deploy/ui-token
 Restart=on-failure
 
 [Install]
@@ -74,7 +74,7 @@ systemctl --user enable --now lite-deploy-ui
 cat ~/.config/lite-deploy/ui-token
 ```
 
-Адрес: `http://127.0.0.1:8787/?t=<содержимое файла ui-token>`. Путь в `ExecStart` замените на тот, куда установлен `lite-deploy` (`command -v lite-deploy`). Чтобы сервис работал и без открытого сеанса, выполните `loginctl enable-linger $USER`. Для доступа по SSH нужен ключ без пароля или запущенный агент.
+Адрес: `http://127.0.0.1:8787/?t=<содержимое файла ui-token>`. Если вы ставили с другим `--prefix`, подставьте в `ExecStart` путь из `command -v lite-deploy`. Чтобы сервис работал и без открытого сеанса, выполните `loginctl enable-linger $USER`. Для доступа по SSH нужен ключ без пароля или запущенный агент.
 
 ## Лицензия
 
