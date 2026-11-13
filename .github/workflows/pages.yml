@@ -4,7 +4,7 @@ name: pages
 on:
   push:
     branches: [main]
-    paths: ["site/**", "minisign.pub"]
+    paths: ["site/**", "*.md", "minisign.pub"]
   workflow_dispatch:
 
 permissions:
@@ -27,8 +27,13 @@ jobs:
         run: |
           key=$(sed -n '2p' minisign.pub)
           grep -qF "MINISIGN_PUBKEY=\"$key\"" site/install.sh
+      - name: Сборка сайта из Markdown
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install -q markdown==3.7
+          "$RUNNER_TEMP/venv/bin/python" site/build.py
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: _site
       - uses: actions/deploy-pages@v4
