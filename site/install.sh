@@ -1,18 +1,13 @@
 #!/bin/sh
-# Установщик lite-deploy.
+# Установщик lite-deploy. Одна команда ставит всё:
+#   бинарник из GitHub Releases (проверяются SHA256 и подпись minisign) в /usr/local/bin,
+#   minisign (для проверки подписи), Caddy (входящий трафик) с главным Caddyfile,
+#   агента: пользователя службы без прав и сокеты systemd.
 #
-# Без параметров (ваш компьютер): скачивает бинарник из GitHub Releases, проверяет SHA256 и подпись minisign,
-# кладёт в /usr/local/bin. Если нет minisign, ставит его через менеджер пакетов.
-#
-# С --server (сервер, нужен root): то же, и дополнительно ставит Caddy (ingress) с главным Caddyfile,
-# создаёт пользователя службы агента и включает агента и исполнителя (systemd).
-#
-#   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sh
-#   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh -s -- --server
-#   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sh -s -- --version v0.1.0
+#   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh
+#   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh -s -- --version v0.1.0
 #
 # Параметры (или переменные окружения):
-#   --server              установка на сервер (Caddy и агент), от root
 #   --version <тег>       LITE_DEPLOY_VERSION   версия (по умолчанию последняя)
 #   --prefix <каталог>    LITE_DEPLOY_PREFIX    куда ставить (по умолчанию /usr/local/bin)
 #   --skip-sig            LITE_DEPLOY_SKIP_SIG=1  не проверять подпись (только SHA256; небезопасно)
@@ -30,24 +25,24 @@ die() { printf 'ОШИБКА: %s\n' "$*" >&2; exit 1; }
 version=${LITE_DEPLOY_VERSION:-latest}
 prefix=${LITE_DEPLOY_PREFIX:-/usr/local/bin}
 skip_sig=${LITE_DEPLOY_SKIP_SIG:-0}
-server=0
 
 while [ $# -gt 0 ]; do
   case $1 in
     --version) [ $# -ge 2 ] || die "--version требует значение"; version=$2; shift ;;
     --prefix)  [ $# -ge 2 ] || die "--prefix требует значение"; prefix=$2; shift ;;
     --skip-sig) skip_sig=1 ;;
-    --server)  server=1 ;;
-    -h|--help) sed -n '2,20p' "$0" 2>/dev/null || true; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0" 2>/dev/null || true; exit 0 ;;
     *) die "неизвестный параметр: $1" ;;
   esac
   shift
 done
 
 [ "$(uname -s)" = Linux ] || die "поддерживается только Linux"
-if [ "$server" = 1 ]; then
-  [ "$(id -u)" -eq 0 ] || die "для установки сервера нужен root: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh -s -- --server"
-  [ -d /run/systemd/system ] || die "на сервере нужен systemd"
+# LITE_DEPLOY_BINARY_ONLY=1: только бинарник (для проверки установщика без root)
+binary_only=${LITE_DEPLOY_BINARY_ONLY:-0}
+if [ "$binary_only" != 1 ]; then
+  [ "$(id -u)" -eq 0 ] || die "нужен root: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh"
+  [ -d /run/systemd/system ] || die "нужен systemd"
 fi
 case $(uname -m) in
   x86_64|amd64)  arch=amd64 ;;
@@ -148,9 +143,9 @@ fi
 say "Установлено: $prefix/lite-deploy"
 "$prefix/lite-deploy" version || true
 
-[ "$server" = 1 ] || exit 0
+[ "$binary_only" != 1 ] || exit 0
 
-# ---- сервер: Caddy, агент ----
+# ---- Caddy и агент ----
 install_caddy() {
   case $pm in
     apt)
@@ -194,5 +189,4 @@ say "Ставлю агента (systemd)..."
 "$prefix/lite-deploy" agent install
 
 say ""
-say "Сервер готов. Управлять им могут администраторы системы (группа sudo или wheel):"
-say "  на вашем компьютере: lite-deploy ui --host пользователь@этот-сервер"
+say "Готово. Управлять могут администраторы системы (группа sudo или wheel)."

@@ -16,7 +16,7 @@ import (
 )
 
 // Служебные команды: их запускают install.sh и systemd, вручную они не нужны.
-const agentUsage = "использование: lite-deploy agent install (служебная, вызывается install.sh --server) | agent serve (запускает systemd)"
+const agentUsage = "использование: lite-deploy agent install (служебная, вызывается install.sh) | agent serve (запускает systemd)"
 
 func cmdAgent(args []string, env Env) result {
 	if len(args) == 0 {
@@ -38,7 +38,7 @@ func agentInstall(args []string, env Env) result {
 		return fail("agent.install", CodeUsage, agentUsage)
 	}
 	if !env.root() {
-		return fail("agent.install", "permission_denied", "установка агента требует root; она входит в установку сервера: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh -s -- --server")
+		return fail("agent.install", "permission_denied", "установка агента требует root; она входит в установку сервера: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh")
 	}
 	bin, _ := os.Executable()
 	group, err := agent.Install(context.Background(), env.Runner, env.FS, bin)
@@ -126,7 +126,7 @@ func cmdCall(args []string, env Env) result {
 	out, err := agent.Call(context.Background(), sock, pos[0], pos[1], body)
 	if err != nil {
 		return result{command: "call", err: &ErrorBody{Code: "precondition_failed", Message: err.Error(),
-			Hint: "агент ставится при установке сервера: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh -s -- --server; пользователь должен быть администратором (sudo или wheel)"}}
+			Hint: "агент ставится при установке сервера: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh; пользователь должен быть администратором (sudo или wheel)"}}
 	}
 	out = bytes.TrimSpace(out)
 	if len(out) == 0 || out[0] != '{' {

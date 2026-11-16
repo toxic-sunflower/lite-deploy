@@ -87,7 +87,7 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 		msg = "команда не вернула ответа"
 	}
 	b, _ := json.Marshal(map[string]any{"ok": false, "api_version": "v1", "command": "ui",
-		"error": map[string]string{"code": "internal", "message": msg, "hint": "на сервере должен работать агент: он ставится при установке сервера (install.sh --server), а пользователь должен быть администратором (sudo или wheel)"}})
+		"error": map[string]string{"code": "internal", "message": msg, "hint": "на сервере должен работать агент: он ставится при установке сервера (install.sh), а пользователь должен быть администратором (sudo или wheel)"}})
 	return b
 }
 

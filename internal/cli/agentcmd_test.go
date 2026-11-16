@@ -41,7 +41,7 @@ func TestCallWithoutAgent(t *testing.T) {
 		t.Fatalf("код %d", c)
 	}
 	e := decode(t, out)
-	if e.Error == nil || e.Error.Code != "precondition_failed" || !strings.Contains(e.Error.Hint, "--server") {
+	if e.Error == nil || e.Error.Code != "precondition_failed" || !strings.Contains(e.Error.Hint, "install.sh") {
 		t.Fatalf("%+v %s", e, errb.String())
 	}
 }
