@@ -105,7 +105,7 @@ func TestNewUserFullFlow(t *testing.T) {
 		t.Fatalf("sshd: %q", drop)
 	}
 	// порядок: правило SSH до включения файервола; запрет пароля после ключа и файервола
-	if !(w.index("ufw limit") < w.index("ufw --force enable") && w.index("ufw --force enable") < w.index("sshd -t")) {
+	if w.index("ufw limit") >= w.index("ufw --force enable") || w.index("ufw --force enable") >= w.index("sshd -t") {
 		t.Fatalf("порядок: %v", w.calls)
 	}
 }
