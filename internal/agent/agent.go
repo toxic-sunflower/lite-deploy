@@ -81,7 +81,7 @@ func (a *Agent) exec(ctx context.Context, req Request) []byte {
 	if err != nil {
 		return ErrorJSON(req.Cmd, "precondition_failed", "исполнитель недоступен: "+err.Error())
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(to))
 	b, _ := json.Marshal(req)
 	if _, err := conn.Write(b); err != nil {
@@ -272,6 +272,6 @@ func Call(ctx context.Context, sock, method, path string, body []byte) ([]byte, 
 	if err != nil {
 		return nil, fmt.Errorf("агент недоступен (%s): %w", sock, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 }

@@ -140,7 +140,9 @@ else
   die "нет прав на запись в $prefix и нет sudo (запустите от root или задайте --prefix)"
 fi
 
-say "Установлено: $prefix/lite-deploy"
+# короткое имя команды: lite
+ln -sf lite-deploy "$prefix/lite" 2>/dev/null || { command -v sudo >/dev/null 2>&1 && sudo ln -sf lite-deploy "$prefix/lite"; } || true
+say "Установлено: $prefix/lite-deploy (короткое имя: lite)"
 "$prefix/lite-deploy" version || true
 
 [ "$binary_only" != 1 ] || exit 0

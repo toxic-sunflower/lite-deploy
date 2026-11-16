@@ -45,3 +45,30 @@ func TestCallWithoutAgent(t *testing.T) {
 		t.Fatalf("%+v %s", e, errb.String())
 	}
 }
+
+func TestDirectRootIsRefused(t *testing.T) {
+	env, out, _ := testEnv(t)
+	env.LoginUID = func() (int, bool) { return 0, true } // вход под root
+	for _, cmd := range [][]string{{"status", "--json"}, {"deploy", "shop", "x", "--json"}, {"firewall", "status", "--json"}, {"project", "list", "--json"}} {
+		out.Reset()
+		if c := run(t, env, cmd...); c != 4 {
+			t.Fatalf("%v: код %d", cmd, c)
+		}
+		if e := decode(t, out); e.Error == nil || e.Error.Code != "permission_denied" || !strings.Contains(e.Error.Hint, "lite init --user") {
+			t.Fatalf("%v: %+v", cmd, e)
+		}
+	}
+	out.Reset()
+	if c := run(t, env, "version", "--json"); c != 0 {
+		t.Fatalf("version должна работать: %d", c)
+	}
+	// через sudo от обычного пользователя (loginuid 1000) и из службы (не задан) запрета нет
+	for _, l := range []func() (int, bool){func() (int, bool) { return 1000, true }, func() (int, bool) { return 0, false }} {
+		env.LoginUID = l
+		out.Reset()
+		run(t, env, "status", "--json")
+		if e := decode(t, out); e.Error != nil && e.Error.Code == "permission_denied" {
+			t.Fatalf("запрет не должен срабатывать: %+v", e)
+		}
+	}
+}

@@ -146,7 +146,7 @@ func Exec(r io.Reader, w io.Writer, run func(args []string) []byte, journal io.W
 	}
 	args, err := req.CLIArgs()
 	if err != nil {
-		fmt.Fprintf(journal, "отклонено: cmd=%q caller=%q: %v\n", req.Cmd, req.Caller, err)
+		_, _ = fmt.Fprintf(journal, "отклонено: cmd=%q caller=%q: %v\n", req.Cmd, req.Caller, err)
 		_, _ = w.Write(ErrorJSON(req.Cmd, "usage", err.Error()))
 		return
 	}
@@ -154,7 +154,7 @@ func Exec(r io.Reader, w io.Writer, run func(args []string) []byte, journal io.W
 	if !userRe.MatchString(caller) {
 		caller = "?"
 	}
-	fmt.Fprintf(journal, "выполняется: caller=%s %s\n", caller, strings.Join(args, " "))
+	_, _ = fmt.Fprintf(journal, "выполняется: caller=%s %s\n", caller, strings.Join(args, " "))
 	out := run(append(args, "--json"))
 	_, _ = w.Write(out)
 }

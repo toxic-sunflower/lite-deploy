@@ -85,7 +85,7 @@ func newAgent(t *testing.T, ran *[]string, allowed bool) (*Agent, *bytes.Buffer)
 		ExecDial: func(ctx context.Context) (net.Conn, error) {
 			c1, c2 := net.Pipe()
 			go func() {
-				defer c2.Close()
+				defer func() { _ = c2.Close() }()
 				Exec(c2, c2, func(args []string) []byte {
 					*ran = append(*ran, strings.Join(args, " "))
 					return []byte(`{"ok":true,"api_version":"v1","command":"x","data":{}}`)

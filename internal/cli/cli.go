@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,6 +57,8 @@ type Env struct {
 	Lock   host.Locker
 	Sleep  func(time.Duration)
 	Getenv func(string) string
+	// LoginUID uid входа в систему (/proc/self/loginuid); ok=false, если он не задан
+	LoginUID func() (int, bool)
 }
 
 // Run выполняет команду в настоящем окружении и возвращает код выхода.
@@ -66,7 +69,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 // realEnv настоящее окружение процесса.
 func realEnv(stdout, stderr io.Writer) Env {
 	return Env{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr, FS: host.OSFS{}, Paths: plan.DefaultPaths(), Config: config.DefaultPath, Now: time.Now, IsRoot: func() bool { return os.Geteuid() == 0 },
-		Runner: host.ExecRunner{}, HTTP: host.NetHTTP{}, Rand: rand.Reader, UID: os.Geteuid(), Lock: host.OSLocker{}, Sleep: time.Sleep, Getenv: os.Getenv,
+		Runner: host.ExecRunner{}, HTTP: host.NetHTTP{}, Rand: rand.Reader, UID: os.Geteuid(), Lock: host.OSLocker{}, Sleep: time.Sleep, Getenv: os.Getenv, LoginUID: loginUID,
 		Interactive: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }} //nolint:gosec // дескриптор терминала помещается в int
 }
 
@@ -100,7 +103,14 @@ func RunEnv(args []string, env Env) int {
 	if len(rest) > 0 && rest[0] == "gate" && env.Getenv != nil && strings.HasSuffix(env.Getenv("SSH_ORIGINAL_COMMAND"), " --json") {
 		jsonOut = true
 	}
-	r := dispatch(rest, env)
+	var r result
+	if cmd := directRoot(rest, env); cmd != "" {
+		r = result{command: cmd, err: &ErrorBody{Code: "permission_denied",
+			Message: "lite не работает при входе под root: зайдите обычным пользователем и запускайте через sudo",
+			Hint:    "нет такого пользователя: создайте его командой lite init --user имя (init единственная команда, которая работает от root)"}}
+	} else {
+		r = dispatch(rest, env)
+	}
 	if r.raw != nil {
 		_, _ = env.Stdout.Write(append(r.raw, '\n'))
 		var e Envelope
@@ -129,6 +139,22 @@ func RunEnv(args []string, env Env) int {
 		return ExitCode(r.err.Code)
 	}
 	return 0
+}
+
+// directRoot возвращает имя команды, если её запустили при входе под root (loginuid 0), а ей это запрещено.
+// Через sudo от обычного пользователя loginuid остаётся его uid; у служб systemd он не задан.
+func directRoot(args []string, env Env) string {
+	if len(args) == 0 || env.LoginUID == nil || !env.root() {
+		return ""
+	}
+	switch args[0] {
+	case "init", "version", "schema", "agent", "exec":
+		return ""
+	}
+	if uid, ok := env.LoginUID(); ok && uid == 0 {
+		return args[0]
+	}
+	return ""
 }
 
 func dispatch(args []string, env Env) result {
@@ -160,7 +186,7 @@ func dispatch(args []string, env Env) result {
 	case "apply":
 		return cmdApply(args[1:], env)
 	case "init":
-		return cmdInit(env)
+		return cmdInit(args[1:], env)
 	case "secret":
 		return cmdSecret(args[1:], env)
 	case "deploy":
@@ -562,4 +588,17 @@ func sortedProjectNames(st plan.State) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// loginUID читает uid входа в систему. 4294967295 значит «не задан» (служба, контейнер).
+func loginUID() (int, bool) {
+	b, err := os.ReadFile("/proc/self/loginuid")
+	if err != nil {
+		return 0, false
+	}
+	n, err := strconv.ParseUint(strings.TrimSpace(string(b)), 10, 32)
+	if err != nil || n == 4294967295 {
+		return 0, false
+	}
+	return int(n), true
 }

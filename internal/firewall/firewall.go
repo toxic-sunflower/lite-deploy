@@ -262,3 +262,48 @@ func (m *Manager) Enable(ctx context.Context) (*State, *Error) {
 	}
 	return m.Status(ctx)
 }
+
+// Режимы файервола для `init --ufw`.
+const (
+	ModeOff  = "off"  // фильтрации нет
+	ModeHTTP = "http" // SSH и веб-порты (80/tcp, 443/tcp, 443/udp: HTTP, HTTPS, WebSocket, HTTP/2, HTTP/3)
+	ModeMax  = "max"  // только SSH
+)
+
+// ModeSteps возвращает команды ufw для режима (без слова ufw), в порядке выполнения.
+// Правило для SSH всегда добавляется до включения, чтобы не потерять доступ.
+func ModeSteps(mode string, sshPort int) ([][]string, *Error) {
+	switch mode {
+	case ModeOff:
+		return [][]string{{"disable"}}, nil
+	case ModeHTTP, ModeMax:
+		steps := [][]string{
+			{"--force", "reset"},
+			{"default", "deny", "incoming"},
+			{"default", "allow", "outgoing"},
+			{"limit", fmt.Sprintf("%d/tcp", sshPort)},
+		}
+		if mode == ModeHTTP {
+			steps = append(steps, []string{"allow", "80/tcp"}, []string{"allow", "443/tcp"}, []string{"allow", "443/udp"})
+		}
+		return append(steps, []string{"--force", "enable"}), nil
+	}
+	return nil, fail(CodeUsage, "режим файервола: off, http или max")
+}
+
+// SSHPort порт sshd (22, если прочитать не удалось).
+func (m *Manager) SSHPort(ctx context.Context) int { return m.sshPort(ctx) }
+
+// SetMode приводит ufw к режиму: прежние правила сбрасываются (кроме режима off, он только выключает).
+func (m *Manager) SetMode(ctx context.Context, mode string) *Error {
+	steps, e := ModeSteps(mode, m.sshPort(ctx))
+	if e != nil {
+		return e
+	}
+	for _, s := range steps {
+		if _, e := m.ufw(ctx, s...); e != nil {
+			return e
+		}
+	}
+	return nil
+}

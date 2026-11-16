@@ -38,12 +38,12 @@ func TestFirewallStatusJSON(t *testing.T) {
 }
 
 func TestFirewallNeedsRootAndConfirmation(t *testing.T) {
-	env, calls := fwEnv(t)
+	env, _ := fwEnv(t)
 	env.IsRoot = func() bool { return false }
 	if c := run(t, env, "firewall", "status"); c != 4 {
 		t.Fatalf("без root: код %d", c)
 	}
-	env, calls = fwEnv(t)
+	env, calls := fwEnv(t)
 	if c := run(t, env, "firewall", "allow", "8080/tcp"); c != 4 {
 		t.Fatalf("без --yes: код %d", c)
 	}

@@ -22,7 +22,7 @@ func TestRealSockets(t *testing.T) {
 	if err != nil {
 		t.Skip("unix-сокеты недоступны:", err)
 	}
-	defer execLn.Close()
+	defer func() { _ = execLn.Close() }()
 	var ran []string
 	go func() {
 		for {
@@ -31,7 +31,7 @@ func TestRealSockets(t *testing.T) {
 				return
 			}
 			go func() {
-				defer c.Close()
+				defer func() { _ = c.Close() }()
 				Exec(c, c, func(args []string) []byte {
 					ran = append(ran, strings.Join(args, " "))
 					return []byte(`{"ok":true,"api_version":"v1","command":"deploy","data":{"slot":"blue"}}`)
@@ -87,7 +87,7 @@ func TestPeerUIDMatchesProcess(t *testing.T) {
 	if err != nil {
 		t.Skip(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	got := make(chan int, 1)
 	go func() {
 		c, err := ln.Accept()
@@ -95,7 +95,7 @@ func TestPeerUIDMatchesProcess(t *testing.T) {
 			got <- -2
 			return
 		}
-		defer c.Close()
+		defer func() { _ = c.Close() }()
 		uid, _ := host.PeerUID(c)
 		got <- uid
 	}()
@@ -103,7 +103,7 @@ func TestPeerUIDMatchesProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	if uid := <-got; uid != os.Getuid() {
 		t.Fatalf("SO_PEERCRED: %d, ожидалось %d", uid, os.Getuid())
 	}

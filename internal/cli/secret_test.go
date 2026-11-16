@@ -14,12 +14,38 @@ import (
 
 func memfs(env Env) *host.MemFS { return env.FS.(*host.MemFS) }
 
+const testKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFakeFakeFakeFake anna@laptop"
+
+// initArgs аргументы init для тестов: без вопросов, файервол не трогаем.
+var initArgs = []string{"init", "--yes", "--ufw", "off", "--json"}
+
+// forInit готовит окружение, в котором init проходит: запуск через sudo от anna, у неё уже есть ключ и пароль.
+func forInit(env Env) Env {
+	m := memfs(env)
+	m.Files["/etc/passwd"] = []byte("root:x:0:0::/root:/bin/bash\nanna:x:1000:1000::/home/anna:/bin/bash\n")
+	m.Files["/home/anna/.ssh/authorized_keys"] = []byte(testKey + "\n")
+	m.Files["/etc/ssh/sshd_config"] = []byte("Include /etc/ssh/sshd_config.d/*.conf\n")
+	env.Getenv = func(k string) string {
+		if k == "SUDO_USER" {
+			return "anna"
+		}
+		return ""
+	}
+	env.Runner = &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		if c.Name == "passwd" {
+			return host.Result{Stdout: []byte("anna P 2026-01-01 0 99999 7 -1\n")}, nil
+		}
+		return host.Result{}, nil
+	}}
+	return env
+}
+
 func initKeys(t *testing.T, env Env) string {
 	t.Helper()
 	var sink strings.Builder
-	e := env
+	e := forInit(env)
 	e.Stdout = &sink
-	if c := RunEnv([]string{"init", "--json"}, e); c != 0 {
+	if c := RunEnv(initArgs, e); c != 0 {
 		t.Fatalf("init: %d %s", c, sink.String())
 	}
 	return string(memfs(env).Files[secrets.DefaultKeyPath])
@@ -36,7 +62,8 @@ func TestInit(t *testing.T) {
 	}
 
 	env, out, _ = testEnv(t)
-	if c := run(t, env, "init", "--json"); c != 0 {
+	env = forInit(env)
+	if c := run(t, env, initArgs...); c != 0 {
 		t.Fatal(c, out.String())
 	}
 	e := decode(t, out)
@@ -53,7 +80,7 @@ func TestInit(t *testing.T) {
 	}
 	key := string(m.Files[secrets.DefaultKeyPath])
 	out.Reset()
-	if c := run(t, env, "init", "--json"); c != 0 || decode(t, out).Data.(map[string]any)["created"] != false || string(m.Files[secrets.DefaultKeyPath]) != key {
+	if c := run(t, env, initArgs...); c != 0 || decode(t, out).Data.(map[string]any)["created"] != false || string(m.Files[secrets.DefaultKeyPath]) != key {
 		t.Fatalf("повторный init: %s", out.String())
 	}
 }

@@ -400,6 +400,7 @@ reverse_proxy 127.0.0.1:<порт слота сервиса> {
 | `lite-deploy rollback <проект>` | то же | normal | раздел 5.3 |
 | `lite-deploy status [проект]` | то же | safe | раздел 5.4 |
 | `lite-deploy gate --project <P>` | SSH (ключ CI) | — | раздел 5.5 |
+| `lite init [--user <имя>[,<имя>…]] [--all-users] [--ufw off\|http\|max] [--plugins podman,postgres] [--yes]` | root (единственная команда, разрешённая при входе под root) | normal | ключ исполнителя и каталоги; пользователи-администраторы (создание, пароль через системный `passwd`, группа `sudo` или `wheel`, обязательный открытый SSH-ключ); режим файервола (по умолчанию `max`: только SSH); пакеты плагинов; запрет входа по SSH по паролю для этих пользователей в `/etc/ssh/sshd_config.d/50-lite-deploy.conf` с проверкой `sshd -t`. Перед выполнением показывает план и спрашивает подтверждение |
 | `lite-deploy agent install` | root (служебная: её вызывает `install.sh`) | normal | создаёт пользователя службы `lite-deploy` (без прав и оболочки), записывает unit-файлы (`lite-deploy-agent.socket`, `lite-deploy-agent.service`, `lite-deploy-exec.socket`, `lite-deploy-exec@.service`), включает сокеты; доступ к агенту у группы администраторов системы (`sudo` или `wheel`) |
 | `lite-deploy agent serve [--socket <путь>]` | systemd | — | агент без прав: HTTP/JSON поверх unix-сокета `/run/lite-deploy/api.sock`, `/v1/status`, `/v1/deploy`, `/v1/rollback`, `/v1/firewall[/allow\|/remove\|/enable]`, `/v1/info`; доступ по группе администраторов системы (`sudo` или `wheel`) и `SO_PEERCRED` |
 | `lite-deploy exec` | systemd (root) | — | исполнитель: одно соединение на сокете `/run/lite-deploy/exec.sock` (доступен только пользователю агента), один запрос `{"cmd","args","caller"}` из фиксированного списка, ответ в формате `--json` |
@@ -412,6 +413,8 @@ reverse_proxy 127.0.0.1:<порт слота сервиса> {
 | `lite-deploy version` | любой | safe | версия, версии схем |
 
 Общие флаги: `--json` (машинный вывод), `--host <пользователь@адрес>` (клиентский режим: команда выполняется на сервере через `ssh <host> lite-deploy <аргументы> --json`, вход и вывод пробрасываются; так работают UI и MCP, D-28), `--quiet`. Права берутся от пользователя ОС: для `apply` при `--host` используется `ssh -t <host> sudo lite-deploy apply …`.
+
+Запрет прямого root: при входе под root (`/proc/self/loginuid` равен 0) все команды, кроме `init`, `version`, `schema` и служебных `agent`, `exec`, отвечают `permission_denied`. Через `sudo` от обычного пользователя и из служб systemd запрета нет.
 
 Команда `secret set` и значения секретов: никогда не принимаются в аргументах и не читаются из переменных окружения; только стандартный ввод или скрытый ввод с терминала.
 

@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/toxic-sunflower/lite-deploy/internal/setup"
 	"io"
 	"os"
 	"strings"
@@ -63,9 +66,24 @@ func readSecretValue(env Env) ([]byte, error) {
 	return b, nil
 }
 
-func cmdInit(env Env) result {
+const initUsage = "использование: lite init [--user имя[,имя…]] [--all-users] [--ufw off|http|max] [--plugins podman,postgres] [--yes]"
+
+// cmdInit готовит сервер к работе: ключ исполнителя и каталоги, пользователи-администраторы с SSH-ключами,
+// вход по SSH только по ключу, режим файервола, плагины. Единственная команда, которую можно запускать прямо от root.
+func cmdInit(args []string, env Env) result {
+	fl := flag.NewFlagSet("init", flag.ContinueOnError)
+	var users listFlag
+	fl.Var(&users, "user", "")
+	allUsers := fl.Bool("all-users", false, "")
+	ufw := fl.String("ufw", "max", "")
+	plugins := fl.String("plugins", "", "")
+	yes := fl.Bool("yes", false, "")
+	pos, err := parseArgs(fl, args)
+	if err != nil || len(pos) != 0 {
+		return fail("init", CodeUsage, initUsage)
+	}
 	if !env.root() {
-		return fail("init", "permission_denied", "init выполняется от root: sudo lite-deploy init")
+		return fail("init", "permission_denied", "init выполняется от root: sudo lite init")
 	}
 	pub, created, err := secrets.EnsureKey(env.FS, env.keyPath(), env.pubPath())
 	if err != nil {
@@ -82,6 +100,38 @@ func cmdInit(env Env) result {
 		if err := env.FS.MkdirAll(d.path, os.FileMode(d.perm)); err != nil {
 			return fail("init", CodeIO, "не удалось создать "+d.path+": "+err.Error())
 		}
+	}
+	split := func(vals []string) []string {
+		var out []string
+		for _, v := range vals {
+			for _, x := range strings.Split(v, ",") {
+				if x = strings.TrimSpace(x); x != "" {
+					out = append(out, x)
+				}
+			}
+		}
+		return out
+	}
+	var projects []string
+	if names, err := env.FS.ReadDir("/etc/lite-deploy/projects"); err == nil {
+		for _, n := range names {
+			if p, ok := strings.CutSuffix(n, ".json"); ok {
+				projects = append(projects, p)
+			}
+		}
+	}
+	current := ""
+	if env.Getenv != nil {
+		current = env.Getenv("SUDO_USER")
+	}
+	stdin := env.Stdin
+	if stdin == nil {
+		stdin = strings.NewReader("")
+	}
+	se := setup.Env{Runner: env.Runner, FS: env.FS, In: bufio.NewReader(stdin), Out: env.Stderr, Projects: projects}
+	opts := setup.Options{Users: split(users), AllUsers: *allUsers, Current: current, Firewall: *ufw, Plugins: split([]string{*plugins}), Yes: *yes}
+	if err := se.Apply(context.Background(), opts); err != nil {
+		return fail("init", plan.CodePrecondition, err.Error())
 	}
 	text := "Ключ исполнителя уже был создан, он не изменён.\n"
 	if created {

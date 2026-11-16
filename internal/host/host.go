@@ -26,6 +26,8 @@ type Cmd struct {
 	Stdin   []byte
 	Env     []string      // дополнительные переменные, формат NAME=value
 	Timeout time.Duration // 0 = 30 секунд
+	// Interactive: команда говорит с человеком напрямую (например passwd): ввод и вывод идут в терминал, вывод не собирается.
+	Interactive bool
 }
 
 // Result результат запуска.
@@ -61,6 +63,9 @@ func (ExecRunner) Run(ctx context.Context, c Cmd) (Result, error) {
 	}
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
+	if c.Interactive {
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	}
 	err := cmd.Run()
 	res := Result{Stdout: out.Bytes(), Stderr: errb.Bytes()}
 	if ctx.Err() != nil {

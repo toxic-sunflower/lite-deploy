@@ -72,7 +72,7 @@ func agentServe(args []string, env Env) result {
 	}
 	var audit io.Writer
 	if f, err := os.OpenFile(agent.AuditPath(env.Getenv("STATE_DIRECTORY")), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640); err == nil { //nolint:gosec // путь из каталога состояния службы
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		audit = f
 	} else {
 		_, _ = fmt.Fprintf(env.Stderr, "журнал агента недоступен: %v\n", err)
