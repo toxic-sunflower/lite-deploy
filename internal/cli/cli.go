@@ -57,6 +57,8 @@ type Env struct {
 	Lock   host.Locker
 	Sleep  func(time.Duration)
 	Getenv func(string) string
+	// PluginDir каталог внешних плагинов; пусто: plugin.Dir
+	PluginDir string
 	// LoginUID uid входа в систему (/proc/self/loginuid); ok=false, если он не задан
 	LoginUID func() (int, bool)
 }
@@ -122,6 +124,7 @@ func RunEnv(args []string, env Env) int {
 	if jsonOut {
 		writeJSON(env.Stdout, Envelope{OK: r.err == nil, APIVersion: APIVersion, Command: r.command, Data: r.data, Warnings: r.warn, Error: r.err})
 	} else if r.err != nil {
+		_, _ = fmt.Fprint(env.Stdout, r.text)
 		_, _ = fmt.Fprintf(env.Stderr, "ОШИБКА [%s]: %s\n", r.err.Code, r.err.Message)
 		for _, d := range r.err.Details {
 			_, _ = fmt.Fprintf(env.Stderr, "  %s: %s (%s)\n", d.Path, d.Message, d.Code)
@@ -207,8 +210,20 @@ func dispatch(args []string, env Env) result {
 		return cmdExec(env)
 	case "call":
 		return cmdCall(args[1:], env)
+	case "plugin":
+		return cmdPlugin(args[1:], env)
+	case "info":
+		return cmdInfo(env, "info")
+	case "verify":
+		return cmdVerify(env)
 	}
-	return fail("usage", CodeUsage, "неизвестная команда: "+args[0])
+	// команда плагина: lite ПЛАГИН КОМАНДА
+	if r, _ := registry(env); r != nil {
+		if _, ok := r.Get(args[0]); ok {
+			return cmdPluginRun(args[0], args[1:], env)
+		}
+	}
+	return fail("usage", CodeUsage, "неизвестная команда: "+args[0]+" (плагины: lite plugin list)")
 }
 
 // listFlag повторяемый флаг.

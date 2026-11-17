@@ -10,7 +10,7 @@
       "type": "string"
     },
     "command": {
-      "pattern": "^[a-z_.]{1,64}$",
+      "pattern": "^[a-z_.-]{1,64}$",
       "type": "string"
     },
     "data": {},

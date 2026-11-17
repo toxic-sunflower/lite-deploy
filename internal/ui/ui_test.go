@@ -183,3 +183,46 @@ func TestFirewallValidation(t *testing.T) {
 		t.Fatalf("при неверном вводе ничего не запускается: %v", r.Calls)
 	}
 }
+
+func TestPluginAPI(t *testing.T) {
+	s, r := newServer("")
+	h := s.Handler()
+	if w := do(h, "GET", "/api/plugins", "", ""); w.Code != 401 {
+		t.Fatalf("без токена: %d", w.Code)
+	}
+	do(h, "GET", "/api/plugins", "", tok)
+	do(h, "GET", "/api/verify", "", tok)
+	do(h, "POST", "/api/plugin", `{"plugin":"package","command":"install","args":["nginx"]}`, tok)
+	do(h, "POST", "/api/plugin", `{"plugin":"package","command":"list"}`, tok)
+	want := []string{"call GET /v1/plugins", "call GET /v1/verify", "call POST /v1/plugin", "call POST /v1/plugin"}
+	if len(r.Calls) != len(want) {
+		t.Fatalf("вызовов %d: %v", len(r.Calls), r.Calls)
+	}
+	for i, w := range want {
+		if got := strings.Join(r.Calls[i].Args, " "); got != w {
+			t.Errorf("%d: %q, ожидалось %q", i, got, w)
+		}
+	}
+	if got := string(r.Calls[2].Stdin); !strings.Contains(got, `"args":["nginx"]`) {
+		t.Errorf("тело: %s", got)
+	}
+	if got := string(r.Calls[3].Stdin); !strings.Contains(got, `"args":[]`) {
+		t.Errorf("пустые аргументы должны быть списком: %s", got)
+	}
+}
+
+func TestPluginValidation(t *testing.T) {
+	s, r := newServer("")
+	h := s.Handler()
+	for _, body := range []string{
+		`{"plugin":"Package","command":"list"}`, `{"plugin":"package","command":"../x"}`, `{"plugin":"package","command":"install","args":["a\nb"]}`,
+		`{"plugin":"package","command":"list","extra":1}`, `not json`,
+	} {
+		if w := do(h, "POST", "/api/plugin", body, tok); w.Code != 400 {
+			t.Errorf("%s: код %d", body, w.Code)
+		}
+	}
+	if len(r.Calls) != 0 {
+		t.Fatalf("неверные запросы не должны доходить до сервера: %v", r.Calls)
+	}
+}

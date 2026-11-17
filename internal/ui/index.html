@@ -37,6 +37,10 @@
   input.num { flex:0 0 90px; } input.src { flex:1 1 180px; }
   select { padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); font:inherit; }
   .tag { color:var(--muted); font-size:12px; }
+  pre.out { margin:8px 0 0; padding:8px 10px; background:var(--bg); border:1px solid var(--line); border-radius:6px; font:13px ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; max-height:260px; overflow:auto; }
+  .warn { color:#9a6700; } @media (prefers-color-scheme: dark) { .warn { color:#e3b341; } }
+  .cmd { margin:8px 0 0; }
+  .cmd .help { color:var(--muted); font-size:13px; }
 </style>
 </head>
 <body>
@@ -46,6 +50,10 @@
   <div id="list"><p class="empty">Загрузка…</p></div>
   <h3>Файервол</h3>
   <div id="fw"><p class="empty">Загрузка…</p></div>
+  <h3>Проверка сервера</h3>
+  <div id="vf"><button id="vfgo" class="primary">Проверить</button><div id="vfout"></div></div>
+  <h3>Пакеты и плагины</h3>
+  <div id="pl"><p class="empty">Загрузка…</p></div>
 </div>
 <script>
 (function () {
@@ -184,6 +192,78 @@
     }).catch(function (e) { document.getElementById('fw').textContent = 'Нет связи: ' + e; });
   }
 
+  function pluginCard(p) {
+    var c = el('div', 'card');
+    c.appendChild(el('h2', null, p.name));
+    c.appendChild(el('div', 'meta', p.description + ' · ' + (p.kind === 'builtin' ? 'встроенный' : 'внешний') + (p.requires && p.requires.length ? ' · нужны пакеты: ' + p.requires.join(', ') : '')));
+    var out = el('pre', 'out'); out.style.display = 'none';
+    (p.commands || []).forEach(function (cm) {
+      var row = el('div', 'cmd');
+      row.appendChild(el('code', null, 'lite ' + p.name + ' ' + cm.name + (cm.args ? ' ' + cm.args : '')));
+      row.appendChild(el('span', 'help', ' — ' + cm.help));
+      var f = el('form'), inp = el('input'), go = el('button', cm.confirm ? null : 'primary', 'Выполнить');
+      if (cm.args) { inp.type = 'text'; inp.placeholder = cm.args; inp.autocomplete = 'off'; inp.spellcheck = false; f.appendChild(inp); }
+      go.type = 'submit'; f.appendChild(go);
+      f.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var args = cm.args ? inp.value.trim().split(/\s+/).filter(Boolean) : [];
+        if (cm.args && cm.args.indexOf('…') < 0 && args.length !== cm.args.split(/\s+/).length) { msg('err', 'Нужно: ' + cm.args); return; }
+        if (cm.args && !args.length) { msg('err', 'Нужно: ' + cm.args); return; }
+        if (cm.confirm && !confirm('Выполнить: lite ' + p.name + ' ' + cm.name + ' ' + args.join(' ') + '?')) return;
+        if (busy) return;
+        setBusy(true); msg('ok', 'Выполняю…');
+        api('/api/plugin', { plugin: p.name, command: cm.name, args: args }).then(function (r) {
+          if (r.ok) {
+            clearMsg();
+            out.style.display = 'block';
+            out.textContent = pluginText(r.data);
+          } else { msg('err', r.error.message + (r.error.hint ? '\n' + r.error.hint : '')); }
+        }).catch(function (e) { msg('err', 'Нет связи: ' + e); }).then(function () { setBusy(false); });
+      });
+      row.appendChild(f);
+      c.appendChild(row);
+    });
+    c.appendChild(out);
+    return c;
+  }
+  function pluginText(d) {
+    if (!d) return 'Готово.';
+    if (Array.isArray(d.packages) && !d.action) return d.packages.length ? d.packages.map(function (x) { return x.name + '  ' + x.version + '  ' + x.installed_at; }).join('\n') : 'Через lite пакеты пока не ставились.';
+    if (d.packages && d.action) return 'Готово: ' + d.action + ' ' + d.packages.join(', ');
+    if ('installed' in d) return d.name + ': ' + (d.installed ? 'установлен, версия ' + d.version + (d.by_lite ? ' (через lite)' : ' (не через lite)') : 'не установлен');
+    if (d.output !== undefined) return d.output;
+    return JSON.stringify(d, null, 2);
+  }
+  function loadPlugins() {
+    api('/api/plugins').then(function (r) {
+      var box = document.getElementById('pl');
+      box.textContent = '';
+      if (!r.ok) { box.appendChild(el('p', r.error.code === 'permission_denied' ? 'empty' : 'down', r.error.message)); return; }
+      (r.data.plugins || []).forEach(function (p) { box.appendChild(pluginCard(p)); });
+      (r.data.load_errors || []).forEach(function (m) { box.appendChild(el('p', 'down', m)); });
+    }).catch(function (e) { document.getElementById('pl').textContent = 'Нет связи: ' + e; });
+  }
+  function verify() {
+    var box = document.getElementById('vfout');
+    if (busy) return;
+    setBusy(true); box.textContent = 'Проверяю…';
+    api('/api/verify').then(function (r) {
+      box.textContent = '';
+      if (!r.data) { box.appendChild(el('p', 'down', r.error.message)); return; }
+      var t = el('table');
+      r.data.findings.forEach(function (f) {
+        var row = el('tr');
+        row.appendChild(el('td', f.level === 'ok' ? 'up' : (f.level === 'warn' ? 'warn' : 'down'), f.level === 'ok' ? 'ок' : (f.level === 'warn' ? 'внимание' : 'ошибка')));
+        row.appendChild(el('td', null, f.plugin + '/' + f.check));
+        row.appendChild(el('td', null, f.message + (f.fix && f.level !== 'ok' ? '  →  ' + f.fix : '')));
+        t.appendChild(row);
+      });
+      box.appendChild(t);
+      box.appendChild(el('div', 'meta', 'Итого: ок ' + r.data.ok + ', предупреждений ' + r.data.warnings + ', ошибок ' + r.data.failures));
+    }).catch(function (e) { box.textContent = 'Нет связи: ' + e; }).then(function () { setBusy(false); });
+  }
+  document.getElementById('vfgo').addEventListener('click', verify);
+
   function load() {
     api('/api/status').then(function (r) {
       var list = document.getElementById('list');
@@ -201,7 +281,7 @@
   }
 
   api('/api/info').then(function (i) { document.getElementById('srv').textContent = i.host ? 'сервер: ' + i.host : 'этот компьютер'; }).catch(function () {});
-  load(); loadFw();
+  load(); loadFw(); loadPlugins();
   setInterval(function () { if (!busy && document.activeElement.tagName !== 'INPUT') { load(); loadFw(); } }, 10000);
 })();
 </script>

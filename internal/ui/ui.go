@@ -18,6 +18,7 @@ import (
 
 	"github.com/toxic-sunflower/lite-deploy/internal/firewall"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
+	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
 //go:embed index.html
@@ -27,6 +28,7 @@ var (
 	projectRe = regexp.MustCompile(`\A[a-z][a-z0-9-]{1,30}\z`)
 	shaRe     = regexp.MustCompile(`\A[0-9a-f]{40}\z`)
 	hostRe    = regexp.MustCompile(`\A[A-Za-z0-9_][A-Za-z0-9._@:-]{0,100}\z`)
+	pluginRe  = regexp.MustCompile(`\A[a-z][a-z0-9-]{0,30}\z`)
 )
 
 // Server интерфейс.
@@ -132,6 +134,29 @@ func (s *Server) Handler() http.Handler {
 			return errBody("usage", "неверное имя проекта"), 400
 		}
 		return s.call(r.Context(), "POST", "/v1/rollback", map[string]string{"project": in.Project}), 200
+	}))
+	mux.HandleFunc("/api/plugins", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
+		return s.call(r.Context(), "GET", "/v1/plugins", nil), 200
+	}))
+	mux.HandleFunc("/api/verify", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
+		return s.call(r.Context(), "GET", "/v1/verify", nil), 200
+	}))
+	mux.HandleFunc("/api/plugin", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		var in struct {
+			Plugin  string   `json:"plugin"`
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		}
+		if code := readBody(r, &in); code != 0 {
+			return errBody("usage", "неверный запрос"), code
+		}
+		if !pluginRe.MatchString(in.Plugin) || !pluginRe.MatchString(in.Command) || !plugin.ValidArgs(in.Args) {
+			return errBody("usage", "неверный плагин, команда или аргументы"), 400
+		}
+		if in.Args == nil {
+			in.Args = []string{}
+		}
+		return s.call(r.Context(), "POST", "/v1/plugin", in), 200
 	}))
 	mux.HandleFunc("/api/firewall", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		return s.call(r.Context(), "GET", "/v1/firewall", nil), 200

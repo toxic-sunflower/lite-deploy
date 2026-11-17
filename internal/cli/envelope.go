@@ -28,7 +28,7 @@ type ErrorBody struct {
 type Envelope struct {
 	OK         bool       `json:"ok"`
 	APIVersion string     `json:"api_version" enum:"v1"`
-	Command    string     `json:"command" pattern:"^[a-z_.]{1,64}$"`
+	Command    string     `json:"command" pattern:"^[a-z_.-]{1,64}$"`
 	Data       any        `json:"data,omitempty"`
 	Warnings   []Warning  `json:"warnings,omitempty"`
 	Error      *ErrorBody `json:"error,omitempty"`
@@ -50,7 +50,7 @@ var exitCodes = map[string]int{
 	"permission_denied": 4, "confirmation_required": 4, "protected_rule": 4,
 	"step_failed":        5,
 	"plan_hash_mismatch": 6, "plan_expired": 6, "plan_wrong_server": 6, "deploy_in_progress": 6, "quota_exceeded": 6,
-	"project_not_found": 7, "secret_not_found": 7, "rule_not_found": 7,
+	"project_not_found": 7, "secret_not_found": 7, "rule_not_found": 7, "verify_failed": 8,
 	"deploy_unhealthy": 10, "deploy_failed": 10, "rollback_unavailable": 10, "nothing_deployed": 10,
 }
 

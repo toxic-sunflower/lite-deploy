@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/firewall"
+	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
 // MaxRequest предел размера запроса к исполнителю, байт.
@@ -23,6 +24,7 @@ var (
 	shaRe     = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	specRe    = regexp.MustCompile(`^([0-9]{1,5})/(tcp|udp)$`)
 	userRe    = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+	pluginRe  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 )
 
 // Request запрос агента исполнителю.
@@ -85,6 +87,16 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, errors.New("неверное имя проекта")
 		}
 		return []string{"rollback", a[0]}, nil
+	case "info", "verify":
+		if err := need(0); err != nil {
+			return nil, err
+		}
+		return []string{r.Cmd}, nil
+	case "plugin.run": // аргументы: плагин, команда, аргументы команды; подтверждение даёт интерфейс (--yes)
+		if len(a) < 2 || !pluginRe.MatchString(a[0]) || !pluginRe.MatchString(a[1]) || !plugin.ValidArgs(a[2:]) {
+			return nil, errors.New("plugin.run: нужны имя плагина, команда и допустимые аргументы")
+		}
+		return append(append([]string{"plugin", "run"}, a...), "--yes"), nil
 	case "firewall.status":
 		if err := need(0); err != nil {
 			return nil, err

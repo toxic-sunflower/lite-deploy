@@ -17,13 +17,16 @@ const sha = "1111111111111111111111111111111111111111"
 
 func TestCLIArgs(t *testing.T) {
 	ok := map[string]Request{
-		"status":                      {Cmd: "status"},
-		"status shop":                 {Cmd: "status", Args: []string{"shop"}},
-		"deploy shop " + sha:          {Cmd: "deploy", Args: []string{"shop", sha}},
-		"rollback shop":               {Cmd: "rollback", Args: []string{"shop"}},
-		"firewall status":             {Cmd: "firewall.status"},
-		"firewall enable --yes":       {Cmd: "firewall.enable"},
-		"firewall allow 80/tcp --yes": {Cmd: "firewall.allow", Args: []string{"80/tcp", ""}},
+		"status":                                 {Cmd: "status"},
+		"status shop":                            {Cmd: "status", Args: []string{"shop"}},
+		"deploy shop " + sha:                     {Cmd: "deploy", Args: []string{"shop", sha}},
+		"rollback shop":                          {Cmd: "rollback", Args: []string{"shop"}},
+		"firewall status":                        {Cmd: "firewall.status"},
+		"info":                                   {Cmd: "info"},
+		"verify":                                 {Cmd: "verify"},
+		"plugin run package install nginx --yes": {Cmd: "plugin.run", Args: []string{"package", "install", "nginx"}},
+		"firewall enable --yes":                  {Cmd: "firewall.enable"},
+		"firewall allow 80/tcp --yes":            {Cmd: "firewall.allow", Args: []string{"80/tcp", ""}},
 		"firewall allow 80/tcp --from 10.0.0.0/8 --yes":                {Cmd: "firewall.allow", Args: []string{"80/tcp", "10.0.0.0/8"}},
 		"firewall remove 8080/udp --action limit --yes":                {Cmd: "firewall.remove", Args: []string{"8080/udp", "", "limit"}},
 		"firewall remove 8080/udp --action allow --from 1.2.3.4 --yes": {Cmd: "firewall.remove", Args: []string{"8080/udp", "1.2.3.4", "allow"}},
@@ -41,6 +44,8 @@ func TestCLIArgs(t *testing.T) {
 		{Cmd: "deploy", Args: []string{"shop; id", sha}},
 		{Cmd: "firewall.allow", Args: []string{"80", ""}}, {Cmd: "firewall.allow", Args: []string{"99999/tcp", ""}},
 		{Cmd: "firewall.allow", Args: []string{"80/tcp", "--force"}}, {Cmd: "firewall.allow", Args: []string{"80/tcp"}},
+		{Cmd: "plugin.run"}, {Cmd: "plugin.run", Args: []string{"package"}}, {Cmd: "plugin.run", Args: []string{"Package", "install"}},
+		{Cmd: "plugin.run", Args: []string{"package", "install", "a\nb"}}, {Cmd: "info", Args: []string{"x"}},
 		{Cmd: "firewall.remove", Args: []string{"80/tcp", "", "drop"}}, {Cmd: "firewall.enable", Args: []string{"x"}},
 	}
 	for _, req := range bad {
@@ -118,6 +123,9 @@ func TestAgentRoutes(t *testing.T) {
 		{"GET", "/v1/status", "", "status --json"},
 		{"POST", "/v1/deploy", `{"project":"shop","sha":"` + sha + `"}`, "deploy shop " + sha + " --json"},
 		{"POST", "/v1/rollback", `{"project":"shop"}`, "rollback shop --json"},
+		{"GET", "/v1/plugins", "", "info --json"},
+		{"GET", "/v1/verify", "", "verify --json"},
+		{"POST", "/v1/plugin", `{"plugin":"package","command":"check","args":["nginx"]}`, "plugin run package check nginx --yes --json"},
 		{"GET", "/v1/firewall", "", "firewall status --json"},
 		{"POST", "/v1/firewall/allow", `{"port":8080,"proto":"tcp","from":"10.0.0.0/8"}`, "firewall allow 8080/tcp --from 10.0.0.0/8 --yes --json"},
 		{"POST", "/v1/firewall/remove", `{"port":8080,"proto":"tcp","action":"allow"}`, "firewall remove 8080/tcp --action allow --yes --json"},

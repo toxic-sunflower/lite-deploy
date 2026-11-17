@@ -155,6 +155,19 @@ func (a *Agent) Handler() http.Handler {
 		}
 		return Request{Cmd: "rollback", Args: []string{in.Project}}, true
 	})
+	route(http.MethodGet, "/v1/plugins", func(*http.Request) (Request, bool) { return Request{Cmd: "info"}, true })
+	route(http.MethodGet, "/v1/verify", func(*http.Request) (Request, bool) { return Request{Cmd: "verify"}, true })
+	route(http.MethodPost, "/v1/plugin", func(r *http.Request) (Request, bool) {
+		var in struct {
+			Plugin  string   `json:"plugin"`
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		}
+		if !readJSON(r, &in) {
+			return Request{}, false
+		}
+		return Request{Cmd: "plugin.run", Args: append([]string{in.Plugin, in.Command}, in.Args...)}, true
+	})
 	route(http.MethodGet, "/v1/firewall", func(*http.Request) (Request, bool) { return Request{Cmd: "firewall.status"}, true })
 	route(http.MethodPost, "/v1/firewall/enable", func(r *http.Request) (Request, bool) {
 		var in struct{}
