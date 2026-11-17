@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -42,7 +43,8 @@ func TestLoadAndRun(t *testing.T) {
 	fr.Handler = func(c host.Cmd) (host.Result, error) { return host.Result{Stdout: []byte("строка 1")}, nil }
 	// не хватает пакета jq
 	_, err := p.Run(context.Background(), env, "tail", []string{"caddy"})
-	pe, _ := err.(*Error)
+	var pe *Error
+	_ = errors.As(err, &pe)
 	if pe == nil || pe.Code != "precondition_failed" || pe.Hint != "lite package install jq" {
 		t.Fatalf("%v", err)
 	}
@@ -71,7 +73,8 @@ func TestRunFailure(t *testing.T) {
 		return host.Result{ExitCode: 3, Stderr: []byte("нет доступа")}, nil
 	}
 	_, err := p.Run(context.Background(), Env{Runner: fr, FS: m}, "clear", nil)
-	if pe, _ := err.(*Error); pe == nil || pe.Code != "step_failed" || !strings.Contains(pe.Message, "нет доступа") {
+	var pe *Error
+	if !errors.As(err, &pe) || pe == nil || pe.Code != "step_failed" || !strings.Contains(pe.Message, "нет доступа") {
 		t.Fatalf("%v", err)
 	}
 }

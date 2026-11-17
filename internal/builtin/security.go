@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sort"
@@ -408,7 +409,8 @@ func (Security) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 		var done []string
 		step := func(name string, f func() error) error {
 			if err := f(); err != nil {
-				if pe, ok := err.(*plugin.Error); ok {
+				var pe *plugin.Error
+				if errors.As(err, &pe) {
 					pe.Message = fmt.Sprintf("шаг «%s»: %s (уже выполнено: %s)", name, pe.Message, strings.Join(append(done, "—"), ", "))
 				}
 				return err
@@ -726,7 +728,7 @@ func (s *sec) portFindings() []plugin.Finding {
 			continue
 		}
 		proto := f[0]
-		if proto == "udp" && skipUDP[n] {
+		if proto == "udp" && (skipUDP[n] || n >= 32768) { // 32768 и выше: временные порты клиентов
 			continue
 		}
 		k := port + "/" + proto

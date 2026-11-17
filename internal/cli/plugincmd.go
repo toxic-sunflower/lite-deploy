@@ -152,7 +152,7 @@ func cmdInfo(env Env, command string) result {
 		list = append(list, pluginInfo{Name: p.Name(), Kind: p.Kind(), Description: p.Description(), Requires: req, Commands: p.Commands()})
 		fmt.Fprintf(&sb, "  %-12s %-9s %s\n", p.Name(), p.Kind(), p.Description())
 		for _, c := range p.Commands() {
-			fmt.Fprintf(&sb, "      lite %s %s %s — %s\n", p.Name(), c.Name, c.Args, c.Help)
+			fmt.Fprintf(&sb, "      %s — %s\n", strings.TrimSpace("lite "+p.Name()+" "+c.Name+" "+c.Args), c.Help)
 		}
 	}
 	var warns []Warning

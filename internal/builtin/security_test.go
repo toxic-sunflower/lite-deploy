@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -133,7 +134,8 @@ func runSec(s *server, user string, cmd string, args ...string) (plugin.Output, 
 }
 
 func code(err error) string {
-	if pe, ok := err.(*plugin.Error); ok {
+	var pe *plugin.Error
+	if errors.As(err, &pe) {
 		return pe.Code
 	}
 	return ""
@@ -164,7 +166,7 @@ func TestEnableFull(t *testing.T) {
 		t.Error("нет файла sysctl")
 	}
 	// порядок: SSH в самом конце, после остальных защит (чтобы сбой раньше не запер сервер)
-	if !(s.did("systemctl restart fail2ban") < s.did("sysctl -e") && s.did("sysctl -e") < s.did("sshd -t") && s.did("sshd -t") < s.did("systemctl reload ssh")) {
+	if s.did("systemctl restart fail2ban") >= s.did("sysctl -e") || s.did("sysctl -e") >= s.did("sshd -t") || s.did("sshd -t") >= s.did("systemctl reload ssh") {
 		t.Errorf("порядок шагов:\n%s", strings.Join(s.calls, "\n"))
 	}
 	// всё применено: проверки зелёные

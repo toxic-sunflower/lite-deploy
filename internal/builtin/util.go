@@ -52,16 +52,6 @@ func (t tools) manager() string {
 	return m
 }
 
-// installed проверяет, стоит ли пакет в системе.
-func (t tools) installed(name string) bool {
-	m := t.manager()
-	if m == "" {
-		return false
-	}
-	_, ok, _ := t.pm().Query(t.ctx, m, name)
-	return ok
-}
-
 func finding(plug, check, level, msg, fix string) plugin.Finding {
 	return plugin.Finding{Plugin: plug, Check: check, Level: level, Message: msg, Fix: fix}
 }
