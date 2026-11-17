@@ -62,7 +62,7 @@ func (e Env) installCaddy(ctx context.Context, m string) error {
 		}
 	}
 	if err := e.must(ctx, "caddy", "validate", "--config", caddyfile, "--adapter", "caddyfile"); err != nil {
-		return fmt.Errorf("Caddyfile не прошёл проверку: %w", err)
+		return fmt.Errorf("главный Caddyfile не прошёл проверку: %w", err)
 	}
 	if err := e.must(ctx, "systemctl", "enable", "--now", "caddy"); err != nil {
 		return err
