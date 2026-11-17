@@ -186,7 +186,11 @@ func (e Env) Plan(o Options, users []string) ([]string, error) {
 		if _, ok := pluginPackages[pl]; !ok {
 			return nil, fmt.Errorf("неизвестный плагин %q (есть: %s)", pl, strings.Join(pluginNames(), ", "))
 		}
-		p = append(p, "плагин "+pl+": установить пакеты")
+		if pl == "caddy" {
+			p = append(p, "плагин caddy: установить Caddy, главный Caddyfile (подключает сайты проектов из /etc/caddy/conf.d), запустить службу")
+		} else {
+			p = append(p, "плагин "+pl+": установить пакеты")
+		}
 	}
 	return p, nil
 }

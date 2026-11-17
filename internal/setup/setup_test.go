@@ -46,6 +46,8 @@ func (w *world) env(input string) Env {
 			return host.Result{ExitCode: 2}, nil
 		case line == "sshd -T":
 			return host.Result{Stdout: []byte("port 2222\n")}, nil
+		case c.Name == "gpg":
+			w.fs.Files[c.Args[len(c.Args)-1]] = c.Stdin // настоящий gpg создаёт файл ключей
 		case c.Name == "useradd":
 			name := c.Args[len(c.Args)-1]
 			w.created = append(w.created, name)
@@ -245,5 +247,69 @@ func TestNoIncludeInSSHDConfig(t *testing.T) {
 	w.fs.Files["/home/anna/.ssh/authorized_keys"] = []byte(key + "\n")
 	if err := w.env("").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Yes: true}); err == nil {
 		t.Fatal("без Include настройка не подействует: нужно сказать об этом")
+	}
+}
+
+func TestCaddyPluginInstallsAndConfigures(t *testing.T) {
+	w := newWorld()
+	w.fs.Files["/home/anna/.ssh/authorized_keys"] = []byte(key + "\n")
+	w.fs.Files["/etc/caddy/Caddyfile"] = []byte(":80 { respond \"старое\" }\n")
+	w.failOn = "caddy version"
+	if err := w.env("").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Plugins: []string{"caddy"}, Yes: true}); err != nil {
+		t.Fatal(err, w.out.String())
+	}
+	w.has(t, "apt-get install -y -qq debian-keyring", "curl -fsSL --proto =https --tlsv1.2 https://dl.cloudsmith.io/public/caddy/stable/gpg.key",
+		"gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg", "apt-get install -y -qq caddy",
+		"caddy validate --config /etc/caddy/Caddyfile", "systemctl enable --now caddy", "systemctl reload caddy")
+	if got := string(w.fs.Files["/etc/caddy/Caddyfile"]); !strings.Contains(got, caddyMark) || !strings.Contains(got, "import /etc/caddy/conf.d/*.caddy") {
+		t.Fatalf("Caddyfile: %q", got)
+	}
+	backup := false
+	for name, body := range w.fs.Files {
+		if strings.HasPrefix(name, "/etc/caddy/Caddyfile.bak.") && strings.Contains(string(body), "старое") {
+			backup = true
+		}
+	}
+	if !backup {
+		t.Fatal("прежний Caddyfile должен быть сохранён")
+	}
+	if _, ok := w.fs.Files["/etc/caddy/conf.d/00-placeholder.caddy"]; !ok {
+		t.Fatal("нет заглушки conf.d")
+	}
+	if w.index("systemctl enable --now caddy") < w.index("caddy validate") {
+		t.Fatal("службу нельзя запускать до проверки Caddyfile")
+	}
+}
+
+func TestCaddyAlreadyInstalledKeepsOurCaddyfile(t *testing.T) {
+	w := newWorld()
+	w.fs.Files["/home/anna/.ssh/authorized_keys"] = []byte(key + "\n")
+	own := caddyMark + "\nimport /etc/caddy/conf.d/*.caddy\n"
+	w.fs.Files["/etc/caddy/Caddyfile"] = []byte(own)
+	if err := w.env("").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Plugins: []string{"caddy"}, Yes: true}); err != nil {
+		t.Fatal(err)
+	}
+	if w.index("curl") >= 0 || w.index("apt-get install") >= 0 {
+		t.Fatalf("Caddy уже есть: ставить нечего: %v", w.calls)
+	}
+	if string(w.fs.Files["/etc/caddy/Caddyfile"]) != own {
+		t.Fatal("свой Caddyfile не переписывается")
+	}
+	for name := range w.fs.Files {
+		if strings.Contains(name, "Caddyfile.bak") {
+			t.Fatal("копию делать не нужно")
+		}
+	}
+}
+
+func TestCaddyValidateFailureStopsBeforeStart(t *testing.T) {
+	w := newWorld()
+	w.fs.Files["/home/anna/.ssh/authorized_keys"] = []byte(key + "\n")
+	w.failOn = "caddy validate"
+	if err := w.env("").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Plugins: []string{"caddy"}, Yes: true}); err == nil {
+		t.Fatal("ошибка проверки Caddyfile должна останавливать")
+	}
+	if w.index("systemctl enable --now caddy") >= 0 {
+		t.Fatal("со сломанным Caddyfile службу не запускаем")
 	}
 }

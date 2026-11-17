@@ -37,7 +37,7 @@ func verifyHost(ctx context.Context, r *run, _ any) (outcome, error) {
 	for _, t := range tools {
 		res, err := r.Runner.Run(ctx, hostCmd(t[0], t[1:]...))
 		if err != nil || res.ExitCode != 0 {
-			problems = append(problems, t[0]+" не установлен или не запускается")
+			problems = append(problems, t[0]+" не установлен или не запускается"+installHint(t[0]))
 			continue
 		}
 		if t[0] == "podman" {
@@ -147,4 +147,15 @@ func createProjectUser(ctx context.Context, r *run, v any) (outcome, error) {
 		return outcome{}, nil
 	}
 	return outcome{changed: true, detail: strings.Join(did, ", ")}, nil
+}
+
+// installHint подсказывает, как поставить недостающий компонент.
+func installHint(tool string) string {
+	switch tool {
+	case "caddy", "podman":
+		return " (поставьте: sudo lite init --plugins " + tool + ")"
+	case "psql":
+		return " (поставьте: sudo lite init --plugins postgres)"
+	}
+	return ""
 }

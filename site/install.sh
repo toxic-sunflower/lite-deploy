@@ -1,8 +1,8 @@
 #!/bin/sh
 # Установщик lite-deploy. Одна команда ставит всё:
 #   бинарник из GitHub Releases (проверяются SHA256 и подпись minisign) в /usr/local/bin,
-#   minisign (для проверки подписи), Caddy (входящий трафик) с главным Caddyfile,
-#   агента: пользователя службы без прав и сокеты systemd.
+#   minisign (для проверки подписи) и агента: пользователя службы без прав и сокеты systemd.
+#   Всё остальное (пользователи, файервол, Caddy, podman, PostgreSQL) настраивает `lite init` и интерфейс.
 #
 #   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh
 #   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh -s -- --version v0.1.0
@@ -147,48 +147,9 @@ say "Установлено: $prefix/lite-deploy (короткое имя: lite)
 
 [ "$binary_only" != 1 ] || exit 0
 
-# ---- Caddy и агент ----
-install_caddy() {
-  case $pm in
-    apt)
-      pkg_install debian-keyring debian-archive-keyring apt-transport-https curl gnupg
-      fetch 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' "$tmp/caddy.gpg" || die "не удалось скачать ключ репозитория Caddy"
-      gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg "$tmp/caddy.gpg"
-      fetch 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' /etc/apt/sources.list.d/caddy-stable.list || die "не удалось скачать список репозитория Caddy"
-      chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list
-      as_root apt-get update -qq
-      pkg_install caddy ;;
-    dnf)
-      pkg_install 'dnf-command(copr)'
-      as_root dnf copr enable -y @caddy/caddy
-      pkg_install caddy ;;
-    zypper|pacman) pkg_install caddy ;;
-    *) die "не умею ставить Caddy на этой системе: поставьте вручную и запустите установщик снова" ;;
-  esac
-}
-
-if ! command -v caddy >/dev/null 2>&1; then
-  say "Ставлю Caddy (ingress)..."
-  install_caddy
-fi
-
-MARK='# managed-by: lite-deploy'
-mkdir -p /etc/caddy/conf.d
-if ! grep -qF "$MARK" /etc/caddy/Caddyfile 2>/dev/null; then
-  [ -f /etc/caddy/Caddyfile ] && cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak.$(date +%Y%m%d%H%M%S)"
-  cat > /etc/caddy/Caddyfile <<EOF
-$MARK
-# Каждый проект добавляет свой файл /etc/caddy/conf.d/<проект>.caddy. Не правьте этот файл руками.
-import /etc/caddy/conf.d/*.caddy
-EOF
-fi
-[ -f /etc/caddy/conf.d/00-placeholder.caddy ] || echo '# заглушка: чтобы маска import всегда находила файл' > /etc/caddy/conf.d/00-placeholder.caddy
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || die "Caddyfile не проходит проверку: caddy validate --config /etc/caddy/Caddyfile"
-systemctl enable --now caddy
-systemctl reload caddy
-
+# ---- агент ----
 say "Ставлю агента (systemd)..."
 "$prefix/lite-deploy" agent install
 
 say ""
-say "Готово. Управлять могут администраторы системы (группа sudo или wheel)."
+say "Готово. Дальше: lite init --user ВАШЕ_ИМЯ (создаст администратора с SSH-ключом)."

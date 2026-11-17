@@ -18,6 +18,8 @@ var pluginPackages = map[string]map[string][]string{
 	"postgres": {
 		"apt": {"postgresql"}, "dnf": {"postgresql-server"}, "zypper": {"postgresql-server"}, "pacman": {"postgresql"},
 	},
+	// caddy ставится отдельной процедурой (installCaddy): репозиторий и главный Caddyfile
+	"caddy": {},
 }
 
 func pluginNames() []string {
@@ -81,6 +83,9 @@ func (e Env) installPlugin(ctx context.Context, name string) error {
 	m, err := e.manager(ctx)
 	if err != nil {
 		return err
+	}
+	if name == "caddy" {
+		return e.installCaddy(ctx, m)
 	}
 	pkgs := pluginPackages[name][m]
 	if len(pkgs) == 0 {
