@@ -17,7 +17,7 @@ const pluginUsage = "использование: lite plugin list | lite plugin 
 // registry собирает встроенные и внешние плагины. Ошибки загрузки внешних плагинов возвращаются отдельно.
 func registry(env Env) (*plugin.Registry, []error) {
 	r := plugin.NewRegistry()
-	for _, p := range []plugin.Plugin{builtin.Pkg{}} {
+	for _, p := range []plugin.Plugin{builtin.Pkg{}, builtin.Security{}, builtin.Firewall{}, builtin.Caddy{}, builtin.Podman{}, builtin.PG{}} {
 		if err := r.Add(p); err != nil {
 			panic(err) // ошибка в самой программе: встроенные имена фиксированы
 		}
@@ -39,7 +39,7 @@ func (e Env) pluginEnv() plugin.Env {
 	if e.Getenv != nil {
 		user = e.Getenv("SUDO_USER")
 	}
-	return plugin.Env{Runner: e.Runner, FS: e.FS, Now: e.Now, User: user}
+	return plugin.Env{Runner: e.Runner, FS: e.FS, Now: e.Now, User: user, Projects: projectNames(e)}
 }
 
 func pluginFail(command string, err error) result {
@@ -90,10 +90,10 @@ func cmdPluginRun(name string, args []string, env Env) result {
 	if !plugin.ValidArgs(cargs) {
 		return fail(command, CodeUsage, "неверные аргументы: без управляющих символов, не длиннее 256 знаков, не больше 16")
 	}
+	if (c.Confirm || c.Root) && !env.root() {
+		return fail(command, "permission_denied", "команда требует root: sudo lite "+name+" "+cmd+" …")
+	}
 	if c.Confirm {
-		if !env.root() {
-			return fail(command, "permission_denied", "команда меняет систему и требует root: sudo lite "+name+" "+cmd+" …")
-		}
 		if !yes && !confirm(env, fmt.Sprintf("Выполнить: lite %s %s %s?", name, cmd, strings.Join(cargs, " "))) {
 			return fail(command, "confirmation_required", "это изменит систему; повторите с --yes")
 		}
@@ -198,4 +198,17 @@ func cmdVerify(env Env) result {
 		res.err = &ErrorBody{Code: "verify_failed", Message: fmt.Sprintf("проверка нашла ошибок: %d", counts[plugin.LevelFail])}
 	}
 	return res
+}
+
+// projectNames имена проектов (они же пользователи проектов) по описаниям в /etc/lite-deploy/projects.
+func projectNames(env Env) []string {
+	var out []string
+	if names, err := env.FS.ReadDir("/etc/lite-deploy/projects"); err == nil {
+		for _, n := range names {
+			if p, ok := strings.CutSuffix(n, ".json"); ok {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
 }

@@ -101,10 +101,11 @@ func TestInfoVerifyAndExternalPlugin(t *testing.T) {
 		t.Fatalf("%d %s", c, out.String())
 	}
 	out.Reset()
-	if c := run(t, env, "verify", "--json"); c != 0 {
-		t.Fatalf("предупреждение не должно ломать verify: %d %s", c, out.String())
+	// в этом окружении у security есть ошибки (нет fail2ban), поэтому verify завершается кодом 8; предупреждение плагина logs видно
+	if c := run(t, env, "verify", "--json"); c != 8 {
+		t.Fatalf("%d %s", c, out.String())
 	}
-	if s := out.String(); !strings.Contains(s, `"warnings":1`) || !strings.Contains(s, "lite logs clear") {
+	if s := out.String(); !strings.Contains(s, `"plugin":"logs","check":"size","level":"warn"`) || !strings.Contains(s, "lite logs clear") {
 		t.Fatalf("%s", s)
 	}
 	out.Reset()

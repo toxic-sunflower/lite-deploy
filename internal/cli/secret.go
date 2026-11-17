@@ -66,7 +66,7 @@ func readSecretValue(env Env) ([]byte, error) {
 	return b, nil
 }
 
-const initUsage = "использование: lite init [--user имя[,имя…]] [--all-users] [--ufw off|http|max] [--plugins podman,postgres] [--yes]"
+const initUsage = "использование: lite init [--user имя[,имя…]] [--all-users] [--ufw off|http|max] [--plugins caddy,podman,pg,security] [--yes]"
 
 // cmdInit готовит сервер к работе: ключ исполнителя и каталоги, пользователи-администраторы с SSH-ключами,
 // вход по SSH только по ключу, режим файервола, плагины. Единственная команда, которую можно запускать прямо от root.
@@ -112,14 +112,7 @@ func cmdInit(args []string, env Env) result {
 		}
 		return out
 	}
-	var projects []string
-	if names, err := env.FS.ReadDir("/etc/lite-deploy/projects"); err == nil {
-		for _, n := range names {
-			if p, ok := strings.CutSuffix(n, ".json"); ok {
-				projects = append(projects, p)
-			}
-		}
-	}
+	projects := projectNames(env)
 	current := ""
 	if env.Getenv != nil {
 		current = env.Getenv("SUDO_USER")

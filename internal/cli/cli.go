@@ -202,8 +202,6 @@ func dispatch(args []string, env Env) result {
 		return cmdGate(args[1:], env)
 	case "ui":
 		return cmdUI(args[1:], env)
-	case "firewall":
-		return cmdFirewall(args[1:], env)
 	case "agent":
 		return cmdAgent(args[1:], env)
 	case "exec":

@@ -16,8 +16,11 @@ import (
 	"time"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/agent"
+	"github.com/toxic-sunflower/lite-deploy/internal/builtin"
 	"github.com/toxic-sunflower/lite-deploy/internal/firewall"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
+	"github.com/toxic-sunflower/lite-deploy/internal/pkgmgr"
+	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
 // SSHDropIn файл настроек sshd, которым управляет lite.
@@ -183,13 +186,15 @@ func (e Env) Plan(o Options, users []string) ([]string, error) {
 		return nil, fmt.Errorf("режим файервола: off, http или max")
 	}
 	for _, pl := range o.Plugins {
-		if _, ok := pluginPackages[pl]; !ok {
-			return nil, fmt.Errorf("неизвестный плагин %q (есть: %s)", pl, strings.Join(pluginNames(), ", "))
-		}
-		if pl == "caddy" {
+		switch pl {
+		case "caddy":
 			p = append(p, "плагин caddy: установить Caddy, главный Caddyfile (подключает сайты проектов из /etc/caddy/conf.d), запустить службу")
-		} else {
+		case "security":
+			p = append(p, "плагин security: защита сервера: SSH только по ключу для всех и root только по ключу, fail2ban, автообновления безопасности, защитные параметры ядра")
+		case "podman", "pg", "postgres":
 			p = append(p, "плагин "+pl+": установить пакеты")
+		default:
+			return nil, fmt.Errorf("неизвестный плагин %q (есть: %s)", pl, strings.Join(builtin.PluginNames(), ", "))
 		}
 	}
 	return p, nil
@@ -228,8 +233,8 @@ func (e Env) Apply(ctx context.Context, o Options) error {
 		keyed = append(keyed, u)
 	}
 	for _, pl := range o.Plugins {
-		e.say("Плагин %s: ставлю пакеты...", pl)
-		if err := e.installPlugin(ctx, pl); err != nil {
+		penv := plugin.Env{Runner: e.Runner, FS: e.FS, Projects: e.Projects, User: o.Current}
+		if err := builtin.InstallPlugin(ctx, penv, pl, builtin.Say(e.say)); err != nil {
 			return fmt.Errorf("плагин %s: %w", pl, err)
 		}
 	}
@@ -357,7 +362,7 @@ func (e Env) firewall(ctx context.Context, mode string) error {
 			return nil // ufw нет, фильтрации и так нет
 		}
 		e.say("Ставлю ufw...")
-		if err := e.pkgInstall(ctx, "ufw"); err != nil {
+		if err := (&pkgmgr.Manager{Runner: e.Runner, FS: e.FS}).Install(ctx, "ufw"); err != nil {
 			return fmt.Errorf("не удалось поставить ufw: %w", err)
 		}
 	}

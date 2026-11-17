@@ -10,6 +10,8 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
+const caddyMark = "# managed-by: lite-deploy"
+
 const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFakeFakeFakeFake me@laptop"
 
 type world struct {
@@ -20,13 +22,14 @@ type world struct {
 	failOn  string
 	noUfw   bool
 	created []string
+	pkgs    map[string]bool // установленные пакеты
 }
 
 func newWorld() *world {
 	m := host.NewMemFS()
 	m.Files["/etc/passwd"] = []byte("root:x:0:0::/root:/bin/bash\nanna:x:1000:1000::/home/anna:/bin/bash\nshop:x:1001:1001::/home/shop:/bin/bash\nwww:x:33:33::/var/www:/usr/sbin/nologin\nsvc:x:1002:1002::/home/svc:/bin/false\n")
 	m.Files["/etc/ssh/sshd_config"] = []byte("Include /etc/ssh/sshd_config.d/*.conf\n")
-	return &world{fs: m, noPass: map[string]bool{}}
+	return &world{fs: m, noPass: map[string]bool{}, pkgs: map[string]bool{}}
 }
 
 func (w *world) env(input string) Env {
@@ -37,6 +40,17 @@ func (w *world) env(input string) Env {
 			return host.Result{ExitCode: 1, Stderr: []byte("сбой")}, nil
 		}
 		switch {
+		case c.Name == "apt-get" && len(c.Args) > 0 && c.Args[0] == "install":
+			for _, a := range c.Args[1:] {
+				if !strings.HasPrefix(a, "-") {
+					w.pkgs[a] = true
+				}
+			}
+		case c.Name == "dpkg-query":
+			if w.pkgs[c.Args[len(c.Args)-1]] {
+				return host.Result{Stdout: []byte("install ok installed|1.0")}, nil
+			}
+			return host.Result{ExitCode: 1}, nil
 		case c.Name == "ufw" && w.noUfw && line == "ufw version":
 			return host.Result{}, context.DeadlineExceeded
 		case c.Name == "getent":

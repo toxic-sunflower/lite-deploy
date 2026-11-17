@@ -29,7 +29,7 @@ var (
 // reserved имена команд lite, которые плагину занимать нельзя.
 var reserved = map[string]bool{
 	"version": true, "schema": true, "project": true, "apply": true, "init": true, "secret": true, "deploy": true,
-	"rollback": true, "status": true, "gate": true, "ui": true, "firewall": true, "agent": true, "exec": true,
+	"rollback": true, "status": true, "gate": true, "ui": true, "agent": true, "exec": true,
 	"call": true, "plugin": true, "info": true, "verify": true, "fix": true,
 }
 
@@ -49,6 +49,8 @@ type Command struct {
 	Help string `json:"help"`
 	// Confirm: команда меняет систему, нужно подтверждение (--yes или ответ в терминале).
 	Confirm bool `json:"confirm,omitempty"`
+	// Root: команде нужны права root даже без изменений (например, чтение состояния файервола).
+	Root bool `json:"root,omitempty"`
 	// Args описание аргументов для справки и интерфейса, например "ПАКЕТ".
 	Args string `json:"args,omitempty"`
 }
@@ -81,6 +83,8 @@ type Env struct {
 	FS     host.FS
 	Now    func() time.Time
 	User   string // имя пользователя, от чьего имени выполняется команда
+	// Projects пользователи проектов (CI заходит под ними по SSH): плагины не должны их отключать.
+	Projects []string
 }
 
 // Plugin плагин.
@@ -173,6 +177,7 @@ type ManifestCmd struct {
 	Help    string `json:"help"`
 	Args    string `json:"args,omitempty"`
 	Confirm bool   `json:"confirm,omitempty"`
+	Root    bool   `json:"root,omitempty"`
 	// Exec файл относительно каталога плагина.
 	Exec string `json:"exec"`
 }
@@ -239,7 +244,7 @@ func (x *external) Requires() []string  { return x.m.Requires }
 func (x *external) Commands() []Command {
 	out := make([]Command, 0, len(x.m.Commands))
 	for _, c := range x.m.Commands {
-		out = append(out, Command{Name: c.Name, Help: c.Help, Args: c.Args, Confirm: c.Confirm})
+		out = append(out, Command{Name: c.Name, Help: c.Help, Args: c.Args, Confirm: c.Confirm, Root: c.Root})
 	}
 	return out
 }
