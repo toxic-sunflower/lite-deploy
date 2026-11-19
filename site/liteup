@@ -10,6 +10,8 @@
 #   sudo liteup update                       move to the latest release (restarts the agent)
 #   sudo liteup reinstall                    uninstall and install the same version again
 #   sudo liteup uninstall [--purge] [--yes]  remove lite and the agent; --purge also deletes settings, secrets and backups
+#   sudo liteup uninstall --everything       take the server back to bare: also remove projects, databases, Caddy, podman, Redis,
+#                                            fail2ban and every setting lite made (your login user and SSH key stay)
 #   liteup status                            installed and latest versions
 #
 # Options (or environment variables):
@@ -40,6 +42,7 @@ liteup: installs and manages lite-deploy.
   sudo liteup update                       move to the latest release (restarts the agent)
   sudo liteup reinstall                    uninstall and install the same version again
   sudo liteup uninstall [--purge] [--yes]  remove lite and the agent; --purge also deletes settings, secrets and backups
+  sudo liteup uninstall --everything       take the server back to bare (deletes projects and databases; your login user stays)
   liteup status                            installed and latest versions
 
 Options: --version TAG, --prefix DIR (default /usr/local/bin), --skip-sig (unsafe), --yes, --purge, --force
@@ -52,6 +55,7 @@ skip_sig=${LITE_DEPLOY_SKIP_SIG:-0}
 binary_only=${LITE_DEPLOY_BINARY_ONLY:-0}
 assume_yes=0
 purge=0
+everything=0
 force=0
 
 # ---- arguments: liteup [command] [options] ----
@@ -69,6 +73,7 @@ while [ $# -gt 0 ]; do
     --skip-sig) skip_sig=1 ;;
     --yes|-y) assume_yes=1 ;;
     --purge) purge=1 ;;
+    --everything) everything=1; purge=1 ;;
     --force) force=1 ;;
     -h|--help) cmd=help ;;
     *) die "unknown option: $1 (see: liteup help)" ;;
@@ -251,6 +256,61 @@ do_uninstall() {
   say "Done. Project users, containers and databases were not touched."
 }
 
+# Takes the server back to bare: projects and their users, databases, the packages lite installed, every setting lite made.
+# Your own login user and its SSH key stay, and so does SSH access (the firewall keeps only SSH).
+do_everything() {
+  need_root
+  [ "$pm" = apt ] || die "removing everything automatically works on Debian and Ubuntu only; use: liteup uninstall --purge and remove the packages by hand"
+  host=$(hostname)
+  say "This deletes ALL projects, their data and databases, and the programs lite installed (Caddy, PostgreSQL, podman, Redis, fail2ban) on '$host'."
+  if [ "$assume_yes" != 1 ]; then
+    if [ -r /dev/tty ] && [ -t 1 ] 2>/dev/null; then
+      printf "Type the name of this server (%s) to continue: " "$host" >/dev/tty
+      read -r ans </dev/tty || ans=""
+      [ "$ans" = "$host" ] || die "canceled, nothing was changed"
+    else
+      die "no terminal to ask on: run again with --yes"
+    fi
+  fi
+  say "[1/5] Removing projects and their users"
+  for f in /etc/lite-deploy/projects/*.json; do
+    [ -e "$f" ] || continue
+    p=$(basename "$f" .json)
+    if id "$p" >/dev/null 2>&1; then
+      loginctl disable-linger "$p" >/dev/null 2>&1 || true
+      pkill -u "$p" >/dev/null 2>&1 || true
+      sleep 1
+      userdel -r "$p" >/dev/null 2>&1 || userdel -f -r "$p" >/dev/null 2>&1 || say "WARNING: could not remove user $p"
+    fi
+    rm -f "/etc/sudoers.d/lite-deploy-$p"
+  done
+  say "[2/5] Removing lite and its settings"
+  assume_yes=1
+  do_uninstall
+  say "[3/5] Removing the packages"
+  systemctl stop caddy redis-server postgresql fail2ban >/dev/null 2>&1 || true
+  DEBIAN_FRONTEND=noninteractive apt-get purge -y -qq caddy 'postgresql*' redis-server fail2ban podman >/dev/null 2>&1 || true
+  DEBIAN_FRONTEND=noninteractive apt-get autoremove -y -qq --purge >/dev/null 2>&1 || true
+  rm -rf /var/lib/postgresql /etc/postgresql /var/lib/redis /etc/caddy /var/log/caddy /etc/apt/sources.list.d/caddy-stable.list /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  say "[4/5] Removing the settings lite made (SSH, kernel, fail2ban, updates, backups)"
+  rm -f /etc/ssh/sshd_config.d/01-lite-security.conf /etc/ssh/sshd_config.d/50-lite-deploy.conf \
+    /etc/sysctl.d/60-lite-security.conf /etc/fail2ban/jail.d/lite-deploy.local /etc/apt/apt.conf.d/52lite-deploy-auto-upgrades \
+    /etc/systemd/system/lite-pg-backup.service /etc/systemd/system/lite-pg-backup.timer
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  sysctl --system >/dev/null 2>&1 || true
+  if command -v sshd >/dev/null 2>&1 && sshd -t >/dev/null 2>&1; then
+    systemctl reload ssh >/dev/null 2>&1 || systemctl reload sshd >/dev/null 2>&1 || true
+  fi
+  say "[5/5] Firewall: only SSH stays open"
+  if command -v ufw >/dev/null 2>&1; then
+    sshport=$(sshd -T 2>/dev/null | awk '$1=="port"{print $2; exit}')
+    ufw --force reset >/dev/null 2>&1 || true
+    ufw allow "${sshport:-22}/tcp" >/dev/null 2>&1 || true
+    ufw --force enable >/dev/null 2>&1 || true
+  fi
+  say "Done. The server is bare again. Your login user and SSH key were kept. Install again with: liteup install"
+}
+
 case $cmd in
   install)
     do_install
@@ -284,7 +344,7 @@ case $cmd in
     say "Done: $(installed_version)."
     ;;
   uninstall)
-    do_uninstall
+    if [ "$everything" = 1 ]; then do_everything; else do_uninstall; fi
     ;;
   status|version)
     cur=$(installed_version)
