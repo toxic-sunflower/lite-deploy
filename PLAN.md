@@ -124,6 +124,8 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 
 - **T6. Built for non-professionals, UI first.** The users do not know SSH or fail2ban and barely use a terminal. Every goal is one button in the UI or one command, in plain words: "Make the server safe", "Publish my site", "Back up". The UI covers the whole path (server setup, protection, project, deploy, publishing, backups) without a terminal after the first install. No jargon in messages (explain what a thing does, not what it is called), and every screen says what to do next.
 
+- **T7. Human-readable results.** Some commands (for example `lite security enable`) print raw JSON of their steps. Every command prints a plain sentence of what was done and what to do next; JSON only with `--json`.
+
 ## Status
 
 | Session | Status |
