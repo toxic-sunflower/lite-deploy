@@ -50,7 +50,7 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 	server := *hostFlag
 	saved := savedHostPath()
 	if server == "" {
-		if b, err := os.ReadFile(saved); err == nil {
+		if b, err := os.ReadFile(filepath.Clean(saved)); err == nil {
 			server = strings.TrimSpace(string(b))
 		}
 	}
