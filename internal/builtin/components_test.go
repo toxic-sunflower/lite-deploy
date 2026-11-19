@@ -11,7 +11,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// fn запускает функцию как Runner.
+// fn runs a function as a Runner.
 type fn func(host.Cmd) (host.Result, error)
 
 func (f fn) Run(_ context.Context, c host.Cmd) (host.Result, error) { return f(c) }
@@ -34,7 +34,7 @@ func TestPGCreateDB(t *testing.T) {
 		if c.Name == "runuser" {
 			sql = append(sql, c.Args[len(c.Args)-1]+string(c.Stdin))
 		}
-		return host.Result{}, nil // роли и базы ещё нет: select возвращает пусто
+		return host.Result{}, nil // the role and the database do not exist yet: select returns nothing
 	})
 	env := plugin.Env{Runner: r, FS: mem}
 	if _, err := (PG{}).Run(context.Background(), env, "create-db", []string{"shop", "shopapp"}); err != nil {
@@ -49,7 +49,7 @@ func TestPGCreateDB(t *testing.T) {
 		!strings.Contains(all, "create database shop owner shopapp") {
 		t.Fatalf("unexpected SQL:\n%s", all)
 	}
-	// второй вызов использует тот же пароль
+	// the second call uses the same password
 	if _, err := (PG{}).Run(context.Background(), env, "create-db", []string{"shop2", "shopapp"}); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestPGBackupRotates(t *testing.T) {
 			left++
 		}
 	}
-	// девять старых копий в mem, новая не создана фейком; после ротации остаётся 7
+	// nine old backups in mem, the fake did not create a new one; after rotation 7 are left
 	if left != 7 {
 		t.Fatalf("%d backups are left, expected 7: %v", left, names)
 	}

@@ -1,4 +1,4 @@
-// Package cli реализует командную строку lite-deploy (SPEC-v0.md, раздел 6).
+// Package cli implements the lite-deploy command line (SPEC-v0.md, section 6).
 package cli
 
 import (
@@ -26,67 +26,67 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/secrets"
 )
 
-// Version подставляется при релизной сборке: -ldflags "-X .../internal/cli.Version=v1.2.3".
+// Version is set by a release build: -ldflags "-X .../internal/cli.Version=v1.2.3".
 var Version = "0.0.0-dev"
 
-// Идентификаторы схем.
+// Schema identifiers.
 const (
 	ProjectSchema = project.SchemaID
 	PlanSchema    = plan.SchemaID
 )
 
-// Env всё внешнее, от чего зависит CLI; в тестах подменяется.
+// Env is everything external the CLI depends on; replaced in tests.
 type Env struct {
 	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
 	FS     host.FS
 	Paths  plan.Paths
-	Config string // путь config.json; пусто: config.DefaultPath
-	// пути ключа исполнителя и хранилища секретов; пусто: значения по умолчанию из пакета secrets
+	Config string // the config.json path; empty: config.DefaultPath
+	// paths of the executor key and the secret store; empty: the defaults from the secrets package
 	KeyPath, PubPath, SecretsDir string
 	IsRoot                       func() bool
-	// CurrentUser имя пользователя процесса; nil: os/user
+	// CurrentUser is the process user name; nil: os/user
 	CurrentUser func() string
-	// AgentCall вызов агента (подменяется в тестах); nil: agent.Call
+	// AgentCall calls the agent (replaced in tests); nil: agent.Call
 	AgentCall func(ctx context.Context, sock, method, path string, body []byte) ([]byte, error)
 	Now       func() time.Time
-	// для apply и project create: запуск команд, HTTP-проверки, случайность, признак интерактивного терминала, uid
+	// for apply and project create: running commands, HTTP checks, randomness, the interactive terminal flag, uid
 	Runner      host.Runner
 	HTTP        host.HTTPClient
 	Rand        io.Reader
 	Interactive func() bool
 	UID         int
-	// для deploy, rollback, status, gate
+	// for deploy, rollback, status, gate
 	Lock   host.Locker
 	Sleep  func(time.Duration)
 	Getenv func(string) string
-	// PluginDir каталог внешних плагинов; пусто: plugin.Dir
+	// PluginDir is the directory of external plugins; empty: plugin.Dir
 	PluginDir string
-	// LoginUID uid входа в систему (/proc/self/loginuid); ok=false, если он не задан
+	// LoginUID is the login uid (/proc/self/loginuid); ok=false if it is not set
 	LoginUID func() (int, bool)
 }
 
-// Run выполняет команду в настоящем окружении и возвращает код выхода.
+// Run executes a command in the real environment and returns the exit code.
 func Run(args []string, stdout, stderr io.Writer) int {
 	return RunEnv(args, realEnv(stdout, stderr))
 }
 
-// realEnv настоящее окружение процесса.
+// realEnv is the real process environment.
 func realEnv(stdout, stderr io.Writer) Env {
 	return Env{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr, FS: host.OSFS{}, Paths: plan.DefaultPaths(), Config: config.DefaultPath, Now: time.Now, IsRoot: func() bool { return os.Geteuid() == 0 },
 		Runner: host.ExecRunner{}, HTTP: host.NetHTTP{}, Rand: rand.Reader, UID: os.Geteuid(), Lock: host.OSLocker{}, Sleep: time.Sleep, Getenv: os.Getenv, LoginUID: loginUID,
-		Interactive: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }} //nolint:gosec // дескриптор терминала помещается в int
+		Interactive: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }} //nolint:gosec // the terminal descriptor fits into an int
 }
 
-// result итог команды: данные или ошибка, плюс текст для людей.
+// result is the outcome of a command: data or an error, plus text for people.
 type result struct {
 	command string
 	data    any
 	text    string
 	warn    []Warning
 	err     *ErrorBody
-	// raw готовый конверт JSON (ответ агента): выводится как есть, код выхода берётся из него
+	// raw is a ready JSON envelope (the agent answer): printed as is, the exit code is taken from it
 	raw []byte
 }
 
@@ -94,7 +94,7 @@ func fail(command, code, msg string) result {
 	return result{command: command, err: &ErrorBody{Code: code, Message: msg}}
 }
 
-// RunEnv выполняет команду и возвращает код выхода (SPEC-v0.md, 6.3).
+// RunEnv executes a command and returns the exit code (SPEC-v0.md, 6.3).
 func RunEnv(args []string, env Env) int {
 	jsonOut := false
 	rest := make([]string, 0, len(args))
@@ -105,7 +105,7 @@ func RunEnv(args []string, env Env) int {
 		}
 		rest = append(rest, a)
 	}
-	// привратник: формат ответа задаёт команда ключа CI (`status --json`), а не аргументы принудительной команды
+	// the gatekeeper: the response format is set by the CI key command (`status --json`), not by the arguments of the forced command
 	if len(rest) > 0 && rest[0] == "gate" && env.Getenv != nil && strings.HasSuffix(env.Getenv("SSH_ORIGINAL_COMMAND"), " --json") {
 		jsonOut = true
 	}
@@ -150,8 +150,8 @@ func RunEnv(args []string, env Env) int {
 	return 0
 }
 
-// directRoot возвращает имя команды, если её запустили при входе под root (loginuid 0), а ей это запрещено.
-// Через sudo от обычного пользователя loginuid остаётся его uid; у служб systemd он не задан.
+// directRoot returns the command name if it was run when logged in as root (loginuid 0) and is forbidden to do so.
+// Through sudo from a regular user loginuid stays that user's uid; for systemd services it is not set.
 func directRoot(args []string, env Env) string {
 	if len(args) == 0 || env.LoginUID == nil || !env.root() {
 		return ""
@@ -231,7 +231,7 @@ func dispatch(args []string, env Env) result {
 		}
 		return cmdVerify(env)
 	}
-	// команда плагина: lite ПЛАГИН КОМАНДА
+	// a plugin command: lite PLUGIN COMMAND
 	if r, _ := registry(env); r != nil {
 		if _, ok := r.Get(args[0]); ok {
 			return cmdPluginRun(args[0], args[1:], env)
@@ -240,13 +240,13 @@ func dispatch(args []string, env Env) result {
 	return fail("usage", CodeUsage, "unknown command: "+args[0]+" (plugins: lite plugin list)")
 }
 
-// listFlag повторяемый флаг.
+// listFlag is a repeatable flag.
 type listFlag []string
 
 func (l *listFlag) String() string     { return strings.Join(*l, ",") }
 func (l *listFlag) Set(v string) error { *l = append(*l, v); return nil }
 
-// parseArgs разбирает флаги, стоящие в любом месте среди позиционных аргументов.
+// parseArgs parses flags that stand anywhere among positional arguments.
 func parseArgs(fs *flag.FlagSet, args []string) ([]string, error) {
 	fs.SetOutput(io.Discard)
 	var pos []string
@@ -263,7 +263,7 @@ func parseArgs(fs *flag.FlagSet, args []string) ([]string, error) {
 	return pos, nil
 }
 
-// loadConfig читает config.json; ошибки файла превращаются в precondition_failed.
+// loadConfig reads config.json; file errors become precondition_failed.
 func loadConfig(env Env, command string) (config.Config, *result) {
 	path := env.Config
 	if path == "" {
@@ -356,14 +356,14 @@ type stepView struct {
 	Summary string `json:"summary,omitempty"`
 }
 
-// prepared построенный план и всё, что нужно для его применения.
+// prepared is the built plan and everything needed to apply it.
 type prepared struct {
 	pl      *plan.Plan
 	project *project.Project
 	out     string
 }
 
-// preparePlan разбирает аргументы `project plan` и `project create` и строит план (без записи на диск).
+// preparePlan parses the arguments of `project plan` and `project create` and builds a plan (without writing to disk).
 func preparePlan(command string, args []string, env Env) (*prepared, *result) {
 	p, extra, bad := loadProject(env, command, args)
 	if bad != nil {
@@ -387,7 +387,7 @@ func preparePlan(command string, args []string, env Env) (*prepared, *result) {
 	return buildPlan(command, p, out, rotate, ciphertexts, env)
 }
 
-// buildPlan строит план по готовому описанию и шифртекстам (общая часть файлового и пакетного путей).
+// buildPlan builds a plan from a ready description and ciphertexts (the shared part of the file and bundle paths).
 func buildPlan(command string, p *project.Project, out string, rotate bool, ciphertexts map[string]string, env Env) (*prepared, *result) {
 	st, err := plan.LoadState(env.FS, env.Paths)
 	if err != nil {
@@ -463,7 +463,7 @@ func cmdApply(args []string, env Env) result {
 	return applyPlan("apply", env, data, *dry, *yes, projJSON)
 }
 
-// applyPlan общий путь apply и project create: проверка плана, dry-run, подтверждение, применение.
+// applyPlan is the shared path of apply and project create: plan check, dry-run, confirmation, applying.
 func applyPlan(command string, env Env, data []byte, dry, yes bool, projJSON []byte) result {
 	st, err := plan.LoadState(env.FS, env.Paths)
 	if err != nil {
@@ -480,7 +480,7 @@ func applyPlan(command string, env Env, data []byte, dry, yes bool, projJSON []b
 		return result{command: command, err: &ErrorBody{Code: verr.Code, Message: verr.Message, Details: verr.Issues}}
 	}
 	if len(projJSON) > 0 {
-		// Копия описания в /etc/lite-deploy/projects пишется только если оно совпадает с планом.
+		// A copy of the description in /etc/lite-deploy/projects is written only if it matches the plan.
 		if p, issues := project.Parse(projJSON); len(issues) == 0 {
 			if h, herr := plan.ProjectHash(p); herr != nil || h != pl.ProjectHash {
 				projJSON = nil
@@ -555,7 +555,7 @@ func joinNonEmpty(a, b string) string {
 	return b
 }
 
-// cmdProjectCreate: plan, dry-run и apply одной командой (SPEC-v0.md, 6.1).
+// cmdProjectCreate: plan, dry-run and apply in one command (SPEC-v0.md, 6.1).
 func cmdProjectCreate(args []string, env Env) result {
 	fs := flag.NewFlagSet("project.create", flag.ContinueOnError)
 	yes := fs.Bool("yes", false, "")
@@ -570,7 +570,7 @@ func cmdProjectCreate(args []string, env Env) result {
 	if !env.root() {
 		return forwardProjectCreate(env, pos[0], *yes, *rotate, cts)
 	}
-	// stdin читается один раз: "-" нельзя использовать и для описания, и для подтверждения
+	// stdin is read once: "-" cannot be used both for the description and for the confirmation
 	var rest []string
 	for _, a := range args {
 		if a != "--yes" {
@@ -624,7 +624,7 @@ func sortedProjectNames(st plan.State) []string {
 	return out
 }
 
-// loginUID читает uid входа в систему. 4294967295 значит «не задан» (служба, контейнер).
+// loginUID reads the login uid. 4294967295 means "not set" (a service, a container).
 func loginUID() (int, bool) {
 	b, err := os.ReadFile("/proc/self/loginuid")
 	if err != nil {

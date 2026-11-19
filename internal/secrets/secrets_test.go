@@ -122,7 +122,7 @@ func TestEncryptValidation(t *testing.T) {
 
 func TestMaxValueFitsCiphertextLimit(t *testing.T) {
 	_, pub := keys(t)
-	// худший случай по размеру: 8 КиБ значения из символов, которые JSON экранирует шестью байтами
+	// the worst case by size: 8 KiB of value made of characters that JSON escapes with six bytes
 	v := strings.Repeat("\x01", MaxValueBytes)
 	if ct, err := Encrypt(pub, "shop", "api_key", []byte(v), now); err == nil && len(ct) > MaxCiphertextSize {
 		t.Fatalf("the ciphertext of %d bytes is over the limit", len(ct))
@@ -185,17 +185,17 @@ func TestEnsureKey(t *testing.T) {
 	if err != nil || created2 || pub2 != pub || string(m.Files[DefaultKeyPath]) != before {
 		t.Fatal("a repeated call must not change the key")
 	}
-	// открытый ключ восстанавливается из закрытого, закрытый не трогается
+	// the public key is restored from the private one, the private one is not touched
 	delete(m.Files, DefaultPubPath)
 	if p, c, err := EnsureKey(m, DefaultKeyPath, DefaultPubPath); err != nil || c || p != pub || strings.TrimSpace(string(m.Files[DefaultPubPath])) != pub {
 		t.Fatal("restoring the public key")
 	}
-	// повреждённый закрытый ключ не перезаписывается
+	// a corrupt private key is not overwritten
 	m.Files[DefaultKeyPath] = []byte("garbage")
 	if _, _, err := EnsureKey(m, DefaultKeyPath, DefaultPubPath); err == nil || string(m.Files[DefaultKeyPath]) != "garbage" {
 		t.Fatal("a corrupt key must give an error and not be overwritten")
 	}
-	// шифрование под созданным ключом работает
+	// encryption under the created key works
 	m2 := host.NewMemFS()
 	pub3, _, _ := EnsureKey(m2, DefaultKeyPath, DefaultPubPath)
 	ct, _ := Encrypt(pub3, "shop", "api_key", []byte("v"), now)

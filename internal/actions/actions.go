@@ -1,5 +1,5 @@
-// Package actions задаёт фиксированный список действий исполнителя и проверку их параметров
-// (SPEC-v0.md, раздел 4). Исполнитель принимает только эти действия и только типизированные параметры (D-42).
+// Package actions defines the fixed list of executor actions and the validation of their parameters
+// (SPEC-v0.md, section 4). The executor accepts only these actions and only typed parameters (D-42).
 package actions
 
 import (
@@ -12,19 +12,19 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/schema"
 )
 
-// Классы действий (D-29).
+// Action classes (D-29).
 const (
 	ClassSafe      = "safe"
 	ClassNormal    = "normal"
 	ClassDangerous = "dangerous"
 )
 
-// Def описывает одно действие.
+// Def describes one action.
 type Def struct {
 	Name  string
 	Class string
 	New   func() any
-	// Extra проверяет связи между полями сверх тегов; может быть nil.
+	// Extra checks relations between fields beyond the tags; may be nil.
 	Extra func(v any) []schema.Issue
 }
 
@@ -32,13 +32,13 @@ var registry = map[string]Def{}
 
 func register(d Def) { registry[d.Name] = d }
 
-// Lookup ищет действие по имени.
+// Lookup finds an action by name.
 func Lookup(name string) (Def, bool) {
 	d, ok := registry[name]
 	return d, ok
 }
 
-// Names перечисляет все действия по алфавиту.
+// Names lists all actions in alphabetical order.
 func Names() []string {
 	out := make([]string, 0, len(registry))
 	for n := range registry {
@@ -48,7 +48,7 @@ func Names() []string {
 	return out
 }
 
-// Decode строго разбирает параметры шага и проверяет их. Неизвестное действие даёт ошибку unknown_action.
+// Decode strictly parses the step parameters and validates them. An unknown action gives the unknown_action error.
 func Decode(name string, raw json.RawMessage) (any, []schema.Issue) {
 	d, ok := registry[name]
 	if !ok {
@@ -76,7 +76,7 @@ func Decode(name string, raw json.RawMessage) (any, []schema.Issue) {
 	return v, issues
 }
 
-// Имена действий.
+// Action names.
 const (
 	VerifyHostName        = "verify_host"
 	CreateProjectUserName = "create_project_user"
@@ -96,31 +96,31 @@ const (
 	RecordProjectName     = "record_project"
 )
 
-// VerifyHost только читает: проверяет предусловия сервера.
+// VerifyHost only reads: it checks the server preconditions.
 type VerifyHost struct {
 	NoPodman bool `json:"no_podman,omitempty" doc:"the project has no containers: podman is not needed"`
 }
 
-// CreateProjectUser создаёт системного пользователя проекта.
+// CreateProjectUser creates the project system user.
 type CreateProjectUser struct {
 	Project string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 }
 
-// ProvisionPostgres создаёт роль и базу проекта.
+// ProvisionPostgres creates the project role and database.
 type ProvisionPostgres struct {
 	Project          string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	ConnectionFormat string `json:"connection_format" enum:"npgsql,url,libpq"`
 	RotatePassword   bool   `json:"rotate_password,omitempty"`
 }
 
-// SetSecret записывает значение секрета (шифртекст) в хранилище.
+// SetSecret writes a secret value (ciphertext) to the store.
 type SetSecret struct {
 	Project    string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	Name       string `json:"name" pattern:"^_?[a-z][a-z0-9_]{1,63}$"`
 	Ciphertext string `json:"ciphertext" pattern:"^-----BEGIN AGE ENCRYPTED FILE-----\\n[A-Za-z0-9+/=\\n]{20,}-----END AGE ENCRYPTED FILE-----$" maxLen:"16384" doc:"age ciphertext (armor)"`
 }
 
-// RegistryLogin входит в реестр образов от имени проектного пользователя.
+// RegistryLogin logs in to the image registry as the project user.
 type RegistryLogin struct {
 	Project  string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	Registry string `json:"registry" pattern:"^[a-z0-9.-]+(:[0-9]{2,5})?$" maxLen:"255"`
@@ -128,7 +128,7 @@ type RegistryLogin struct {
 	Secret   string `json:"secret" pattern:"^[a-z][a-z0-9_]{1,63}$"`
 }
 
-// EnvVar одна строка env-файла сервиса.
+// EnvVar is one line of a service env file.
 type EnvVar struct {
 	Name   string `json:"name" pattern:"^[A-Za-z_][A-Za-z0-9_]*$"`
 	Kind   string `json:"kind" enum:"literal,secret,database"`
@@ -138,14 +138,14 @@ type EnvVar struct {
 	Port   int    `json:"port,omitempty" min:"1" max:"65535" doc:"database with host only"`
 }
 
-// WriteServiceEnv собирает env-файл сервиса.
+// WriteServiceEnv builds the service env file.
 type WriteServiceEnv struct {
 	Project string   `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	Service string   `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
 	Env     []EnvVar `json:"env" maxItems:"300"`
 }
 
-// InstallQuadlet пишет юнит Quadlet одного слота сервиса.
+// InstallQuadlet writes the Quadlet unit of one service slot.
 type InstallQuadlet struct {
 	Project        string   `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	Service        string   `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
@@ -158,7 +158,7 @@ type InstallQuadlet struct {
 	Data           []string `json:"data,omitempty" maxItems:"8" pattern:"^[a-z][a-z0-9-]{0,15}$" doc:"persistent directories, mounted at /data/<name>"`
 }
 
-// InstallUnit пишет пользовательский юнит systemd одного слота компонента kind unit (процесс на хосте).
+// InstallUnit writes the user systemd unit of one slot of a kind unit component (a process on the host).
 type InstallUnit struct {
 	Project  string   `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	Service  string   `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
@@ -171,25 +171,25 @@ type InstallUnit struct {
 	Pids     int      `json:"pids" min:"16" max:"4096"`
 }
 
-// WriteReleaseAuth записывает заголовок авторизации для скачивания релиза (файл 600 у пользователя проекта).
+// WriteReleaseAuth writes the authorization header for downloading a release (a 600 file owned by the project user).
 type WriteReleaseAuth struct {
 	Project string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	Service string `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
 	Secret  string `json:"secret" pattern:"^[a-z][a-z0-9_]{1,63}$"`
 }
 
-// ReloadUserUnits перечитывает юниты в сессии проектного пользователя.
+// ReloadUserUnits re-reads the units in the project user's session.
 type ReloadUserUnits struct {
 	Project string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 }
 
-// SiteRoute особый лимит тела для пути.
+// SiteRoute is a special body limit for a path.
 type SiteRoute struct {
 	Path    string `json:"path" pattern:"^/[^\\s{}]*$" maxLen:"256"`
 	MaxBody string `json:"max_body" pattern:"^[1-9][0-9]*(KB|MB)$"`
 }
 
-// InstallCaddySite пишет файл сайта Caddy и начальный upstream.
+// InstallCaddySite writes a Caddy site file and the initial upstream.
 type InstallCaddySite struct {
 	Project         string      `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	Site            string      `json:"site" pattern:"^[a-z][a-z0-9-]{0,15}$"`
@@ -201,34 +201,34 @@ type InstallCaddySite struct {
 	Routes          []SiteRoute `json:"routes,omitempty" maxItems:"16"`
 }
 
-// InstallReloadRule ставит правило sudoers на reload Caddy.
+// InstallReloadRule installs the sudoers rule for reloading Caddy.
 type InstallReloadRule struct {
 	Project string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 }
 
-// ReloadCaddy проверяет конфигурацию Caddy и перезагружает его.
+// ReloadCaddy checks the Caddy configuration and reloads it.
 type ReloadCaddy struct{}
 
-// ProbeSite проверяет, что Caddy отвечает на имя сайта.
+// ProbeSite checks that Caddy answers for the site name.
 type ProbeSite struct {
 	Host       string `json:"host" pattern:"^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$" maxLen:"253"`
 	ListenPort int    `json:"listen_port" min:"18000" max:"18999"`
 	Expect     string `json:"expect" enum:"not_deployed,deployed"`
 }
 
-// InstallDeployKey ставит ключ CI с привратником.
+// InstallDeployKey installs the CI key with the gatekeeper.
 type InstallDeployKey struct {
 	Project   string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	PublicKey string `json:"public_key" pattern:"^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5[A-Za-z0-9+/]{48}( [^\\r\\n]{1,100})?$"`
 }
 
-// Ports выбранные порты проекта.
+// Ports are the chosen ports of a project.
 type Ports struct {
 	Services map[string][]int `json:"services" keypattern:"^[a-z][a-z0-9-]{0,15}$" maxProps:"8" min:"18000" max:"18999" minItems:"2" maxItems:"2"`
 	Sites    map[string]int   `json:"sites" keypattern:"^[a-z][a-z0-9-]{0,15}$" maxProps:"8" min:"18000" max:"18999"`
 }
 
-// RecordProject записывает метку управления и состояние.
+// RecordProject records the management mark and the state.
 type RecordProject struct {
 	Project     string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	ProjectHash string `json:"project_hash" pattern:"^sha256:[0-9a-f]{64}$"`

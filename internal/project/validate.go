@@ -14,7 +14,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/schema"
 )
 
-// MaxBytes предел размера файла описания (SPEC-v0.md, раздел 8).
+// MaxBytes is the size limit of a description file (SPEC-v0.md, section 8).
 const MaxBytes = 64 * 1024
 
 var dataNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,15}$`)
@@ -24,13 +24,13 @@ var reservedNames = map[string]bool{
 	"lite-deploy": true, "www-data": true, "daemon": true,
 }
 
-// Reserved сообщает, что имя нельзя использовать как имя проекта.
+// Reserved reports that a name cannot be used as a project name.
 func Reserved(name string) bool {
 	return reservedNames[name] || strings.HasPrefix(name, "systemd-")
 }
 
-// Parse разбирает JSON строго: неизвестные поля и лишние данные отклоняются (D-33).
-// Значения по умолчанию не подставляются, см. WithDefaults.
+// Parse parses JSON strictly: unknown fields and extra data are rejected (D-33).
+// Defaults are not filled in, see WithDefaults.
 func Parse(data []byte) (*Project, []schema.Issue) {
 	if len(data) > MaxBytes {
 		return nil, []schema.Issue{{Path: "/", Code: "too_large", Message: fmt.Sprintf("the file is larger than %d bytes", MaxBytes)}}
@@ -53,7 +53,7 @@ func Parse(data []byte) (*Project, []schema.Issue) {
 	return &p, nil
 }
 
-// Validate проверяет описание: схема по тегам плюс связи между полями (SPEC-v0.md, 2.2).
+// Validate validates the description: the schema by tags plus relations between fields (SPEC-v0.md, 2.2).
 func Validate(p *Project) []schema.Issue {
 	issues := schema.Check(p)
 	add := func(path, code, format string, args ...any) {
@@ -208,7 +208,7 @@ func Validate(p *Project) []schema.Issue {
 	return issues
 }
 
-// MemoryMB переводит «768m» или «2g» в мегабайты.
+// MemoryMB converts "768m" or "2g" to megabytes.
 func MemoryMB(s string) (int, bool) {
 	if len(s) < 2 {
 		return 0, false
@@ -240,10 +240,10 @@ func sizeWithin(s string) bool {
 	return n <= 1000
 }
 
-// RoleName имя роли и базы PostgreSQL: имя проекта с «-» → «_».
+// RoleName is the PostgreSQL role and database name: the project name with "-" → "_".
 func RoleName(project string) string { return strings.ReplaceAll(project, "-", "_") }
 
-// WithDefaults возвращает копию с подставленными значениями по умолчанию, кроме портов (их выбирает план).
+// WithDefaults returns a copy with the defaults filled in, except ports (the plan chooses those).
 func WithDefaults(p *Project) *Project {
 	c := *p
 	if c.Database != nil {

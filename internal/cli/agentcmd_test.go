@@ -48,7 +48,7 @@ func TestCallWithoutAgent(t *testing.T) {
 
 func TestDirectRootIsRefused(t *testing.T) {
 	env, out, _ := testEnv(t)
-	env.LoginUID = func() (int, bool) { return 0, true } // вход под root
+	env.LoginUID = func() (int, bool) { return 0, true } // root login
 	for _, cmd := range [][]string{{"status", "--json"}, {"deploy", "shop", "x", "--json"}, {"firewall", "status", "--json"}, {"project", "list", "--json"}} {
 		out.Reset()
 		if c := run(t, env, cmd...); c != 4 {
@@ -62,7 +62,7 @@ func TestDirectRootIsRefused(t *testing.T) {
 	if c := run(t, env, "version", "--json"); c != 0 {
 		t.Fatalf("version must work: %d", c)
 	}
-	// через sudo от обычного пользователя (loginuid 1000) и из службы (не задан) запрета нет
+	// through sudo from a regular user (loginuid 1000) and from a service (not set) there is no ban
 	for _, l := range []func() (int, bool){func() (int, bool) { return 1000, true }, func() (int, bool) { return 0, false }} {
 		env.LoginUID = l
 		out.Reset()

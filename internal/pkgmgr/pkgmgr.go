@@ -1,5 +1,5 @@
-// Package pkgmgr системные пакеты: установка, удаление, обновление, проверка и журнал того, что поставил lite
-// (REQUIREMENTS.md, R-18, R-21, R-22). Поддерживаются apt, dnf, zypper, pacman.
+// Package pkgmgr handles system packages: install, remove, update, check and the journal of what lite installed
+// (REQUIREMENTS.md, R-18, R-21, R-22). apt, dnf, zypper and pacman are supported.
 package pkgmgr
 
 import (
@@ -16,22 +16,22 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
-// DefaultJournal журнал пакетов, поставленных через lite.
+// DefaultJournal is the journal of packages installed through lite.
 const DefaultJournal = "/var/lib/lite-deploy/packages.json"
 
 var nameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.+_-]{0,100}$`)
 
-// protected пакеты, без которых сервер нельзя оставлять: их удаление отклоняется.
+// protected are the packages the server cannot be left without: removing them is rejected.
 var protected = map[string]bool{
 	"openssh-server": true, "openssh": true, "openssh-clients": true, "sudo": true, "systemd": true,
 	"libc6": true, "glibc": true, "bash": true, "coreutils": true, "apt": true, "dpkg": true, "dnf": true, "rpm": true,
 	"minisign": true,
 }
 
-// forbidden пакеты, которые lite не ставит: контейнеры только podman и Quadlet (R-11), доступ к демону Docker равен root.
+// forbidden are packages lite does not install: containers are podman and Quadlet only (R-11), access to the Docker daemon is root-equivalent.
 var forbidden = regexp.MustCompile(`^(docker|docker\.io|docker-ce|docker-ce-cli|docker-ce-rootless-extras|docker-compose|docker-compose-plugin|docker-buildx-plugin|docker-engine|containerd\.io|moby-engine|moby-cli)$`)
 
-// Error ошибка с кодом для конверта CLI.
+// Error is an error with a code for the CLI envelope.
 type Error struct{ Code, Message string }
 
 func (e *Error) Error() string { return e.Message }
@@ -40,7 +40,7 @@ func fail(code, format string, a ...any) *Error {
 	return &Error{Code: code, Message: fmt.Sprintf(format, a...)}
 }
 
-// Entry запись журнала.
+// Entry is a journal entry.
 type Entry struct {
 	Name        string `json:"name"`
 	Version     string `json:"version"`
@@ -48,7 +48,7 @@ type Entry struct {
 	By          string `json:"by,omitempty"`
 }
 
-// Info состояние одного пакета.
+// Info is the state of one package.
 type Info struct {
 	Name      string `json:"name"`
 	Installed bool   `json:"installed"`
@@ -56,13 +56,13 @@ type Info struct {
 	ByLite    bool   `json:"by_lite"`
 }
 
-// Manager менеджер пакетов системы.
+// Manager is the system package manager.
 type Manager struct {
 	Runner  host.Runner
 	FS      host.FS
-	Journal string // пусто: DefaultJournal
+	Journal string // empty: DefaultJournal
 	Now     func() time.Time
-	By      string // кто выполняет (имя пользователя) для журнала
+	By      string // who runs it (a user name) for the journal
 }
 
 func (m *Manager) journalPath() string {
@@ -79,7 +79,7 @@ func (m *Manager) now() time.Time {
 	return time.Now()
 }
 
-// ValidName проверяет имя пакета.
+// ValidName validates a package name.
 func ValidName(n string) bool { return nameRe.MatchString(n) }
 
 func (m *Manager) run(ctx context.Context, c host.Cmd) (host.Result, error) {
@@ -89,7 +89,7 @@ func (m *Manager) run(ctx context.Context, c host.Cmd) (host.Result, error) {
 	return m.Runner.Run(ctx, c)
 }
 
-// Detect определяет менеджер пакетов: apt, dnf, zypper или pacman.
+// Detect finds the package manager: apt, dnf, zypper or pacman.
 func (m *Manager) Detect(ctx context.Context) (string, error) {
 	for _, p := range [][2]string{{"apt", "apt-get"}, {"dnf", "dnf"}, {"zypper", "zypper"}, {"pacman", "pacman"}} {
 		if res, err := m.Runner.Run(ctx, host.Cmd{Name: p[1], Args: []string{"--version"}}); err == nil && res.ExitCode == 0 {
@@ -111,7 +111,7 @@ func checkNames(names []string) *Error {
 	return nil
 }
 
-// checkAllowed отклоняет пакеты, которые lite не ставит и не обновляет.
+// checkAllowed rejects packages that lite does not install or update.
 func checkAllowed(names []string) *Error {
 	for _, n := range names {
 		if forbidden.MatchString(n) {
@@ -121,7 +121,7 @@ func checkAllowed(names []string) *Error {
 	return nil
 }
 
-// Query возвращает версию установленного пакета.
+// Query returns the version of an installed package.
 func (m *Manager) Query(ctx context.Context, mgr, name string) (string, bool, error) {
 	var c host.Cmd
 	switch mgr {
@@ -183,10 +183,10 @@ func (m *Manager) saveJournal(es []Entry) error {
 	return m.FS.WriteFile(m.journalPath(), append(b, '\n'), 0o644)
 }
 
-// List перечисляет пакеты, поставленные через lite (из журнала).
+// List lists the packages installed through lite (from the journal).
 func (m *Manager) List() ([]Entry, error) { return m.loadJournal() }
 
-// Check показывает состояние пакета.
+// Check shows the state of a package.
 func (m *Manager) Check(ctx context.Context, name string) (Info, error) {
 	if !nameRe.MatchString(name) {
 		return Info{}, fail("usage", "invalid package name %q", name)
@@ -255,7 +255,7 @@ func (m *Manager) exec(ctx context.Context, mgr, op string, pkgs []string) error
 	return nil
 }
 
-// Install ставит пакеты и записывает в журнал те, которых раньше не было.
+// Install installs packages and records in the journal those that were not there before.
 func (m *Manager) Install(ctx context.Context, names ...string) error {
 	if e := checkNames(names); e != nil {
 		return e
@@ -297,7 +297,7 @@ func (m *Manager) Install(ctx context.Context, names ...string) error {
 	return m.saveJournal(es)
 }
 
-// Update обновляет пакеты и версию в журнале.
+// Update updates packages and the version in the journal.
 func (m *Manager) Update(ctx context.Context, names ...string) error {
 	if e := checkNames(names); e != nil {
 		return e
@@ -333,7 +333,7 @@ func (m *Manager) Update(ctx context.Context, names ...string) error {
 	return m.saveJournal(es)
 }
 
-// Remove удаляет пакеты. Системно важные пакеты (ssh-сервер, sudo, systemd, оболочка) не удаляются.
+// Remove removes packages. System-critical packages (the ssh server, sudo, systemd, the shell) are not removed.
 func (m *Manager) Remove(ctx context.Context, names ...string) error {
 	if e := checkNames(names); e != nil {
 		return e

@@ -50,7 +50,7 @@ func TestProjectCreateWithoutRootGoesThroughAgent(t *testing.T) {
 	if strings.Join(paths, ",") != "/v1/project/preview,/v1/project/create" || !strings.Contains(createBody, `"expect_project_hash":"sha256:abc"`) || !strings.Contains(createBody, "BEGIN AGE ENCRYPTED FILE") {
 		t.Fatalf("%v %s", paths, createBody)
 	}
-	// без --yes и терминала применение не идёт
+	// without --yes and a terminal applying does not go ahead
 	paths = nil
 	out.Reset()
 	if c := run(t, env, "project", "create", projectFile, "--ciphertext", "api_key="+ct, "--json"); c != 4 || len(paths) != 1 {
@@ -99,7 +99,7 @@ func TestDeployByAdminGoesThroughAgentButProjectUserRunsLocally(t *testing.T) {
 	if c := run(t, env, "deploy", "shop", strings.Repeat("a", 40)); c != 0 || path != "/v1/deploy" || !strings.Contains(body, `"project":"shop"`) || !strings.Contains(out.String(), "Deployed aaaaaaaaaaaa") {
 		t.Fatalf("%d %s %s %s", c, path, body, out.String())
 	}
-	// пользователь проекта (CI через привратник) выкатывает сам, агент не нужен
+	// a project user (CI through the gatekeeper) deploys by itself, the agent is not needed
 	path = ""
 	env.CurrentUser = func() string { return "shop" }
 	run(t, env, "deploy", "shop", strings.Repeat("a", 40), "--json")
@@ -112,7 +112,7 @@ func TestHelpWorksForEveryoneIncludingRoot(t *testing.T) {
 	for _, args := range [][]string{{"--help"}, {"help"}, {"-h"}, {}, {"deploy", "--help"}} {
 		env, out, _ := testEnv(t)
 		env.IsRoot = func() bool { return true }
-		env.LoginUID = func() (int, bool) { return 0, true } // вход под root: остальные команды запрещены
+		env.LoginUID = func() (int, bool) { return 0, true } // root login: the other commands are forbidden
 		if c := run(t, env, args...); c != 0 || !strings.Contains(out.String(), "Usage: lite") {
 			t.Errorf("%v: code %d, output %q", args, c, out.String())
 		}

@@ -8,16 +8,16 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// safeFixes исправления, которые разрешено выполнять само: повторяемые, без подстановки значений владельца и без
-// расширения доступа к серверу. Всё остальное (файервол, пользователи, ключи, обновление пакетов) только предлагается.
+// safeFixes are the fixes that may be run automatically: repeatable, without substituting owner values and without
+// broadening access to the server. Everything else (the firewall, users, keys, package updates) is only suggested.
 var safeFixes = map[string]bool{
 	"security ssh": true, "security updates": true, "security sysctl": true, "security fail2ban": true,
 	"pg schedule on": true, "backup schedule on": true, "backblaze schedule on": true,
 	"podman install": true, "pg install": true, "redis install": true, "caddy install": true,
 }
 
-// fixCommands разбирает подсказку «sudo lite … ; sudo lite …» на команды (плагин, аргументы) из списка safeFixes.
-// Части, которых в списке нет, возвращаются отдельно как требующие ручного выполнения.
+// fixCommands splits a "sudo lite … ; sudo lite …" hint into commands (plugin, arguments) from the safeFixes list.
+// The parts that are not in the list are returned separately as needing manual action.
 func fixCommands(hint string) (auto [][]string, manual []string) {
 	for _, part := range strings.Split(hint, ";") {
 		part = strings.TrimSpace(part)
@@ -37,7 +37,7 @@ func fixCommands(hint string) (auto [][]string, manual []string) {
 	return auto, manual
 }
 
-// cmdFix: lite fix [--dry-run] [--yes] (то же, что verify --autofix). Исправляет только то, что в safeFixes.
+// cmdFix: lite fix [--dry-run] [--yes] (the same as verify --autofix). It fixes only what is in safeFixes.
 func cmdFix(args []string, env Env) result {
 	fs := flag.NewFlagSet("fix", flag.ContinueOnError)
 	dry := fs.Bool("dry-run", false, "")

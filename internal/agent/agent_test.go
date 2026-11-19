@@ -80,7 +80,7 @@ func TestExec(t *testing.T) {
 			t.Errorf("%q: ran %v, answer %s", in, ran, out.String())
 		}
 	}
-	// имя вызывающего в журнале проверяется: подделка не должна ломать строку журнала
+	// the caller name in the journal is checked: a forgery must not break the journal line
 	journal.Reset()
 	Exec(strings.NewReader(`{"cmd":"status","caller":"x\nhack: root"}`), &out, run, &journal)
 	if strings.Count(journal.String(), "\n") != 1 {
@@ -88,7 +88,7 @@ func TestExec(t *testing.T) {
 	}
 }
 
-// newAgent собирает агента, соединённого с исполнителем через net.Pipe.
+// newAgent builds an agent connected to the executor through net.Pipe.
 func newAgent(t *testing.T, ran *[]string, allowed bool) (*Agent, *bytes.Buffer) {
 	t.Helper()
 	var audit bytes.Buffer
@@ -231,7 +231,7 @@ func TestInstall(t *testing.T) {
 				return host.Result{ExitCode: 2}, nil
 			}
 			if c.Name == "id" {
-				return host.Result{ExitCode: 1}, nil // пользователя службы ещё нет
+				return host.Result{ExitCode: 1}, nil // the service user does not exist yet
 			}
 			return host.Result{}, nil
 		}}

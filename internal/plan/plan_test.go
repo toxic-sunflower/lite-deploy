@@ -67,7 +67,7 @@ func TestBuildExampleStepOrder(t *testing.T) {
 	pl := build(t, example(t), baseState())
 	want := []string{
 		"verify_host", "create_project_user",
-		"set_secret", // _db_password раньше provision_postgres (adopt)
+		"set_secret", // _db_password before provision_postgres (adopt)
 		"provision_postgres",
 		"set_secret", "set_secret", "set_secret", "set_secret", "set_secret", // admin_password, admin_username, auth_session_secret, webhook_secret, ghcr_read_token
 		"registry_login",
@@ -127,7 +127,7 @@ func TestBuildIsDeterministic(t *testing.T) {
 }
 
 func TestPlanContainsNoSecretValues(t *testing.T) {
-	// шифртекст в плане есть, но открытых значений нет: в этом тесте «значения» это маркеры
+	// the ciphertext is in the plan, but the clear values are not: in this test the "values" are markers
 	st := baseState()
 	st.Ciphertexts["admin_password"] = ct("x")["x"]
 	pl := build(t, example(t), st)
@@ -137,11 +137,11 @@ func TestPlanContainsNoSecretValues(t *testing.T) {
 			t.Errorf("found %q in the plan", bad)
 		}
 	}
-	// ссылки secret:// в плане не остаются: только имена
+	// secret:// references do not remain in the plan: only names
 	if bytes.Contains(raw, []byte("secret://")) {
 		t.Error("a secret:// reference is left in the plan")
 	}
-	// строка подключения не вычисляется при построении
+	// the connection string is not computed at build time
 	for _, s := range pl.Steps {
 		if s.Action == "write_service_env" && strings.Contains(string(s.Params), "postgresql://") {
 			t.Error("a connection string in the plan")
@@ -184,7 +184,7 @@ func TestAutoPortsAvoidOtherProjects(t *testing.T) {
 	v, _ := actions.Decode(last.Action, last.Params)
 	rp := v.(*actions.RecordProject)
 	got := append(append([]int{}, rp.Ports.Services["api"]...), rp.Ports.Sites["main"])
-	// 18000–18002 заняты другим проектом, явные 18080/18090/18091/18092 заняты этим
+	// 18000–18002 are taken by another project, the explicit 18080/18090/18091/18092 are taken by this one
 	want := []int{18003, 18004, 18005}
 	for i := range want {
 		if got[i] != want[i] {
@@ -212,7 +212,7 @@ func TestPortsExhausted(t *testing.T) {
 		p.Sites[i].ListenPort = 0
 	}
 	st := baseState()
-	st.PortRange = [2]int{18000, 18004} // нужно 6 портов, есть 5
+	st.PortRange = [2]int{18000, 18004} // 6 ports are needed, there are 5
 	_, err := Build(p, st)
 	if err == nil || err.Code != CodePrecondition || !strings.Contains(err.Message, "no free ports") {
 		t.Fatalf("expected a shortage of ports: %v", err)

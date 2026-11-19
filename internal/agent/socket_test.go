@@ -13,7 +13,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
-// Настоящие unix-сокеты: агент, исполнитель и клиент, uid вызывающего определяет ядро (SO_PEERCRED).
+// Real unix sockets: the agent, the executor and the client; the caller uid is determined by the kernel (SO_PEERCRED).
 func TestRealSockets(t *testing.T) {
 	dir := t.TempDir()
 	apiSock, execSock := filepath.Join(dir, "api.sock"), filepath.Join(dir, "exec.sock")
@@ -67,7 +67,7 @@ func TestRealSockets(t *testing.T) {
 		t.Fatalf("journal: %s", audit.String())
 	}
 
-	// чужой uid: тот же сокет, но Allowed не пускает
+	// a foreign uid: the same socket, but Allowed does not let it in
 	a.Allowed = func(int) (string, bool) { return "", false }
 	out, err = Call(c, apiSock, "GET", "/v1/status", nil)
 	if err != nil || !strings.Contains(string(out), "permission_denied") {

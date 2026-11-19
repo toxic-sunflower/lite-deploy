@@ -1,4 +1,4 @@
-// Package config читает /etc/lite-deploy/config.json: лимиты и квоты (SPEC-v0.md, раздел 8).
+// Package config reads /etc/lite-deploy/config.json: limits and quotas (SPEC-v0.md, section 8).
 package config
 
 import (
@@ -13,10 +13,10 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/schema"
 )
 
-// DefaultPath путь файла настроек на сервере.
+// DefaultPath is the path of the settings file on the server.
 const DefaultPath = "/etc/lite-deploy/config.json"
 
-// Limits лимиты размеров и числа объектов. Нулевое поле означает «по умолчанию».
+// Limits are limits on sizes and numbers of objects. A zero field means "default".
 type Limits struct {
 	PlanBytes          int   `json:"plan_bytes,omitempty" min:"1024" max:"4194304"`
 	PlanSteps          int   `json:"plan_steps,omitempty" min:"1" max:"1000"`
@@ -28,20 +28,20 @@ type Limits struct {
 	PlanTTLHours       int   `json:"plan_ttl_hours,omitempty" min:"1" max:"168"`
 }
 
-// Quotas квоты на число действий.
+// Quotas are quotas on the number of actions.
 type Quotas struct {
 	DeployPer10MinPerProject int `json:"deploy_per_10min_per_project,omitempty" min:"1" max:"1000"`
 	ApplyPerHour             int `json:"apply_per_hour,omitempty" min:"1" max:"10000"`
 	SecretSetsPerHour        int `json:"secret_sets_per_hour,omitempty" min:"1" max:"10000"`
 }
 
-// Config содержимое config.json.
+// Config is the content of config.json.
 type Config struct {
 	Limits Limits `json:"limits,omitempty"`
 	Quotas Quotas `json:"quotas,omitempty"`
 }
 
-// Default значения из SPEC-v0.md, раздел 8.
+// Default values from SPEC-v0.md, section 8.
 func Default() Config {
 	return Config{
 		Limits: Limits{PlanBytes: 262144, PlanSteps: 200, ProjectBytes: 65536, SecretBytes: 8192, Projects: 50,
@@ -50,7 +50,7 @@ func Default() Config {
 	}
 }
 
-// Load читает файл. Нет файла: значения по умолчанию. Неизвестные поля и значения вне пределов отклоняются.
+// Load reads the file. No file: the defaults. Unknown fields and out-of-range values are rejected.
 func Load(fsys host.FS, path string) (Config, []schema.Issue, error) {
 	def := Default()
 	raw, err := fsys.ReadFile(path)

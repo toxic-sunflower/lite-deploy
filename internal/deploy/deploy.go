@@ -17,7 +17,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/render"
 )
 
-// Коды ошибок выкатки (SPEC-v0.md, 6.3).
+// Deploy error codes (SPEC-v0.md, 6.3).
 const (
 	CodeProjectNotFound   = "project_not_found"
 	CodeInProgress        = "deploy_in_progress"
@@ -29,13 +29,13 @@ const (
 	CodeIO                = "io_error"
 )
 
-// Пути по умолчанию.
+// Default paths.
 const (
 	DefaultProjectsDir = "/etc/lite-deploy/projects"
 	DefaultStateDir    = "/var/lib/lite-deploy/state"
 )
 
-// Error ошибка выкатки с кодом для CLI.
+// Error is a deploy error with a code for the CLI.
 type Error struct {
 	Code    string
 	Message string
@@ -46,7 +46,7 @@ func (e *Error) Error() string { return e.Code + ": " + e.Message }
 
 func fail(code, msg string) *Error { return &Error{Code: code, Message: msg} }
 
-// Env окружение выкатки. Всё внешнее (команды, файлы, HTTP, блокировка, время) подменяется в тестах.
+// Env is the deploy environment. Everything external (commands, files, HTTP, locking, time) is replaced in tests.
 type Env struct {
 	Runner host.Runner
 	FS     host.FS
@@ -54,14 +54,14 @@ type Env struct {
 	Lock   host.Locker
 	Now    func() time.Time
 	Sleep  func(time.Duration)
-	// AsUser: процесс запущен от root, команды podman и systemctl --user идут в сессии пользователя проекта.
+	// AsUser: the process runs as root, podman and systemctl --user commands go to the project user's session.
 	AsUser      bool
-	ProjectsDir string // пусто: DefaultProjectsDir
-	StateDir    string // пусто: DefaultStateDir
+	ProjectsDir string // empty: DefaultProjectsDir
+	StateDir    string // empty: DefaultStateDir
 	Poll        time.Duration
 }
 
-// Manager выкатка одного проекта.
+// Manager deploys one project.
 type Manager struct {
 	Env
 	Name  string
@@ -71,7 +71,7 @@ type Manager struct {
 
 var nameRe = regexp.MustCompile(`\A[a-z][a-z0-9-]{1,30}\z`)
 
-// Slots два слота blue-green.
+// Slots are the two blue-green slots.
 var Slots = [2]string{"blue", "green"}
 
 func slotIndex(s string) int {
@@ -88,7 +88,7 @@ func other(s string) string {
 	return Slots[0]
 }
 
-// Open читает описание проекта и порты из состояния сервера.
+// Open reads the project description and ports from the server state.
 func Open(env Env, name string) (*Manager, *Error) {
 	if !nameRe.MatchString(name) {
 		return nil, fail(CodeProjectNotFound, "invalid project name")
@@ -156,7 +156,7 @@ func (m *Manager) port(service, slot string) int {
 func (m *Manager) home() string         { return "/home/" + m.Name }
 func (m *Manager) userStateDir() string { return m.home() + "/.local/state/lite-deploy" }
 
-// run запускает команду в сессии проектного пользователя (или напрямую, если уже он).
+// run runs a command in the project user's session (or directly, if it is already that user).
 func (m *Manager) run(ctx context.Context, timeout time.Duration, name string, args ...string) (host.Result, error) {
 	if m.AsUser {
 		a := append([]string{"--machine=" + m.Name + "@.host", "--user", "--pipe", "--wait", "--quiet", "--collect", "--", name}, args...)
@@ -182,7 +182,7 @@ func (m *Manager) ensureStateDir() error {
 		return err
 	}
 	if m.AsUser {
-		// от root созданные каталоги принадлежали бы root: возвращаем их пользователю проекта
+		// created as root, the directories would belong to root: give them back to the project user
 		for _, p := range []string{m.home() + "/.local", m.home() + "/.local/state", d} {
 			if err := m.FS.Chown(p, m.Name, m.Name); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
@@ -203,7 +203,7 @@ func (m *Manager) writeState(name string, data []byte) error {
 	return nil
 }
 
-// Active слот, на который идёт трафик: blue, green или none.
+// Active is the slot that receives traffic: blue, green or none.
 func (m *Manager) Active() string {
 	raw, err := m.FS.ReadFile(m.userStateDir() + "/active")
 	if err != nil {
@@ -226,7 +226,7 @@ func (m *Manager) history(event, version, slot, prev string) {
 	}
 }
 
-// HistoryEntry строка журнала выкатки.
+// HistoryEntry is a line of the deploy journal.
 type HistoryEntry struct {
 	Time     string `json:"time"`
 	Event    string `json:"event"`
@@ -264,7 +264,7 @@ func (m *Manager) lastHistory(n int) []HistoryEntry {
 	return out
 }
 
-// probe опрашивает один сервис в слоте. Возвращает (отвечает, версия).
+// probe polls one service in a slot. It returns (answers, version).
 func (m *Manager) probe(ctx context.Context, service, slot string) (bool, string) {
 	svc := m.proj.Services[service]
 	port := m.port(service, slot)
@@ -303,7 +303,7 @@ func (m *Manager) healthTimeout() time.Duration {
 	return time.Duration(t) * time.Second
 }
 
-// DeployResult итог выкатки.
+// DeployResult is the outcome of a deploy.
 type DeployResult struct {
 	Project      string `json:"project"`
 	Version      string `json:"version"`
@@ -312,7 +312,7 @@ type DeployResult struct {
 	Switched     bool   `json:"switched"`
 }
 
-// Deploy выкатывает версию sha в свободный слот и переключает трафик (SPEC-v0.md, 5.2).
+// Deploy deploys version sha into the free slot and switches traffic (SPEC-v0.md, 5.2).
 func (m *Manager) Deploy(ctx context.Context, sha string) (*DeployResult, *Error) {
 	if !shaRe.MatchString(sha) {
 		return nil, fail(CodeInvalidSHA, "the full commit hash is required: 40 characters 0-9a-f")
@@ -413,7 +413,7 @@ func errText(r host.Result, err error) string {
 	return trim(r)
 }
 
-// abort: последние строки журнала, остановка слота, запись, ошибка. Трафик остаётся на прежнем слоте.
+// abort: the last journal lines, stopping the slot, a record, an error. Traffic stays on the previous slot.
 func (m *Manager) abort(ctx context.Context, idle, sha, active string, logsFor []string, msg string) *Error {
 	var logs []string
 	for _, s := range logsFor {
@@ -438,7 +438,7 @@ func (m *Manager) abort(ctx context.Context, idle, sha, active string, logsFor [
 	return e
 }
 
-// switchTraffic пишет upstream всех сайтов на порты слота и перезагружает Caddy. При сбое возвращает прежнее.
+// switchTraffic writes the upstream of all sites to the slot ports and reloads Caddy. On a failure it restores the previous state.
 func (m *Manager) switchTraffic(ctx context.Context, slot string) *Error {
 	var olds []upstreamBackup
 	for _, site := range m.proj.Sites {
@@ -471,7 +471,7 @@ func (m *Manager) switchTraffic(ctx context.Context, slot string) *Error {
 	return nil
 }
 
-// upstreamBackup прежнее содержимое файла upstream (nil: файла не было).
+// upstreamBackup is the previous content of an upstream file (nil: there was no file).
 type upstreamBackup struct {
 	path string
 	data []byte
@@ -505,7 +505,7 @@ func fileExists(f host.FS, p string) (bool, error) {
 	return true, nil
 }
 
-// RollbackResult итог отката.
+// RollbackResult is the outcome of a rollback.
 type RollbackResult struct {
 	Project      string `json:"project"`
 	Version      string `json:"version"`
@@ -513,7 +513,7 @@ type RollbackResult struct {
 	PreviousSlot string `json:"previous_slot"`
 }
 
-// Rollback переключает трафик на прежний слот (SPEC-v0.md, 5.3).
+// Rollback switches traffic to the previous slot (SPEC-v0.md, 5.3).
 func (m *Manager) Rollback(ctx context.Context) (*RollbackResult, *Error) {
 	if err := m.ensureStateDir(); err != nil {
 		return nil, fail(CodeIO, err.Error())
@@ -559,14 +559,14 @@ func orDash(s string) string {
 	return s
 }
 
-// SlotStatus состояние сервиса в слоте.
+// SlotStatus is the state of a service in a slot.
 type SlotStatus struct {
 	Port    int     `json:"port"`
 	Up      bool    `json:"up"`
 	Version *string `json:"version"`
 }
 
-// StatusResult состояние проекта.
+// StatusResult is the state of a project.
 type StatusResult struct {
 	Project string                           `json:"project"`
 	Active  string                           `json:"active"`
@@ -574,7 +574,7 @@ type StatusResult struct {
 	History []HistoryEntry                   `json:"history"`
 }
 
-// Status показывает активный слот, ответы сервисов и последние события (SPEC-v0.md, 5.4).
+// Status shows the active slot, service answers and recent events (SPEC-v0.md, 5.4).
 func (m *Manager) Status(ctx context.Context) (*StatusResult, *Error) {
 	res := &StatusResult{Project: m.Name, Active: m.Active(), Slots: map[string]map[string]SlotStatus{}, History: m.lastHistory(5)}
 	if res.History == nil {
@@ -595,8 +595,8 @@ func (m *Manager) Status(ctx context.Context) (*StatusResult, *Error) {
 	return res, nil
 }
 
-// fetchRelease скачивает архив релиза компонента kind unit и кладёт его в каталог свободного слота.
-// Слот не получает трафика, поэтому его старое содержимое можно заменить; при любой ошибке трафик не затрагивается.
+// fetchRelease downloads the release archive of a kind unit component and puts it into the free slot directory.
+// The slot receives no traffic, so its old content can be replaced; on any error traffic is not affected.
 func (m *Manager) fetchRelease(ctx context.Context, service, sha, slot string) *Error {
 	svc := m.proj.Services[service]
 	if svc.Release == nil || svc.Release.URL == "" {
@@ -650,7 +650,7 @@ func (m *Manager) fetchRelease(ctx context.Context, service, sha, slot string) *
 			return fail(CodeFailed, "owner of the release mark: "+err.Error())
 		}
 	}
-	// слот свободен: останавливаем его, заменяем каталог
+	// the slot is free: stop it and replace the directory
 	_, _ = m.run(ctx, 2*time.Minute, "systemctl", "--user", "stop", render.UnitName(m.Name, service, slot)+".service")
 	if e := step(time.Minute, "replacing the slot directory", "rm", "-rf", dir); e != nil {
 		return e

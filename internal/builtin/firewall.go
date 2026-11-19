@@ -10,7 +10,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// Firewall плагин `firewall`: файервол сервера (ufw).
+// Firewall is the `firewall` plugin: the server firewall (ufw).
 type Firewall struct{}
 
 func (Firewall) Name() string       { return "firewall" }
@@ -48,7 +48,7 @@ func fwOut(st *firewall.State) plugin.Output {
 	return plugin.Output{Text: sb.String(), Data: st}
 }
 
-// splitFlags отделяет --from и --action от позиционных аргументов.
+// splitFlags separates --from and --action from positional arguments.
 func splitFlags(args []string) (pos []string, from, action string, err error) {
 	action = "allow"
 	for i := 0; i < len(args); i++ {

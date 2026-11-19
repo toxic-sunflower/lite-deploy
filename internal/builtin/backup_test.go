@@ -29,7 +29,7 @@ func backupEnv(t *testing.T, stdin string) (plugin.Env, *host.MemFS, *[]host.Cmd
 			if c.Name == "tar" {
 				return host.Result{}, nil
 			}
-			return host.Result{ExitCode: 127}, nil // psql, rclone и т.п. не установлены
+			return host.Result{ExitCode: 127}, nil // psql, rclone and so on are not installed
 		}),
 	}
 	return env, mem, &cmds
@@ -67,7 +67,7 @@ func TestBackupEncryptsAndRestores(t *testing.T) {
 			t.Errorf("tar has no %q: %s", want, tarArgs)
 		}
 	}
-	// закрытый ключ расшифровывает, чужой нет
+	// the private key decrypts, a foreign one does not
 	r, err := age.Decrypt(bytes.NewReader(enc), id)
 	if err != nil {
 		t.Fatal(err)
@@ -180,7 +180,7 @@ func TestPGDumpsAreEncryptedWhenEnabled(t *testing.T) {
 	if _, plain := mem.Files[PGBackupDir+"/shop-20261119T030000Z.dump"]; plain {
 		t.Fatal("the plain backup must not remain")
 	}
-	// восстановление без ключа отказывает, с ключом расшифровывает во временный файл и убирает его
+	// restoring without a key refuses, with a key it decrypts into a temporary file and removes it
 	if _, err := (PG{}).Run(context.Background(), env, "restore", []string{"shop", "shop-20261119T030000Z.dump.age"}); err == nil {
 		t.Fatal("without a key the restore must refuse")
 	}

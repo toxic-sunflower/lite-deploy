@@ -1,12 +1,12 @@
-// Package ui локальный веб-интерфейс: показывает состояние проектов и даёт кнопки «Выкатить» и «Откатить».
-// Интерфейс ничего не решает сам: каждое действие это вызов CLI (`lite-deploy ... --json`) на этом компьютере
-// или на сервере по SSH. Слушает только 127.0.0.1; действия требуют токена из адреса, который печатает команда.
+// Package ui is the local web interface: shows the state of projects and gives the "Deploy" and "Roll back" buttons.
+// The interface decides nothing itself: every action is a CLI call (`lite-deploy ... --json`) on this computer
+// or on the server over SSH. It listens on 127.0.0.1 only; actions need the token from the address the command prints.
 package ui
 
 import (
 	"context"
 	"crypto/subtle"
-	_ "embed" // страница интерфейса
+	_ "embed" // the interface page
 	"encoding/json"
 	"errors"
 	"io"
@@ -31,19 +31,19 @@ var (
 	pluginRe  = regexp.MustCompile(`\A[a-z][a-z0-9-]{0,30}\z`)
 )
 
-// Server интерфейс.
+// Server is the interface.
 type Server struct {
 	Runner host.Runner
-	// Host: пользователь@сервер. Пусто: команды выполняются на этом же компьютере (Bin).
+	// Host: user@server. Empty: commands run on this same computer (Bin).
 	Host string
-	// Bin путь к lite-deploy для локального режима.
+	// Bin is the path to lite-deploy for local mode.
 	Bin   string
 	Token string
-	// Timeout на одно действие; выкатка может идти минуты.
+	// Timeout for one action; a deploy can take minutes.
 	Timeout time.Duration
 }
 
-// Validate проверяет настройки.
+// Validate validates the settings.
 func (s *Server) Validate() error {
 	if s.Host != "" && !hostRe.MatchString(s.Host) {
 		return errors.New("invalid server address, expected user@server")
@@ -54,8 +54,8 @@ func (s *Server) Validate() error {
 	return nil
 }
 
-// call обращается к агенту на сервере: `lite-deploy call МЕТОД ПУТЬ` (тело запроса со стандартного ввода).
-// Для сервера по SSH команда выполняется там же, без sudo: доступ к сокету агента у администраторов системы (группа sudo или wheel).
+// call talks to the agent on the server: `lite-deploy call METHOD PATH` (the request body on standard input).
+// For a server over SSH the command runs there, without sudo: system administrators (group sudo or wheel) can reach the agent socket.
 func (s *Server) call(ctx context.Context, method, path string, body any) []byte {
 	var in []byte
 	if body != nil {
@@ -93,7 +93,7 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 	return b
 }
 
-// Handler HTTP-обработчик интерфейса.
+// Handler is the HTTP handler of the interface.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -203,7 +203,7 @@ type fwIn struct {
 	Action string `json:"action"`
 }
 
-// fwRule читает и проверяет правило брандмауэра из тела запроса.
+// fwRule reads and validates a firewall rule from the request body.
 func fwRule(r *http.Request) (fwIn, int) {
 	var in fwIn
 	if code := readBody(r, &in); code != 0 {
@@ -232,7 +232,7 @@ func readBody(r *http.Request, v any) int {
 	return 0
 }
 
-// api оборачивает обработчик API: метод, токен.
+// api wraps an API handler: method, token.
 func (s *Server) api(method string, h func(*http.Request) ([]byte, int)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != method {
@@ -253,8 +253,8 @@ func (s *Server) api(method string, h func(*http.Request) ([]byte, int)) http.Ha
 	}
 }
 
-// guard защищает от обращений с чужих сайтов: принимается только Host вида localhost или 127.0.0.1
-// (защита от DNS rebinding), а для запросов из браузера Origin должен совпадать с Host.
+// guard protects against requests from foreign sites: only a Host like localhost or 127.0.0.1 is accepted
+// (protection against DNS rebinding), and for browser requests Origin must match Host.
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h, _, err := net.SplitHostPort(r.Host)
@@ -276,7 +276,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 	})
 }
 
-// Serve слушает addr (только loopback) до отмены ctx.
+// Serve listens on addr (loopback only) until ctx is canceled.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {

@@ -75,7 +75,7 @@ func TestReflect(t *testing.T) {
 		t.Error("a field with json:\"-\" must not get into the schema")
 	}
 	req := m["required"].([]any)
-	if len(req) != 2 { // name и list
+	if len(req) != 2 { // name and list
 		t.Errorf("required: %v", req)
 	}
 	name := props["name"].(map[string]any)

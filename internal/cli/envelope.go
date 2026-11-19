@@ -7,16 +7,16 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/schema"
 )
 
-// APIVersion версия формата ответов (D-44).
+// APIVersion is the version of the response format (D-44).
 const APIVersion = "v1"
 
-// Warning предупреждение, не мешающее успеху.
+// Warning is a warning that does not prevent success.
 type Warning struct {
 	Code    string `json:"code" maxLen:"64"`
 	Message string `json:"message" maxLen:"1024"`
 }
 
-// ErrorBody тело ошибки (SPEC-v0.md, 6.2).
+// ErrorBody is the error body (SPEC-v0.md, 6.2).
 type ErrorBody struct {
 	Code    string         `json:"code" pattern:"^[a-z_]{1,64}$"`
 	Message string         `json:"message" maxLen:"2048"`
@@ -24,7 +24,7 @@ type ErrorBody struct {
 	Hint    string         `json:"hint,omitempty" maxLen:"1024"`
 }
 
-// Envelope конверт ответа `--json`: одна строка JSON.
+// Envelope is the `--json` response envelope: one JSON line.
 type Envelope struct {
 	OK         bool       `json:"ok"`
 	APIVersion string     `json:"api_version" enum:"v1"`
@@ -34,7 +34,7 @@ type Envelope struct {
 	Error      *ErrorBody `json:"error,omitempty"`
 }
 
-// Коды ошибок, которые знает CLI сверх кодов плана и привратника.
+// Error codes the CLI knows besides the plan and gatekeeper codes.
 const (
 	CodeInternal       = "internal"
 	CodeIO             = "io_error"
@@ -54,7 +54,7 @@ var exitCodes = map[string]int{
 	"deploy_unhealthy": 10, "deploy_failed": 10, "rollback_unavailable": 10, "nothing_deployed": 10,
 }
 
-// ExitCode код выхода процесса для кода ошибки (SPEC-v0.md, 6.3). Неизвестный код это общая ошибка 1.
+// ExitCode is the process exit code for an error code (SPEC-v0.md, 6.3). An unknown code is the general error 1.
 func ExitCode(code string) int {
 	if c, ok := exitCodes[code]; ok {
 		return c
@@ -62,7 +62,7 @@ func ExitCode(code string) int {
 	return 1
 }
 
-// ErrorCodes перечисляет все известные коды ошибок.
+// ErrorCodes lists all known error codes.
 func ErrorCodes() []string {
 	out := make([]string, 0, len(exitCodes))
 	for c := range exitCodes {

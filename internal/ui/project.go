@@ -11,8 +11,8 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/secrets"
 )
 
-// projectIn то, что присылает страница: описание проекта и значения секретов открытым текстом.
-// Значения шифруются здесь, на компьютере владельца, открытым ключом исполнителя и уходят на сервер только зашифрованными.
+// projectIn is what the page sends: the project description and the secret values in plain text.
+// The values are encrypted here, on the owner computer, with the executor public key and go to the server only encrypted.
 type projectIn struct {
 	Project        json.RawMessage   `json:"project"`
 	Secrets        map[string]string `json:"secrets"`
@@ -32,7 +32,7 @@ func readLarge(r *http.Request, v any) int {
 	return 0
 }
 
-// serverKey запрашивает у агента открытый ключ исполнителя. При ошибке возвращает ответ агента как есть.
+// serverKey asks the agent for the executor public key. On an error it returns the agent answer as is.
 func (s *Server) serverKey(r *http.Request) (string, []byte) {
 	raw := s.call(r.Context(), "GET", "/v1/project/key", nil)
 	var env struct {
@@ -47,7 +47,7 @@ func (s *Server) serverKey(r *http.Request) (string, []byte) {
 	return env.Data.PublicKey, nil
 }
 
-// projectCall готовит пакет (шифрует секреты) и отправляет агенту предпросмотр или создание проекта.
+// projectCall prepares the bundle (encrypts secrets) and sends the agent a preview or a project creation.
 func (s *Server) projectCall(action string) func(*http.Request) ([]byte, int) {
 	return func(r *http.Request) ([]byte, int) {
 		var in projectIn

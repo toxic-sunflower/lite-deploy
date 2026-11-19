@@ -1,6 +1,6 @@
-// Package plugin механизм плагинов (REQUIREMENTS.md, R-19, R-25). Плагин добавляет команды в lite, раздел в интерфейс
-// и проверки для verify. Встроенные плагины написаны на Go; внешние это каталог с манифестом plugin.json и скриптами
-// или программами. Внешние плагины ставит только владелец сервера (каталог принадлежит root).
+// Package plugin is the plugin mechanism (REQUIREMENTS.md, R-19, R-25). A plugin adds commands to lite, a section to the interface
+// and checks for verify. Built-in plugins are written in Go; external ones are a directory with a plugin.json manifest and scripts
+// or programs. External plugins are installed only by the server owner (the directory belongs to root).
 package plugin
 
 import (
@@ -19,7 +19,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
-// Dir каталог внешних плагинов.
+// Dir is the directory of external plugins.
 const Dir = "/etc/lite-deploy/plugins"
 
 var (
@@ -27,49 +27,49 @@ var (
 	argRe  = regexp.MustCompile(`^[^\x00-\x1f\x7f]{0,256}$`)
 )
 
-// reserved имена команд lite, которые плагину занимать нельзя.
+// reserved are lite command names a plugin must not take.
 var reserved = map[string]bool{
 	"version": true, "schema": true, "project": true, "apply": true, "init": true, "secret": true, "deploy": true,
 	"rollback": true, "status": true, "gate": true, "ui": true, "agent": true, "exec": true,
 	"call": true, "plugin": true, "info": true, "verify": true, "fix": true,
 }
 
-// Error ошибка плагина с кодом для конверта CLI.
+// Error is a plugin error with a code for the CLI envelope.
 type Error struct{ Code, Message, Hint string }
 
 func (e *Error) Error() string { return e.Message }
 
-// Errorf создаёт ошибку.
+// Errorf creates an error.
 func Errorf(code, format string, a ...any) *Error {
 	return &Error{Code: code, Message: fmt.Sprintf(format, a...)}
 }
 
-// Command описание команды плагина.
+// Command describes a plugin command.
 type Command struct {
 	Name string `json:"name"`
 	Help string `json:"help"`
-	// Confirm: команда меняет систему, нужно подтверждение (--yes или ответ в терминале).
+	// Confirm: the command changes the system and needs confirmation (--yes or an answer in the terminal).
 	Confirm bool `json:"confirm,omitempty"`
-	// Root: команде нужны права root даже без изменений (например, чтение состояния файервола).
+	// Root: the command needs root even without changes (for example, reading the firewall state).
 	Root bool `json:"root,omitempty"`
-	// Args описание аргументов для справки и интерфейса, например "ПАКЕТ".
+	// Args describes the arguments for help and the interface, for example "PACKAGE".
 	Args string `json:"args,omitempty"`
 }
 
-// Output итог команды.
+// Output is the result of a command.
 type Output struct {
 	Text string
 	Data any
 }
 
-// Уровни результата проверки.
+// Check result levels.
 const (
 	LevelOK   = "ok"
 	LevelWarn = "warn"
 	LevelFail = "fail"
 )
 
-// Finding результат одной проверки.
+// Finding is the result of one check.
 type Finding struct {
 	Plugin  string `json:"plugin"`
 	Check   string `json:"check"`
@@ -78,40 +78,40 @@ type Finding struct {
 	Fix     string `json:"fix,omitempty"`
 }
 
-// Env что плагину доступно.
+// Env is what the plugin has access to.
 type Env struct {
 	Runner host.Runner
 	FS     host.FS
 	Now    func() time.Time
-	User   string // имя пользователя, от чьего имени выполняется команда
-	// Projects пользователи проектов (CI заходит под ними по SSH): плагины не должны их отключать.
+	User   string // the name of the user the command runs as
+	// Projects are the project users (CI logs in as them over SSH): plugins must not disable them.
 	Projects []string
-	// Stdin стандартный ввод команды (для паролей и ключей, которые нельзя передавать аргументами); может быть nil.
+	// Stdin is the command standard input (for passwords and keys that must not be passed as arguments); may be nil.
 	Stdin io.Reader
 }
 
-// Plugin плагин.
+// Plugin is a plugin.
 type Plugin interface {
 	Name() string
 	Description() string
-	// Kind: builtin или external.
+	// Kind: builtin or external.
 	Kind() string
-	// Requires пакеты ОС, нужные плагину.
+	// Requires are the OS packages the plugin needs.
 	Requires() []string
 	Commands() []Command
 	Run(ctx context.Context, env Env, cmd string, args []string) (Output, error)
 	Check(ctx context.Context, env Env) []Finding
 }
 
-// Registry набор плагинов.
+// Registry is a set of plugins.
 type Registry struct {
 	byName map[string]Plugin
 }
 
-// NewRegistry создаёт реестр; имена должны быть допустимыми и уникальными.
+// NewRegistry creates a registry; names must be valid and unique.
 func NewRegistry() *Registry { return &Registry{byName: map[string]Plugin{}} }
 
-// Add добавляет плагин.
+// Add adds a plugin.
 func (r *Registry) Add(p Plugin) error {
 	n := p.Name()
 	if !nameRe.MatchString(n) {
@@ -127,10 +127,10 @@ func (r *Registry) Add(p Plugin) error {
 	return nil
 }
 
-// Get возвращает плагин по имени.
+// Get returns a plugin by name.
 func (r *Registry) Get(name string) (Plugin, bool) { p, ok := r.byName[name]; return p, ok }
 
-// List плагины по алфавиту.
+// List returns the plugins in alphabetical order.
 func (r *Registry) List() []Plugin {
 	out := make([]Plugin, 0, len(r.byName))
 	for _, p := range r.byName {
@@ -140,7 +140,7 @@ func (r *Registry) List() []Plugin {
 	return out
 }
 
-// ValidArgs проверяет аргументы команды плагина: без управляющих символов, ограниченной длины.
+// ValidArgs validates the arguments of a plugin command: no control characters, limited length.
 func ValidArgs(args []string) bool {
 	if len(args) > 16 {
 		return false
@@ -153,7 +153,7 @@ func ValidArgs(args []string) bool {
 	return true
 }
 
-// Find ищет команду плагина.
+// Find looks up a plugin command.
 func Find(p Plugin, cmd string) (Command, bool) {
 	for _, c := range p.Commands() {
 		if c.Name == cmd {
@@ -163,9 +163,9 @@ func Find(p Plugin, cmd string) (Command, bool) {
 	return Command{}, false
 }
 
-// ---------- внешние плагины ----------
+// ---------- external plugins ----------
 
-// Manifest содержимое plugin.json.
+// Manifest is the content of plugin.json.
 type Manifest struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
@@ -174,18 +174,18 @@ type Manifest struct {
 	Checks      []ManifestCheck `json:"checks,omitempty"`
 }
 
-// ManifestCmd команда во внешнем плагине.
+// ManifestCmd is a command in an external plugin.
 type ManifestCmd struct {
 	Name    string `json:"name"`
 	Help    string `json:"help"`
 	Args    string `json:"args,omitempty"`
 	Confirm bool   `json:"confirm,omitempty"`
 	Root    bool   `json:"root,omitempty"`
-	// Exec файл относительно каталога плагина.
+	// Exec is a file relative to the plugin directory.
 	Exec string `json:"exec"`
 }
 
-// ManifestCheck проверка: файл завершается кодом 0 (ок), 1 (предупреждение) или другим (ошибка); первая строка вывода это сообщение.
+// ManifestCheck is a check: the file exits with 0 (ok), 1 (warning) or another code (error); the first output line is the message.
 type ManifestCheck struct {
 	Name string `json:"name"`
 	Exec string `json:"exec"`
@@ -196,7 +196,7 @@ func execOK(p string) bool {
 	return p != "" && !path.IsAbs(p) && path.Clean(p) == p && !strings.HasPrefix(p, "..")
 }
 
-// ParseManifest разбирает и проверяет plugin.json.
+// ParseManifest parses and validates plugin.json.
 func ParseManifest(data []byte) (Manifest, error) {
 	var m Manifest
 	dec := json.NewDecoder(strings.NewReader(string(data)))
@@ -236,7 +236,7 @@ func ParseManifest(data []byte) (Manifest, error) {
 type external struct {
 	m   Manifest
 	dir string
-	// Installed сообщает, установлен ли пакет ОС (для requires); nil: не проверять.
+	// Installed reports whether an OS package is installed (for requires); nil: do not check.
 	installed func(ctx context.Context, name string) bool
 }
 
@@ -327,8 +327,8 @@ func (x *external) Check(ctx context.Context, env Env) []Finding {
 	return out
 }
 
-// LoadDir читает внешние плагины из каталога dir и добавляет их в реестр. Ошибки отдельных плагинов возвращаются
-// списком: один сломанный плагин не мешает остальным. installed проверяет пакеты из requires (может быть nil).
+// LoadDir reads external plugins from the directory dir and adds them to the registry. Errors of individual plugins are returned
+// as a list: one broken plugin does not hinder the others. installed checks the packages from requires (may be nil).
 func LoadDir(fsys host.FS, dir string, r *Registry, installed func(ctx context.Context, name string) bool) []error {
 	names, err := fsys.ReadDir(dir)
 	if err != nil {
@@ -344,7 +344,7 @@ func LoadDir(fsys host.FS, dir string, r *Registry, installed func(ctx context.C
 		if err != nil || !st.IsDir {
 			continue
 		}
-		// плагин выполняется с правами lite: каталог должен принадлежать root и быть закрыт для записи другим
+		// the plugin runs with lite rights: the directory must belong to root and not be writable by others
 		if st.Owner != "root" || st.Mode&0o022 != 0 {
 			errs = append(errs, fmt.Errorf("plugin %s: directory %s must be owned by root and not writable by others (chown root, chmod go-w)", n, pd))
 			continue

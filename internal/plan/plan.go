@@ -14,13 +14,13 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/schema"
 )
 
-// SchemaID идентификатор версии схемы плана.
+// SchemaID is the identifier of the plan schema version.
 const SchemaID = "lite-deploy/plan/v1"
 
-// KindProjectCreate единственный вид плана в v0.
+// KindProjectCreate is the only plan kind in v0.
 const KindProjectCreate = "project.create"
 
-// Plan список шагов, которые применит исполнитель (D-34).
+// Plan is the list of steps the executor will apply (D-34).
 type Plan struct {
 	Schema      string `json:"schema" enum:"lite-deploy/plan/v1"`
 	ID          string `json:"id" pattern:"^[0-9A-HJKMNP-TV-Z]{26}$" doc:"ULID"`
@@ -34,7 +34,7 @@ type Plan struct {
 	Hash        string `json:"hash" pattern:"^sha256:[0-9a-f]{64}$" doc:"sha256 of the canonical plan JSON without the hash field"`
 }
 
-// Step одно действие исполнителя. Исполнитель смотрит только на Action и Params, Summary нужен людям.
+// Step is one executor action. The executor looks only at Action and Params, Summary is for people.
 type Step struct {
 	ID      string          `json:"id" pattern:"^s[0-9]{2,3}$"`
 	Action  string          `json:"action" pattern:"^[a-z_]{1,64}$"`
@@ -43,22 +43,22 @@ type Step struct {
 	Summary string          `json:"summary" maxLen:"500"`
 }
 
-// Limits пределы плана (SPEC-v0.md, раздел 8).
+// Limits are the plan limits (SPEC-v0.md, section 8).
 type Limits struct {
 	PlanBytes    int
 	PlanSteps    int
 	PlanTTLHours int
 }
 
-// DefaultLimits значения по умолчанию.
+// DefaultLimits are the default values.
 func DefaultLimits() Limits { return Limits{PlanBytes: 256 * 1024, PlanSteps: 200, PlanTTLHours: 168} }
 
-// ServerID вычисляет идентификатор сервера из /etc/machine-id: sha256("lite-deploy:" + id).
+// ServerID computes the server identifier from /etc/machine-id: sha256("lite-deploy:" + id).
 func ServerID(machineID string) string {
 	return HashBytes([]byte("lite-deploy:" + strings.TrimSpace(machineID)))
 }
 
-// ComputeHash считает хэш плана без поля hash.
+// ComputeHash computes the plan hash without the hash field.
 func (p Plan) ComputeHash() (string, error) {
 	raw, err := json.Marshal(p)
 	if err != nil {
@@ -80,7 +80,7 @@ func (p Plan) ComputeHash() (string, error) {
 	return HashBytes(c), nil
 }
 
-// Seal проставляет хэш.
+// Seal sets the hash.
 func (p *Plan) Seal() error {
 	h, err := p.ComputeHash()
 	if err != nil {
@@ -90,7 +90,7 @@ func (p *Plan) Seal() error {
 	return nil
 }
 
-// Коды ошибок проверки плана (SPEC-v0.md, 6.3).
+// Plan verification error codes (SPEC-v0.md, 6.3).
 const (
 	CodeInvalidPlan  = "invalid_plan"
 	CodeHashMismatch = "plan_hash_mismatch"
@@ -98,7 +98,7 @@ const (
 	CodeWrongServer  = "plan_wrong_server"
 )
 
-// VerifyError ошибка проверки плана.
+// VerifyError is a plan verification error.
 type VerifyError struct {
 	Code    string
 	Message string
@@ -111,15 +111,15 @@ func invalid(msg string, issues ...schema.Issue) *VerifyError {
 	return &VerifyError{Code: CodeInvalidPlan, Message: msg, Issues: issues}
 }
 
-// VerifyOptions что известно проверяющему о текущем сервере и времени.
+// VerifyOptions is what the verifier knows about the current server and time.
 type VerifyOptions struct {
 	Now      time.Time
 	ServerID string
 	Limits   Limits
 }
 
-// Verify разбирает и проверяет план по шагам раздела 3 («Применение»): схема, размер, шаги, хэш, срок, сервер.
-// Проверка идёт в таком порядке, чтобы чужой или повреждённый план отклонялся раньше, чем что-либо будет выполняться.
+// Verify parses and validates a plan by the steps of section 3 ("Applying"): schema, size, steps, hash, expiry, server.
+// The checks go in this order so that a foreign or corrupt plan is rejected before anything is executed.
 func Verify(data []byte, o VerifyOptions) (*Plan, *VerifyError) {
 	if o.Limits == (Limits{}) {
 		o.Limits = DefaultLimits()
@@ -166,7 +166,7 @@ func Verify(data []byte, o VerifyOptions) (*Plan, *VerifyError) {
 	if p.ServerID != o.ServerID {
 		return nil, &VerifyError{Code: CodeWrongServer, Message: "the plan was built for another server"}
 	}
-	// Шаги проверяются последними: к этому моменту план целый, свежий и для этого сервера.
+	// The steps are checked last: by then the plan is whole, fresh and for this server.
 	if issues := checkSteps(&p); len(issues) > 0 {
 		return nil, invalid("the plan steps did not pass validation", issues...)
 	}
@@ -204,7 +204,7 @@ func checkSteps(p *Plan) []schema.Issue {
 	return out
 }
 
-// Describe возвращает строки для чтения человеком: «s03 provision_postgres: описание».
+// Describe returns human-readable lines: "s03 provision_postgres: description".
 func Describe(p *Plan) []string {
 	out := make([]string, 0, len(p.Steps))
 	for _, s := range p.Steps {
@@ -215,7 +215,7 @@ func Describe(p *Plan) []string {
 
 const crockford = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
-// NewULID создаёт ULID: 48 бит времени (мс) и 80 бит случайности.
+// NewULID creates a ULID: 48 bits of time (ms) and 80 bits of randomness.
 func NewULID(now time.Time, r io.Reader) (string, error) {
 	var rnd [10]byte
 	if _, err := io.ReadFull(r, rnd[:]); err != nil {
@@ -227,7 +227,7 @@ func NewULID(now time.Time, r io.Reader) (string, error) {
 		b[i] = byte((ms >> (8 * (5 - i))) & 0xff)
 	}
 	copy(b[6:], rnd[:])
-	// 128 бит → 26 символов по 5 бит (старшие 2 бита первого символа нулевые)
+	// 128 bits → 26 characters of 5 bits (the top 2 bits of the first character are zero)
 	out := make([]byte, 26)
 	var acc uint
 	bits := 0

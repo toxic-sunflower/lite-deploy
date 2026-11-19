@@ -1,6 +1,6 @@
-// Package firewall управляет брандмауэром ufw: показ правил, открытие и закрытие портов, включение.
-// Порт SSH и порты Caddy (80, 443) защищены: закрыть их через lite-deploy нельзя.
-// Внешние команды запускаются только через host.Runner.
+// Package firewall manages the ufw firewall: showing rules, opening and closing ports, enabling.
+// The SSH port and the Caddy ports (80, 443) are protected: they cannot be closed through lite-deploy.
+// External commands run only through host.Runner.
 package firewall
 
 import (
@@ -14,7 +14,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
-// Коды ошибок.
+// Error codes.
 const (
 	CodeUsage        = "usage"
 	CodePrecondition = "precondition_failed"
@@ -23,7 +23,7 @@ const (
 	CodeFailed       = "step_failed"
 )
 
-// Error ошибка с кодом для CLI.
+// Error is an error with a code for the CLI.
 type Error struct{ Code, Message string }
 
 func (e *Error) Error() string { return e.Code + ": " + e.Message }
@@ -32,17 +32,17 @@ func fail(code, format string, a ...any) *Error {
 	return &Error{Code: code, Message: fmt.Sprintf(format, a...)}
 }
 
-// Rule одно правило ufw.
+// Rule is one ufw rule.
 type Rule struct {
-	Port      int    `json:"port"`   // 0: правило нестандартного вида, показывается как есть
-	Proto     string `json:"proto"`  // tcp, udp или пусто (любой)
+	Port      int    `json:"port"`   // 0: a rule of a non-standard shape, shown as is
+	Proto     string `json:"proto"`  // tcp, udp or empty (any)
 	Action    string `json:"action"` // allow, limit, deny, reject
-	From      string `json:"from"`   // any или адрес/сеть
+	From      string `json:"from"`   // any or an address/network
 	Protected bool   `json:"protected"`
-	Raw       string `json:"raw"` // строка из `ufw status`
+	Raw       string `json:"raw"` // a line from `ufw status`
 }
 
-// Raw0 порт и протокол для показа людям (например 8080/tcp); для нестандартного правила исходная строка.
+// Raw0 is the port and protocol for showing to people (for example 8080/tcp); for a non-standard rule, the original line.
 func (r Rule) Raw0() string {
 	if r.Port == 0 {
 		f := splitCols.Split(r.Raw, -1)
@@ -54,14 +54,14 @@ func (r Rule) Raw0() string {
 	return fmt.Sprintf("%d/%s", r.Port, r.Proto)
 }
 
-// State состояние брандмауэра.
+// State is the firewall state.
 type State struct {
 	Active  bool   `json:"active"`
 	SSHPort int    `json:"ssh_port"`
 	Rules   []Rule `json:"rules"`
 }
 
-// Manager управляет ufw.
+// Manager manages ufw.
 type Manager struct {
 	Runner host.Runner
 }
@@ -82,7 +82,7 @@ func (m *Manager) ufw(ctx context.Context, args ...string) (string, *Error) {
 	return out, nil
 }
 
-// sshPort читает порт sshd; если не удалось, 22.
+// sshPort reads the sshd port; 22 if that failed.
 func (m *Manager) sshPort(ctx context.Context) int {
 	res, err := m.run(ctx, "sshd", "-T")
 	if err == nil && res.ExitCode == 0 {
@@ -99,7 +99,7 @@ func (m *Manager) sshPort(ctx context.Context) int {
 
 var splitCols = regexp.MustCompile(`\s{2,}`)
 
-// parseRule разбирает строку таблицы `ufw status`; ok=false, если это не правило.
+// parseRule parses a line of the `ufw status` table; ok=false if it is not a rule.
 func parseRule(line string, protectedPorts map[int]bool) (Rule, bool, bool) {
 	line = strings.TrimRight(line, " \t\r")
 	if i := strings.Index(line, " # "); i >= 0 {
@@ -135,7 +135,7 @@ func parseRule(line string, protectedPorts map[int]bool) (Rule, bool, bool) {
 	return r, v6, true
 }
 
-// Status показывает состояние брандмауэра.
+// Status shows the firewall state.
 func (m *Manager) Status(ctx context.Context) (*State, *Error) {
 	out, e := m.ufw(ctx, "status")
 	if e != nil {
@@ -163,7 +163,7 @@ func (m *Manager) Status(ctx context.Context) (*State, *Error) {
 		seen[key{r.Port, r.Proto, r.Action, r.From}] = true
 		st.Rules = append(st.Rules, r)
 	}
-	for _, r := range v6 { // правило только для IPv6 тоже показываем
+	for _, r := range v6 { // a rule for IPv6 only is shown too
 		if !seen[key{r.Port, r.Proto, r.Action, r.From}] {
 			st.Rules = append(st.Rules, r)
 		}
@@ -171,7 +171,7 @@ func (m *Manager) Status(ctx context.Context) (*State, *Error) {
 	return st, nil
 }
 
-// ValidateRule проверяет порт, протокол и источник.
+// ValidateRule validates a port, protocol and source.
 func ValidateRule(port int, proto, from string) *Error {
 	if port < 1 || port > 65535 {
 		return fail(CodeUsage, "the port must be from 1 to 65535")
@@ -196,7 +196,7 @@ func ruleArgs(verb string, port int, proto, from string) []string {
 	return []string{verb, "proto", proto, "from", from, "to", "any", "port", strconv.Itoa(port)}
 }
 
-// Allow открывает порт (для всех или только с указанного адреса) и возвращает новое состояние.
+// Allow opens a port (for everyone or only from the given address) and returns the new state.
 func (m *Manager) Allow(ctx context.Context, port int, proto, from string) (*State, *Error) {
 	if e := ValidateRule(port, proto, from); e != nil {
 		return nil, e
@@ -207,7 +207,7 @@ func (m *Manager) Allow(ctx context.Context, port int, proto, from string) (*Sta
 	return m.Status(ctx)
 }
 
-// Remove удаляет разрешающее правило (allow или limit). Защищённые порты удалить нельзя.
+// Remove deletes an allow rule (allow or limit). Protected ports cannot be removed.
 func (m *Manager) Remove(ctx context.Context, port int, proto, from, action string) (*State, *Error) {
 	if e := ValidateRule(port, proto, from); e != nil {
 		return nil, e
@@ -242,8 +242,8 @@ func (m *Manager) Remove(ctx context.Context, port int, proto, from, action stri
 	return m.Status(ctx)
 }
 
-// Enable включает брандмауэр. Перед этим гарантирует правила для SSH (с ограничением частоты), 80 и 443,
-// чтобы включение не закрыло доступ к серверу и сайтам.
+// Enable turns the firewall on. Before that it guarantees rules for SSH (with rate limiting), 80 and 443,
+// so that enabling does not cut off access to the server and the sites.
 func (m *Manager) Enable(ctx context.Context) (*State, *Error) {
 	ssh := m.sshPort(ctx)
 	steps := [][]string{
@@ -263,15 +263,15 @@ func (m *Manager) Enable(ctx context.Context) (*State, *Error) {
 	return m.Status(ctx)
 }
 
-// Режимы файервола для `init --ufw`.
+// Firewall modes for `init --ufw`.
 const (
-	ModeOff  = "off"  // фильтрации нет
-	ModeHTTP = "http" // SSH и веб-порты (80/tcp, 443/tcp, 443/udp: HTTP, HTTPS, WebSocket, HTTP/2, HTTP/3)
-	ModeMax  = "max"  // только SSH
+	ModeOff  = "off"  // there is no filtering
+	ModeHTTP = "http" // SSH and web ports (80/tcp, 443/tcp, 443/udp: HTTP, HTTPS, WebSocket, HTTP/2, HTTP/3)
+	ModeMax  = "max"  // SSH only
 )
 
-// ModeSteps возвращает команды ufw для режима (без слова ufw), в порядке выполнения.
-// Правило для SSH всегда добавляется до включения, чтобы не потерять доступ.
+// ModeSteps returns the ufw commands for a mode (without the word ufw), in execution order.
+// The SSH rule is always added before enabling, so as not to lose access.
 func ModeSteps(mode string, sshPort int) ([][]string, *Error) {
 	switch mode {
 	case ModeOff:
@@ -291,10 +291,10 @@ func ModeSteps(mode string, sshPort int) ([][]string, *Error) {
 	return nil, fail(CodeUsage, "firewall mode: off, http or max")
 }
 
-// SSHPort порт sshd (22, если прочитать не удалось).
+// SSHPort is the sshd port (22 if it could not be read).
 func (m *Manager) SSHPort(ctx context.Context) int { return m.sshPort(ctx) }
 
-// SetMode приводит ufw к режиму: прежние правила сбрасываются (кроме режима off, он только выключает).
+// SetMode brings ufw to a mode: the previous rules are reset (except mode off, which only turns it off).
 func (m *Manager) SetMode(ctx context.Context, mode string) *Error {
 	steps, e := ModeSteps(mode, m.sshPort(ctx))
 	if e != nil {

@@ -1,6 +1,6 @@
-// Package setup подготавливает сервер к работе (`lite init`): пользователи-администраторы, их SSH-ключи,
-// вход по SSH только по ключу, режим файервола, пакеты плагинов. Пароли программа не видит и не хранит:
-// их задаёт системная команда passwd.
+// Package setup prepares the server for work (`lite init`): administrator users, their SSH keys,
+// SSH login by key only, the firewall mode, the plugin packages. The program neither sees nor stores passwords:
+// they are set by the system passwd command.
 package setup
 
 import (
@@ -23,7 +23,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// SSHDropIn файл настроек sshd, которым управляет lite.
+// SSHDropIn is the sshd settings file managed by lite.
 const SSHDropIn = "/etc/ssh/sshd_config.d/50-lite-deploy.conf"
 
 const dropInMark = "# managed-by: lite-deploy (do not edit by hand: lite init rewrites this file)"
@@ -33,27 +33,27 @@ var (
 	keyRe  = regexp.MustCompile(`^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]{32,}={0,3}( [^\n\r]*)?$`)
 )
 
-// Options что сделать.
+// Options is what to do.
 type Options struct {
-	Users    []string // имена; пусто и !AllUsers: текущий пользователь
+	Users    []string // names; empty and !AllUsers: the current user
 	AllUsers bool
-	Current  string   // кто запустил sudo (пусто: запуск прямо от root)
-	Firewall string   // off, http, max или keep (не менять)
+	Current  string   // who started sudo (empty: run directly as root)
+	Firewall string   // off, http, max or keep (do not change)
 	Plugins  []string // podman, postgres
-	Yes      bool     // не спрашивать подтверждение плана
+	Yes      bool     // do not ask for confirmation of the plan
 }
 
-// Env окружение.
+// Env is the environment.
 type Env struct {
 	Runner host.Runner
 	FS     host.FS
 	In     *bufio.Reader
 	Out    io.Writer
-	// Projects имена пользователей проектов: их init не трогает.
+	// Projects are the names of project users: init does not touch them.
 	Projects []string
 }
 
-// Account запись /etc/passwd.
+// Account is an /etc/passwd entry.
 type Account struct {
 	Name, Home, Shell string
 	UID               int
@@ -83,7 +83,7 @@ func hasShell(a Account) bool {
 	return a.Shell != "" && !strings.HasSuffix(a.Shell, "/nologin") && !strings.HasSuffix(a.Shell, "/false")
 }
 
-// ResolveUsers определяет, кого настраивать.
+// ResolveUsers decides whom to configure.
 func (e Env) ResolveUsers(o Options) ([]string, error) {
 	accs, err := e.accounts()
 	if err != nil {
@@ -157,7 +157,7 @@ func (e Env) ask(prompt string) (string, error) {
 	return strings.TrimSpace(l), nil
 }
 
-// Plan человекочитаемый список того, что будет сделано.
+// Plan is a human-readable list of what will be done.
 func (e Env) Plan(o Options, users []string) ([]string, error) {
 	accs, err := e.accounts()
 	if err != nil {
@@ -202,8 +202,8 @@ func (e Env) Plan(o Options, users []string) ([]string, error) {
 	return p, nil
 }
 
-// Apply выполняет подготовку. Порядок выбран так, чтобы не потерять доступ: сначала пользователи и ключи,
-// потом файервол (правило SSH до включения), в конце запрет входа по паролю (с проверкой конфигурации sshd).
+// Apply performs the setup. The order is chosen so as not to lose access: users and keys first,
+// then the firewall (the SSH rule before enabling), and last the ban on password login (with an sshd configuration check).
 func (e Env) Apply(ctx context.Context, o Options) error {
 	users, err := e.ResolveUsers(o)
 	if err != nil {
@@ -254,7 +254,7 @@ func (e Env) Apply(ctx context.Context, o Options) error {
 	return nil
 }
 
-// user создаёт или донастраивает одного пользователя.
+// user creates or finishes configuring one user.
 func (e Env) user(ctx context.Context, name, group string) error {
 	accs, err := e.accounts()
 	if err != nil {
@@ -280,7 +280,7 @@ func (e Env) user(ctx context.Context, name, group string) error {
 			}
 		}
 	}
-	// пароль нужен для sudo; задаёт его сам человек в системной команде passwd
+	// the password is needed for sudo; the person sets it in the system passwd command
 	res, err := e.run(ctx, "passwd", "-S", name)
 	if err != nil {
 		return err
@@ -302,7 +302,7 @@ func (e Env) user(ctx context.Context, name, group string) error {
 	return e.key(name, acc.Home)
 }
 
-// key спрашивает открытый SSH-ключ и добавляет его в authorized_keys. Без ключа init не продолжается.
+// key asks for a public SSH key and adds it to authorized_keys. Without a key init does not continue.
 func (e Env) key(name, home string) error {
 	dir, file := home+"/.ssh", home+"/.ssh/authorized_keys"
 	old, _ := e.FS.ReadFile(file)
@@ -320,7 +320,7 @@ func (e Env) key(name, home string) error {
 	for try := 0; ; try++ {
 		k, err := e.ask(prompt)
 		if err != nil && have > 0 {
-			return nil // ввода нет (запуск без терминала), ключи уже есть
+			return nil // there is no input (run without a terminal), keys already exist
 		}
 		if err != nil {
 			return fmt.Errorf("no key entered: password login cannot be disabled without an SSH key")
@@ -363,7 +363,7 @@ func (e Env) firewall(ctx context.Context, mode string) error {
 	m := &firewall.Manager{Runner: e.Runner}
 	if _, err := e.run(ctx, "ufw", "version"); err != nil {
 		if mode == firewall.ModeOff {
-			return nil // ufw нет, фильтрации и так нет
+			return nil // there is no ufw, so there is no filtering anyway
 		}
 		e.say("Installing ufw...")
 		if err := (&pkgmgr.Manager{Runner: e.Runner, FS: e.FS}).Install(ctx, "ufw"); err != nil {
@@ -377,7 +377,7 @@ func (e Env) firewall(ctx context.Context, mode string) error {
 	return nil
 }
 
-// dropInUsers читает пользователей из прежнего файла lite, чтобы повторный init их не потерял.
+// dropInUsers reads the users from the previous lite file, so that a repeated init does not lose them.
 func dropInUsers(old string) []string {
 	for _, l := range strings.Split(old, "\n") {
 		if rest, ok := strings.CutPrefix(strings.TrimSpace(l), "Match User "); ok {
@@ -387,8 +387,8 @@ func dropInUsers(old string) []string {
 	return nil
 }
 
-// sshKeyOnly запрещает вход по паролю по SSH перечисленным пользователям (у каждого уже есть ключ).
-// Конфигурация проверяется `sshd -t`; при ошибке прежний файл возвращается.
+// sshKeyOnly forbids SSH password login for the listed users (each already has a key).
+// The configuration is checked with `sshd -t`; on an error the previous file is restored.
 func (e Env) sshKeyOnly(ctx context.Context, users []string) error {
 	oldB, oldErr := e.FS.ReadFile(SSHDropIn)
 	set := map[string]bool{}

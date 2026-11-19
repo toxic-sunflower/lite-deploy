@@ -16,12 +16,12 @@ import (
 
 const pluginUsage = "usage: lite plugin list | lite plugin run PLUGIN COMMAND [arguments] | lite PLUGIN COMMAND [arguments]"
 
-// registry собирает встроенные и внешние плагины. Ошибки загрузки внешних плагинов возвращаются отдельно.
+// registry gathers the built-in and external plugins. Load errors of external plugins are returned separately.
 func registry(env Env) (*plugin.Registry, []error) {
 	r := plugin.NewRegistry()
 	for _, p := range []plugin.Plugin{builtin.Pkg{}, builtin.Security{}, builtin.Firewall{}, builtin.Caddy{}, builtin.Podman{}, builtin.PG{}, builtin.Redis{}, builtin.Backblaze, builtin.S3, builtin.SFTP, builtin.Server{}, builtin.Backup{}} {
 		if err := r.Add(p); err != nil {
-			panic(err) // ошибка в самой программе: встроенные имена фиксированы
+			panic(err) // an error in the program itself: the built-in names are fixed
 		}
 	}
 	dir := env.PluginDir
@@ -52,7 +52,7 @@ func pluginFail(command string, err error) result {
 	return fail(command, CodeInternal, err.Error())
 }
 
-// confirm спрашивает подтверждение в терминале. Без терминала и без --yes команда отказывает.
+// confirm asks for confirmation in the terminal. Without a terminal and without --yes the command refuses.
 func confirm(env Env, question string) bool {
 	if env.Interactive == nil || !env.Interactive() {
 		return false
@@ -63,7 +63,7 @@ func confirm(env Env, question string) bool {
 	return a == "y" || a == "yes"
 }
 
-// cmdPluginRun выполняет команду плагина: lite ПЛАГИН КОМАНДА [аргументы] [--yes].
+// cmdPluginRun runs a plugin command: lite PLUGIN COMMAND [arguments] [--yes].
 func cmdPluginRun(name string, args []string, env Env) result {
 	command := name
 	r, _ := registry(env)
@@ -98,7 +98,7 @@ func cmdPluginRun(name string, args []string, env Env) result {
 		}
 	}
 	if (c.Confirm || c.Root) && !env.root() {
-		// без sudo: агент и исполнитель выполняют команду от root; подтверждение уже получено выше
+		// without sudo: the agent and the executor run the command as root; the confirmation was already obtained above
 		return forwardPlugin(env, command, name, cmd, cargs)
 	}
 	out, err := p.Run(context.Background(), env.pluginEnv(), cmd, cargs)
@@ -141,7 +141,7 @@ type pluginInfo struct {
 	Commands    []plugin.Command `json:"commands"`
 }
 
-// cmdInfo: lite info (плагины и их команды).
+// cmdInfo: lite info (plugins and their commands).
 func cmdInfo(env Env, command string) result {
 	r, errs := registry(env)
 	var list []pluginInfo
@@ -170,9 +170,9 @@ func cmdInfo(env Env, command string) result {
 	return result{command: command, data: map[string]any{"version": Version, "plugins": list, "load_errors": msgs}, text: sb.String(), warn: warns}
 }
 
-// cmdVerify: lite verify (только чтение): проверки всех плагинов.
+// cmdVerify: lite verify (read-only): the checks of all plugins.
 func cmdVerify(env Env) result {
-	// без root часть проверок (sshd -T, fail2ban-client) даёт ложные ответы: их выполняет исполнитель через агента
+	// without root some checks (sshd -T, fail2ban-client) give false answers: the executor runs them through the agent
 	if !env.root() {
 		if r, ok := forwardVerify(env); ok {
 			return r
@@ -181,7 +181,7 @@ func cmdVerify(env Env) result {
 	return verifyResult(collectFindings(env))
 }
 
-// verifyResult оформляет найденное в читаемый и машинный вид.
+// verifyResult formats what was found in a readable and a machine form.
 func verifyResult(all []plugin.Finding) result {
 	var sb strings.Builder
 	counts := map[string]int{}
@@ -205,7 +205,7 @@ func verifyResult(all []plugin.Finding) result {
 	return res
 }
 
-// collectFindings собирает проверки всех плагинов и зависимостей проектов (только чтение).
+// collectFindings gathers the checks of all plugins and of project dependencies (read-only).
 func collectFindings(env Env) []plugin.Finding {
 	r, errs := registry(env)
 	ctx := context.Background()
@@ -220,7 +220,7 @@ func collectFindings(env Env) []plugin.Finding {
 	return all
 }
 
-// projectNames имена проектов (они же пользователи проектов) по описаниям в /etc/lite-deploy/projects.
+// projectNames are the project names (also the project users) from the descriptions in /etc/lite-deploy/projects.
 func projectNames(env Env) []string {
 	var out []string
 	if names, err := env.FS.ReadDir("/etc/lite-deploy/projects"); err == nil {
@@ -233,10 +233,10 @@ func projectNames(env Env) []string {
 	return out
 }
 
-// requirementProbe команда, по которой видно, что нужный проекту плагин установлен.
+// requirementProbe is the command that shows a plugin a project needs is installed.
 var requirementProbe = map[string][]string{"podman": {"podman", "--version"}, "pg": {"psql", "--version"}, "caddy": {"caddy", "version"}}
 
-// projectRequirements проверяет, что для каждого проекта на сервере есть то, что он требует (R-20).
+// projectRequirements checks that for every project the server has what it requires (R-20).
 func projectRequirements(ctx context.Context, env Env) []plugin.Finding {
 	var out []plugin.Finding
 	for _, name := range projectNames(env) {

@@ -34,7 +34,7 @@ func testEnv(t *testing.T) (Env, *bytes.Buffer, *bytes.Buffer) {
 
 func run(t *testing.T, env Env, args ...string) int { t.Helper(); return RunEnv(args, env) }
 
-// decode разбирает ответ --json строго и проверяет по схеме конверта.
+// decode parses a --json answer strictly and checks it against the envelope schema.
 func decode(t *testing.T, out *bytes.Buffer) Envelope {
 	t.Helper()
 	if strings.Count(out.String(), "\n") != 1 {
@@ -136,24 +136,24 @@ func TestPlanThenApplyDryRun(t *testing.T) {
 	if data["dry_run"] != true || len(data["steps"].([]any)) == 0 || data["plan_hash"] == "" {
 		t.Fatalf("%v", data)
 	}
-	// на «сервере» нет ни podman, ни caddy: dry-run сообщает would_fail и не меняет систему
+	// the "server" has neither podman nor caddy: dry-run reports would_fail and does not change the system
 	first := data["steps"].([]any)[0].(map[string]any)
 	if first["state"] != "would_fail" || len(e.Warnings) == 0 || e.Warnings[0].Code != "would_fail" {
 		t.Fatalf("verify_host must give would_fail: %v %v", first, e.Warnings)
 	}
 
-	// без --yes и без терминала применение не начинается
+	// without --yes and without a terminal applying does not start
 	env, out, _ = testEnv(t)
 	if c := run(t, env, "apply", planFile, "--json"); c != 4 || decode(t, out).Error.Code != "confirmation_required" {
 		t.Fatalf("apply without --yes: %d %s", c, out.String())
 	}
-	// не root
+	// not root
 	env, out, _ = testEnv(t)
 	env.IsRoot = func() bool { return false }
 	if c := run(t, env, "apply", planFile, "--dry-run", "--json"); c != 4 || decode(t, out).Error.Code != "permission_denied" {
 		t.Fatalf("not root: %d %s", c, out.String())
 	}
-	// первая же ошибка шага: step_failed, остальные пропущены
+	// the very first step error: step_failed, the rest are skipped
 	env, out, _ = testEnv(t)
 	if c := run(t, env, "apply", planFile, "--yes", "--json"); c != 5 {
 		t.Fatalf("apply --yes: %d %s", c, out.String())
@@ -161,21 +161,21 @@ func TestPlanThenApplyDryRun(t *testing.T) {
 		t.Fatalf("%+v", e.Error)
 	}
 
-	// план для другого сервера
+	// a plan for another server
 	env, out, _ = testEnv(t)
 	env.FS.(*host.MemFS).Files["/etc/machine-id"] = []byte("other-machine")
 	if c := run(t, env, "apply", planFile, "--dry-run", "--json"); c != 6 || decode(t, out).Error.Code != "plan_wrong_server" {
 		t.Fatalf("another server: %d %s", c, out.String())
 	}
 
-	// просроченный план
+	// an expired plan
 	env, out, _ = testEnv(t)
 	env.Now = func() time.Time { return now.Add(48 * time.Hour) }
 	if c := run(t, env, "apply", planFile, "--dry-run", "--json"); c != 6 || decode(t, out).Error.Code != "plan_expired" {
 		t.Fatalf("expired: %d %s", c, out.String())
 	}
 
-	// испорченный план
+	// a corrupt plan
 	tampered := strings.Replace(string(raw), `"project": "shop"`, `"project": "other"`, 1)
 	bad := filepath.Join(t.TempDir(), "bad.json")
 	_ = os.WriteFile(bad, []byte(tampered), 0o600)
@@ -191,7 +191,7 @@ func TestPlanErrors(t *testing.T) {
 		t.Fatalf("without secrets: %d %s", c, out.String())
 	}
 	env, out, _ = testEnv(t)
-	env.FS = host.NewMemFS() // нет machine-id
+	env.FS = host.NewMemFS() // no machine-id
 	args := append([]string{"project", "plan", projectFile, "--json"}, ciphertextArgs(t)...)
 	if c := RunEnv(args, env); c != 3 || decode(t, out).Error.Code != "precondition_failed" {
 		t.Fatalf("without machine-id: %d %s", c, out.String())
@@ -265,7 +265,7 @@ func TestUsageAndUnimplemented(t *testing.T) {
 	}
 }
 
-// Таблица кодов выхода из SPEC-v0.md, 6.3.
+// The exit code table from SPEC-v0.md, 6.3.
 func TestExitCodeTable(t *testing.T) {
 	want := map[int][]string{
 		1:  {"internal", "caddy_reload_failed", "io_error"},
@@ -354,7 +354,7 @@ func TestGate(t *testing.T) {
 		t.Fatalf("%+v", e)
 	}
 
-	// формат ответа задаёт команда ключа: `status --json` даёт JSON без аргумента --json у gate
+	// the response format is set by the key command: `status --json` gives JSON without the --json argument at the gate
 	env, out, _ = testEnv(t)
 	env.Getenv = func(string) string { return "status --json" }
 	if c := run(t, env, "gate", "--project", "shop"); c != 7 {

@@ -16,10 +16,10 @@ func memfs(env Env) *host.MemFS { return env.FS.(*host.MemFS) }
 
 const testKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFakeFakeFakeFake anna@laptop"
 
-// initArgs аргументы init для тестов: без вопросов, файервол не трогаем.
+// initArgs are the init arguments for tests: no questions, the firewall is not touched.
 var initArgs = []string{"init", "--yes", "--ufw", "off", "--json"}
 
-// forInit готовит окружение, в котором init проходит: запуск через sudo от anna, у неё уже есть ключ и пароль.
+// forInit prepares the environment init runs in: started through sudo by anna, who already has a key and a password.
 func forInit(env Env) Env {
 	m := memfs(env)
 	m.Files["/etc/passwd"] = []byte("root:x:0:0::/root:/bin/bash\nanna:x:1000:1000::/home/anna:/bin/bash\n")
@@ -57,7 +57,7 @@ func TestInit(t *testing.T) {
 	if c := run(t, env, "init", "--json"); c != 4 || decode(t, out).Error.Code != "permission_denied" {
 		t.Fatalf("not root: %d %s", c, out.String())
 	}
-	if len(memfs(env).Files) != 2 { // только machine-id и passwd
+	if len(memfs(env).Files) != 2 { // only machine-id and passwd
 		t.Error("without root nothing may be created")
 	}
 
@@ -100,7 +100,7 @@ func TestSecretPubkey(t *testing.T) {
 func TestSecretEncryptRoundTrip(t *testing.T) {
 	env, out, _ := testEnv(t)
 	key := initKeys(t, env)
-	env.IsRoot = func() bool { return false } // encrypt доступен любому
+	env.IsRoot = func() bool { return false } // encrypt is available to anyone
 	env.Stdin = strings.NewReader("hunter2\n")
 	if c := run(t, env, "secret", "encrypt", "shop", "api_key", "--json"); c != 0 {
 		t.Fatalf("%d %s", c, out.String())
@@ -120,7 +120,7 @@ func TestSecretEncryptRoundTrip(t *testing.T) {
 
 func TestSecretEncryptPubkeyFlagAndErrors(t *testing.T) {
 	sec, pub, _ := secrets.GenerateIdentity()
-	env, out, _ := testEnv(t) // ключа на сервере нет, как на машине владельца
+	env, out, _ := testEnv(t) // there is no key on the server, as on the owner machine
 	env.Stdin = strings.NewReader("v\r\n")
 	if c := run(t, env, "secret", "encrypt", "shop", "api_key", "--pubkey", pub); c != 0 {
 		t.Fatal(c)
@@ -194,7 +194,7 @@ func TestSecretSetAndList(t *testing.T) {
 		t.Fatalf("%v", items)
 	}
 
-	// не root: каталога секретов не видно, имена берутся из состояния проекта
+	// not root: the secrets directory is not visible, names come from the project state
 	env, out, _ = testEnv(t)
 	env.IsRoot = func() bool { return false }
 	memfs(env).Files["/var/lib/lite-deploy/state/projects/shop.json"] = []byte(`{"secrets":["api_key","tok"]}`)
@@ -224,7 +224,7 @@ func TestSecretUsage(t *testing.T) {
 	}
 }
 
-// Сквозной сценарий: init, encrypt всех секретов, plan, проверка, расшифровка шага set_secret.
+// An end-to-end scenario: init, encrypt all secrets, plan, check, decrypt a set_secret step.
 func TestEndToEndSecrets(t *testing.T) {
 	env, out, _ := testEnv(t)
 	key := initKeys(t, env)
@@ -261,7 +261,7 @@ func TestEndToEndSecrets(t *testing.T) {
 	if c := run(t, env, "apply", planFile, "--dry-run", "--json"); c != 0 {
 		t.Fatalf("apply --dry-run: %d %s", c, out.String())
 	}
-	// шаги set_secret расшифровываются ключом исполнителя и привязаны к проекту и имени
+	// the set_secret steps are decrypted with the executor key and bound to the project and name
 	var pl struct {
 		Steps []struct {
 			Action string

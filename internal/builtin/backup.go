@@ -29,8 +29,8 @@ const (
 
 var configFileRe = regexp.MustCompile(`^config-(\d{8}T\d{6}Z)\.tar\.gz\.age$`)
 
-// Backup плагин `backup`: копии настроек проектов, секретов и баз; отправка в места хранения (backblaze).
-// Секреты в копию входят только зашифрованными ключом владельца: на сервере хранится лишь публичная часть.
+// Backup is the `backup` plugin: backups of project settings, secrets and databases; upload to storage locations (backblaze).
+// Secrets enter the backup only encrypted with the owner key: the server keeps only the public part.
 type Backup struct{}
 
 func (Backup) Name() string       { return "backup" }
@@ -71,7 +71,7 @@ func (t tools) backupConfig() (backupConfig, error) {
 	return c, nil
 }
 
-// configArchive собирает tar.gz настроек и секретов. Ключ исполнителя и ключи мест хранения не входят: на новом сервере выпускаются заново.
+// configArchive builds a tar.gz of the settings and secrets. The executor key and the storage keys are not included: they are issued again on a new server.
 func (t tools) configArchive() ([]byte, error) {
 	args := []string{"-czf", "-", "-C", "/",
 		"--exclude=etc/lite-deploy/exec.age", "--exclude=etc/lite-deploy/backblaze",
@@ -80,7 +80,7 @@ func (t tools) configArchive() ([]byte, error) {
 	if err != nil {
 		return nil, plugin.Errorf("step_failed", "tar: %v", err)
 	}
-	// код 1: «файл изменился при чтении»; для наших небольших файлов допустим, остальное ошибка
+	// code 1: "the file changed while being read"; acceptable for our small files, anything else is an error
 	if res.ExitCode != 0 && res.ExitCode != 1 {
 		return nil, plugin.Errorf("step_failed", "tar: %s", strings.TrimSpace(string(res.Stderr)))
 	}

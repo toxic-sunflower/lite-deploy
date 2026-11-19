@@ -20,7 +20,7 @@ func verifyAt(t *testing.T, raw []byte, st State, now time.Time) *VerifyError {
 	return err
 }
 
-// mutate правит план как generic JSON и пересчитывает хэш, чтобы проверка дошла до нужного правила.
+// mutate edits a plan as generic JSON and recomputes the hash, so that the check reaches the wanted rule.
 func mutate(t *testing.T, pl *Plan, f func(m map[string]any), reseal bool) []byte {
 	t.Helper()
 	raw, _ := json.Marshal(pl)
@@ -149,7 +149,7 @@ func TestULID(t *testing.T) {
 	if id2 <= id {
 		t.Errorf("ULIDs must grow with time: %s %s", id, id2)
 	}
-	// первые 10 символов кодируют время в мс (Crockford base32)
+	// the first 10 characters encode the time in ms (Crockford base32)
 	var ms uint64
 	for _, c := range id[:10] {
 		ms = ms<<5 | uint64(strings.IndexRune(crockford, c))
@@ -204,18 +204,18 @@ func TestLoadState(t *testing.T) {
 		t.Errorf("project: %+v", ps)
 	}
 
-	// без каталога проектов: проектов нет, ошибки нет
+	// no projects directory: there are no projects, no error
 	m2 := host.NewMemFS()
 	m2.Files["/etc/machine-id"] = []byte("abc")
 	st2, err := LoadState(m2, DefaultPaths())
 	if err != nil || len(st2.Projects) != 0 {
 		t.Fatalf("an empty state: %v %v", st2.Projects, err)
 	}
-	// нет machine-id: ошибка
+	// no machine-id: an error
 	if _, err := LoadState(host.NewMemFS(), DefaultPaths()); err == nil {
 		t.Fatal("an error without machine-id was expected")
 	}
-	// повреждённый файл состояния
+	// a corrupt state file
 	m.Files["/var/lib/lite-deploy/state/projects/bad.json"] = []byte("{")
 	if _, err := LoadState(m, DefaultPaths()); err == nil {
 		t.Fatal("an error for a corrupt state was expected")

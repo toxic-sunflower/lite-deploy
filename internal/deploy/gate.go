@@ -1,5 +1,5 @@
-// Package deploy: выкатка, откат, состояние и привратник (SPEC-v0.md, раздел 5).
-// В S3 есть только разбор команд привратника; blue-green появится в S5.
+// Package deploy: deploy, rollback, state and the gatekeeper (SPEC-v0.md, section 5).
+// S3 has only the parsing of gatekeeper commands; blue-green arrives in S5.
 package deploy
 
 import (
@@ -7,13 +7,13 @@ import (
 	"strings"
 )
 
-// Коды ошибок привратника.
+// Gatekeeper error codes.
 const (
 	CodeNotAllowed = "command_not_allowed"
 	CodeInvalidSHA = "invalid_sha"
 )
 
-// GateError отказ привратника.
+// GateError is a gatekeeper refusal.
 type GateError struct {
 	Code    string
 	Message string
@@ -21,30 +21,30 @@ type GateError struct {
 
 func (e *GateError) Error() string { return e.Code + ": " + e.Message }
 
-// Verb что разрешено ключу CI.
+// Verb is what the CI key is allowed to do.
 type Verb string
 
-// Разрешённые команды.
+// Allowed commands.
 const (
 	VerbDeploy   Verb = "deploy"
 	VerbRollback Verb = "rollback"
 	VerbStatus   Verb = "status"
 )
 
-// GateCommand разобранная команда.
+// GateCommand is a parsed command.
 type GateCommand struct {
 	Verb Verb
-	SHA  string // только для deploy
-	JSON bool   // только для status
+	SHA  string // only for deploy
+	JSON bool   // only for status
 }
 
 var shaRe = regexp.MustCompile(`\A[0-9a-f]{40}\z`)
 
-// ParseGate разбирает SSH_ORIGINAL_COMMAND. Разрешено ровно:
+// ParseGate parses SSH_ORIGINAL_COMMAND. Exactly these are allowed:
 //
 //	deploy <40 hex>, rollback, status, status --json.
 //
-// Всё остальное отклоняется целиком: никаких частичных совпадений, пробелов по краям, переводов строк.
+// Everything else is rejected entirely: no partial matches, no surrounding spaces, no line breaks.
 func ParseGate(cmd string) (GateCommand, *GateError) {
 	switch cmd {
 	case "rollback":

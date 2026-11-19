@@ -10,17 +10,17 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
-// Имена, пути и группы агента.
+// Agent names, paths and groups.
 const (
 	ServiceUser  = "lite-deploy"
-	DefaultGroup = "sudo" // группа администраторов системы; на RHEL и Fedora это wheel
+	DefaultGroup = "sudo" // the system administrator group; on RHEL and Fedora it is wheel
 	APISocket    = "/run/lite-deploy/api.sock"
 	ExecSocket   = "/run/lite-deploy/exec.sock"
 	UnitDir      = "/etc/systemd/system"
 	auditFileRel = "audit.log"
 )
 
-// Units возвращает файлы unit systemd (имя → содержимое) для бинарника bin.
+// Units returns the systemd unit files (name → content) for the binary bin.
 func Units(bin, group string) map[string]string {
 	return map[string]string{
 		"lite-deploy-agent.socket": `[Unit]
@@ -86,7 +86,7 @@ PrivateTmp=yes
 	}
 }
 
-// AdminGroup определяет группу администраторов системы: sudo (Debian, Ubuntu) или wheel (RHEL, Fedora, Arch).
+// AdminGroup finds the system administrator group: sudo (Debian, Ubuntu) or wheel (RHEL, Fedora, Arch).
 func AdminGroup(ctx context.Context, r host.Runner) (string, error) {
 	for _, g := range []string{"sudo", "wheel"} {
 		res, err := r.Run(ctx, host.Cmd{Name: "getent", Args: []string{"group", g}})
@@ -100,8 +100,8 @@ func AdminGroup(ctx context.Context, r host.Runner) (string, error) {
 	return "", fmt.Errorf("the system has no administrator group (sudo or wheel)")
 }
 
-// Install создаёт пользователя службы агента, записывает unit-файлы и включает сокеты.
-// К агенту допускаются члены группы администраторов системы (sudo или wheel).
+// Install creates the agent service user, writes the unit files and enables the sockets.
+// Members of the system administrator group (sudo or wheel) are admitted to the agent.
 func Install(ctx context.Context, r host.Runner, fsys host.FS, bin string) (group string, err error) {
 	group, err = AdminGroup(ctx, r)
 	if err != nil {
@@ -174,7 +174,7 @@ func Uninstall(ctx context.Context, r host.Runner, fsys host.FS) error {
 	return nil
 }
 
-// AuditPath путь журнала агента в каталоге состояния службы.
+// AuditPath is the path of the agent journal in the service state directory.
 func AuditPath(stateDir string) string {
 	if stateDir == "" {
 		stateDir = "/var/lib/lite-deploy-agent"

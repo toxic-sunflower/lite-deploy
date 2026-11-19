@@ -1,21 +1,21 @@
-// Package project описывает проект (project.json) и проверяет его (SPEC-v0.md, раздел 2).
+// Package project describes a project (project.json) and validates it (SPEC-v0.md, section 2).
 package project
 
 import "sort"
 
-// SchemaID идентификатор версии схемы описания проекта.
+// SchemaID is the identifier of the project description schema version.
 const SchemaID = "lite-deploy/project/v2"
 
-// SchemaIDv1 прежняя версия схемы: описания v1 принимаются как есть (все сервисы это контейнеры Quadlet на этом сервере).
+// SchemaIDv1 is the previous schema version: v1 descriptions are accepted as they are (all services are Quadlet containers on this server).
 const SchemaIDv1 = "lite-deploy/project/v1"
 
 const (
-	// PortMin и PortMax диапазон портов по умолчанию (SPEC-v0.md, раздел 8).
+	// PortMin and PortMax are the default port range (SPEC-v0.md, section 8).
 	PortMin = 18000
 	PortMax = 18999
 )
 
-// Project единственный вход для `project create`.
+// Project is the only input of `project create`.
 type Project struct {
 	Schema      string             `json:"schema" enum:"lite-deploy/project/v1,lite-deploy/project/v2" doc:"schema version"`
 	Name        string             `json:"name" pattern:"^[a-z][a-z0-9-]{1,30}$" doc:"project name; the same as the system user name"`
@@ -28,7 +28,7 @@ type Project struct {
 	DeployKey   *DeployKey         `json:"deploy_key,omitempty"`
 }
 
-// Database база проекта на PostgreSQL хоста.
+// Database is a project database on the host PostgreSQL.
 type Database struct {
 	Engine           string `json:"engine" enum:"postgres"`
 	Server           string `json:"server,omitempty" pattern:"^[a-z][a-z0-9-]{0,30}$" doc:"server from the registry (lite server add) where PostgreSQL runs; local by default"`
@@ -37,23 +37,23 @@ type Database struct {
 	ConnectionFormat string `json:"connection_format,omitempty" enum:"npgsql,url,libpq" doc:"connection string format, url by default"`
 }
 
-// Registry вход в реестр образов.
+// Registry is a login to an image registry.
 type Registry struct {
 	Host        string `json:"host" pattern:"^[a-z0-9.-]+(:[0-9]{2,5})?$" maxLen:"255"`
 	Username    string `json:"username" pattern:"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"`
 	TokenSecret string `json:"token_secret" pattern:"^secret://[a-z][a-z0-9_]{1,63}$" doc:"secret://name reference; a read-only token"`
 }
 
-// Виды компонента.
+// Component kinds.
 const (
-	KindQuadlet = "quadlet" // контейнер podman под systemd (по умолчанию)
-	KindUnit    = "unit"    // процесс на хосте под systemd: бинарник, Node, .NET и т.п.
+	KindQuadlet = "quadlet" // a podman container under systemd (the default)
+	KindUnit    = "unit"    // a process on the host under systemd: a binary, Node, .NET and so on
 )
 
-// ServerLocal сервер, на котором работает lite; остальные берутся из реестра серверов (R-26).
+// ServerLocal is the server lite runs on; the others come from the server registry (R-26).
 const ServerLocal = "local"
 
-// Service компонент проекта: контейнер или процесс на хосте (поле kind).
+// Service is a project component: a container or a process on the host (the kind field).
 type Service struct {
 	Kind          string            `json:"kind,omitempty" enum:"quadlet,unit" doc:"how it runs: quadlet (container, the default) or unit (a process on the host)"`
 	Release       *Release          `json:"release,omitempty" doc:"for unit: where the release comes from"`
@@ -70,27 +70,27 @@ type Service struct {
 	DatabaseEnv   string            `json:"database_env,omitempty" pattern:"^[A-Za-z_][A-Za-z0-9_]*$" doc:"variable holding the database connection string"`
 }
 
-// Release откуда приезжает релиз компонента kind unit: архив tar.gz, распаковывается в каталог слота.
+// Release is where the release of a kind unit component comes from: a tar.gz archive unpacked into the slot directory.
 type Release struct {
 	URL         string `json:"url" pattern:"^https://[A-Za-z0-9.-]+(:[0-9]{2,5})?/[^\\s{}]*\\{sha\\}[^\\s{}]*$" maxLen:"512" doc:"URL of the tar.gz archive; {sha} is replaced with the hash of the version being deployed"`
 	TokenSecret string `json:"token_secret,omitempty" pattern:"^secret://[a-z][a-z0-9_]{1,63}$" doc:"secret://name reference; the token is sent as Authorization: Bearer"`
 	MinisignKey string `json:"minisign_key" pattern:"^RW[A-Za-z0-9+/]{54}$" doc:"minisign public key that CI signs the archive with; the signature sits next to it: the archive URL plus .minisig"`
 }
 
-// Health проверка готовности.
+// Health is the readiness check.
 type Health struct {
 	Path           string `json:"path,omitempty" pattern:"^/[^\\s]*$" maxLen:"256"`
 	VersionField   string `json:"version_field,omitempty" pattern:"^[A-Za-z_][A-Za-z0-9_]*$"`
 	TimeoutSeconds int    `json:"timeout_seconds,omitempty" min:"5" max:"600"`
 }
 
-// Limits ограничения контейнера.
+// Limits are container limits.
 type Limits struct {
 	Memory string `json:"memory,omitempty" pattern:"^[1-9][0-9]*[mg]$"`
 	Pids   int    `json:"pids,omitempty" min:"16" max:"4096"`
 }
 
-// Site сайт, который принимает трафик на 127.0.0.1.
+// Site is a site that takes traffic on 127.0.0.1.
 type Site struct {
 	Name         string  `json:"name" pattern:"^[a-z][a-z0-9-]{0,15}$"`
 	Host         string  `json:"host" pattern:"^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$" maxLen:"253"`
@@ -102,18 +102,18 @@ type Site struct {
 	Routes       []Route `json:"routes,omitempty" maxItems:"16"`
 }
 
-// Route особый лимит тела запроса для пути.
+// Route is a special request body limit for a path.
 type Route struct {
 	Path    string `json:"path" pattern:"^/[^\\s{}]*$" maxLen:"256"`
 	MaxBody string `json:"max_body" pattern:"^[1-9][0-9]*(KB|MB)$"`
 }
 
-// DeployKey ключ CI для привратника.
+// DeployKey is the CI key for the gatekeeper.
 type DeployKey struct {
 	PublicKey string `json:"public_key" pattern:"^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5[A-Za-z0-9+/]{48}( [^\\r\\n]{1,100})?$" doc:"a single ed25519 key without options"`
 }
 
-// KindOf вид компонента с учётом значения по умолчанию.
+// KindOf is the component kind taking the default into account.
 func (s Service) KindOf() string {
 	if s.Kind == "" {
 		return KindQuadlet
@@ -121,7 +121,7 @@ func (s Service) KindOf() string {
 	return s.Kind
 }
 
-// Requires что проекту нужно на хосте (плагины): их наличие проверяет verify (R-20).
+// Requires is what a project needs on the host (plugins): verify checks that they are present (R-20).
 func Requires(p *Project) []string {
 	need := map[string]bool{}
 	for _, s := range p.Services {
@@ -143,5 +143,5 @@ func Requires(p *Project) []string {
 	return out
 }
 
-// IsLocal истинно, если база на этом же сервере.
+// IsLocal is true if the database is on this same server.
 func (d Database) IsLocal() bool { return d.Server == "" || d.Server == ServerLocal }

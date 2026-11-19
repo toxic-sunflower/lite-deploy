@@ -1,6 +1,6 @@
-// Package agent: агент без прав (HTTP поверх unix-сокета, D-31, D-32), исполнитель по запросу (root, запускается
-// systemd на каждое соединение) и клиент. Исполнитель принимает только запросы из фиксированного списка и сам
-// проверяет параметры; произвольных команд нет.
+// Package agent: the unprivileged agent (HTTP over a unix socket, D-31, D-32), the on-request executor (root, started
+// systemd per connection) and the client. The executor accepts only requests from a fixed list and itself
+// validates the parameters; there are no arbitrary commands.
 package agent
 
 import (
@@ -16,11 +16,11 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// MaxRequest предел размера обычного запроса к исполнителю, байт; MaxBody предел тела (пакет создания проекта).
+// MaxRequest is the size limit of an ordinary request to the executor, in bytes; MaxBody is the body limit (a project create bundle).
 const (
 	MaxRequest = 8192
 	MaxBody    = 128 * 1024
-	// MaxPluginStdin предел стандартного ввода команды плагина (пароль, ключ).
+	// MaxPluginStdin is the limit of a plugin command standard input (a password, a key).
 	MaxPluginStdin = 4096
 )
 
@@ -32,12 +32,12 @@ var (
 	pluginRe  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 )
 
-// Request запрос агента исполнителю.
+// Request is an agent request to the executor.
 type Request struct {
 	Cmd    string   `json:"cmd"`
 	Args   []string `json:"args"`
 	Caller string   `json:"caller"`
-	// Body JSON-пакет для project.preview и project.create; у остальных запросов пусто.
+	// Body is a JSON bundle for project.preview and project.create; empty for other requests.
 	Body string `json:"body,omitempty"`
 }
 
@@ -53,8 +53,8 @@ func checkSpec(spec, from string) error {
 	return nil
 }
 
-// CLIArgs проверяет запрос по списку разрешённых действий и возвращает аргументы lite-deploy (без --json).
-// Всё, чего нет в списке, отклоняется.
+// CLIArgs checks a request against the list of allowed actions and returns the lite-deploy arguments (without --json).
+// Everything not in the list is rejected.
 func (r Request) CLIArgs() ([]string, error) {
 	a := r.Args
 	if r.Body != "" && r.Cmd != "project.preview" && r.Cmd != "project.create" && r.Cmd != "plugin.run" {
@@ -100,7 +100,7 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, errors.New("invalid project name")
 		}
 		return []string{"rollback", a[0]}, nil
-	case "project.preview", "project.create": // тело: пакет {project, ciphertexts, ...}; create применяет, preview только описывает
+	case "project.preview", "project.create": // body: a bundle {project, ciphertexts, ...}; create applies, preview only describes
 		if err := need(0); err != nil {
 			return nil, err
 		}
@@ -111,7 +111,7 @@ func (r Request) CLIArgs() ([]string, error) {
 			return []string{"project", "bundle", "--dry-run"}, nil
 		}
 		return []string{"project", "bundle", "--yes"}, nil
-	case "fix": // исправляет только то, что разрешено списком безопасных исправлений в lite fix
+	case "fix": // fixes only what the list of safe fixes in lite fix allows
 		if err := need(0); err != nil {
 			return nil, err
 		}
@@ -126,7 +126,7 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, err
 		}
 		return []string{r.Cmd}, nil
-	case "plugin.run": // аргументы: плагин, команда, аргументы команды; подтверждение даёт интерфейс (--yes)
+	case "plugin.run": // arguments: plugin, command, command arguments; the interface gives the confirmation (--yes)
 		if len(a) < 2 || !pluginRe.MatchString(a[0]) || !pluginRe.MatchString(a[1]) || !plugin.ValidArgs(a[2:]) {
 			return nil, errors.New("plugin.run: a plugin name, a command and valid arguments are required")
 		}
@@ -141,7 +141,7 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, err
 		}
 		return []string{"firewall", "enable", "--yes"}, nil
-	case "firewall.allow": // аргументы: порт/протокол, источник (пусто: любой)
+	case "firewall.allow": // arguments: port/protocol, source (empty: any)
 		if err := need(2); err != nil {
 			return nil, err
 		}
@@ -153,7 +153,7 @@ func (r Request) CLIArgs() ([]string, error) {
 			out = append(out, "--from", a[1])
 		}
 		return append(out, "--yes"), nil
-	case "firewall.remove": // аргументы: порт/протокол, источник (пусто: любой), действие
+	case "firewall.remove": // arguments: port/protocol, source (empty: any), action
 		if err := need(3); err != nil {
 			return nil, err
 		}
@@ -172,21 +172,21 @@ func (r Request) CLIArgs() ([]string, error) {
 	return nil, fmt.Errorf("action %q is not allowed", r.Cmd)
 }
 
-// ErrorJSON ответ-конверт с ошибкой (формат `--json`, SPEC-v0.md, 6.2).
+// ErrorJSON is a response envelope with an error (the `--json` format, SPEC-v0.md, 6.2).
 func ErrorJSON(command, code, msg string) []byte {
 	b, _ := json.Marshal(map[string]any{"ok": false, "api_version": "v1", "command": command,
 		"error": map[string]string{"code": code, "message": msg}})
 	return b
 }
 
-// Exec обрабатывает одно соединение исполнителя: читает один запрос, выполняет и пишет ответ.
-// run выполняет команду lite-deploy с аргументами (включая --json) и возвращает её конверт.
-// journal получает строку на каждое действие (журнал systemd, недоступный агенту для изменения).
+// Exec handles one executor connection: reads one request, runs it and writes the answer.
+// run runs a lite-deploy command with arguments (including --json) and returns its envelope.
+// journal receives a line for every action (the systemd journal, which the agent cannot modify).
 func Exec(r io.Reader, w io.Writer, run func(args []string) []byte, journal io.Writer) {
 	ExecBody(r, w, func(args []string, _ []byte) []byte { return run(args) }, journal)
 }
 
-// ExecBody как Exec, но run получает ещё и тело запроса (стандартный ввод команды).
+// ExecBody is like Exec, but run also receives the request body (the command standard input).
 func ExecBody(r io.Reader, w io.Writer, run func(args []string, stdin []byte) []byte, journal io.Writer) {
 	var req Request
 	dec := json.NewDecoder(io.LimitReader(r, MaxRequest+2*MaxBody))

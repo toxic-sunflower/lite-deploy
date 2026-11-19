@@ -10,38 +10,38 @@ import (
 	"syscall"
 )
 
-// ErrLocked блокировка уже занята другим процессом.
+// ErrLocked means the lock is already held by another process.
 var ErrLocked = errors.New("lock is held")
 
-// Locker неблокирующая исключающая блокировка по файлу (flock). Нужна, чтобы два деплоя не шли одновременно.
+// Locker is a non-blocking exclusive file lock (flock). It keeps two deploys from running at once.
 type Locker interface {
-	// TryLock берёт блокировку или возвращает ErrLocked. unlock снимает её.
+	// TryLock takes the lock or returns ErrLocked. unlock releases it.
 	TryLock(path string) (unlock func(), err error)
 }
 
-// OSLocker настоящий flock. Каталог файла должен существовать.
+// OSLocker is a real flock. The directory of the file must exist.
 type OSLocker struct{}
 
-// TryLock берёт LOCK_EX|LOCK_NB на файл (создаёт с правами 600).
+// TryLock takes LOCK_EX|LOCK_NB on a file (creates it with mode 600).
 func (OSLocker) TryLock(path string) (func(), error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // путь строится из проверенного имени проекта
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // the path is built from a validated project name
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil { //nolint:gosec // дескриптор файла помещается в int
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil { //nolint:gosec // the file descriptor fits into an int
 		_ = f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
 			return nil, ErrLocked
 		}
 		return nil, err
 	}
-	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); _ = f.Close() }, nil //nolint:gosec // см. выше
+	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); _ = f.Close() }, nil //nolint:gosec // see above
 }
 
-// FakeLocker блокировки в памяти для тестов.
+// FakeLocker is in-memory locking for tests.
 type FakeLocker struct{ Held map[string]bool }
 
-// TryLock берёт блокировку в памяти.
+// TryLock takes an in-memory lock.
 func (l *FakeLocker) TryLock(path string) (func(), error) {
 	if l.Held == nil {
 		l.Held = map[string]bool{}
@@ -53,8 +53,8 @@ func (l *FakeLocker) TryLock(path string) (func(), error) {
 	return func() { delete(l.Held, path) }, nil
 }
 
-// Overwrite записывает файл на месте (O_TRUNC), сохраняя владельца и права. Нужен проектному пользователю:
-// файл upstream принадлежит ему, а в каталог /etc/caddy/upstreams писать он не может (rename невозможен).
+// Overwrite writes a file in place (O_TRUNC), keeping its owner and mode. A project user needs it:
+// the upstream file belongs to it, but it cannot write to /etc/caddy/upstreams (rename is impossible).
 func (OSFS) Overwrite(p string, data []byte) error {
 	f, err := os.OpenFile(filepath.Clean(p), os.O_WRONLY|os.O_TRUNC, 0)
 	if err != nil {
@@ -67,7 +67,7 @@ func (OSFS) Overwrite(p string, data []byte) error {
 	return f.Close()
 }
 
-// Overwrite записывает существующий файл, не меняя владельца и права.
+// Overwrite writes an existing file without changing the owner and mode.
 func (m *MemFS) Overwrite(p string, data []byte) error {
 	p = filepath.Clean(p)
 	if _, ok := m.Files[p]; !ok {
@@ -78,12 +78,12 @@ func (m *MemFS) Overwrite(p string, data []byte) error {
 	return nil
 }
 
-// Open открывает файл для чтения.
-func (OSFS) Open(p string) (io.ReadCloser, error) { return os.Open(p) } //nolint:gosec // путь задаёт вызывающий код ядра
+// Open opens a file for reading.
+func (OSFS) Open(p string) (io.ReadCloser, error) { return os.Open(p) } //nolint:gosec // the path is set by the calling core code
 
-// Create создаёт файл с точными правами perm.
+// Create creates a file with the exact mode perm.
 func (OSFS) Create(p string, perm fs.FileMode) (io.WriteCloser, error) {
-	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm) //nolint:gosec // путь задаёт вызывающий код ядра
+	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm) //nolint:gosec // the path is set by the calling core code
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (OSFS) Create(p string, perm fs.FileMode) (io.WriteCloser, error) {
 	return f, nil
 }
 
-// Open открывает копию содержимого файла.
+// Open opens a copy of the file content.
 func (m *MemFS) Open(p string) (io.ReadCloser, error) {
 	b, ok := m.Files[filepath.Clean(p)]
 	if !ok {
@@ -115,7 +115,7 @@ func (w *memWriter) Close() error {
 	return nil
 }
 
-// Create начинает запись файла; содержимое появляется при Close.
+// Create starts writing a file; the content appears on Close.
 func (m *MemFS) Create(p string, perm fs.FileMode) (io.WriteCloser, error) {
 	p = filepath.Clean(p)
 	m.Perms[p] = perm

@@ -10,7 +10,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
-// fakeApt притворяется apt и dpkg: помнит, какие пакеты установлены.
+// fakeApt pretends to be apt and dpkg: it remembers which packages are installed.
 type fakeApt struct {
 	installed map[string]string
 	calls     []string

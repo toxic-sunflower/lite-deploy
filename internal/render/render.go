@@ -1,5 +1,5 @@
-// Package render строит тексты файлов (Quadlet, Caddy, sudoers, authorized_keys, env) из проверенных параметров.
-// Исполнитель получает типизированные параметры, а не тексты файлов (D-42), поэтому все шаблоны живут здесь.
+// Package render builds file texts (Quadlet, Caddy, sudoers, authorized_keys, env) from validated parameters.
+// The executor receives typed parameters, not file texts (D-42), so all the templates live here.
 package render
 
 import (
@@ -13,23 +13,23 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/actions"
 )
 
-// BinaryPath путь к бинарнику на сервере; его владелец root (D-39).
+// BinaryPath is the path of the binary on the server; its owner is root (D-39).
 const BinaryPath = "/usr/local/bin/lite-deploy"
 
-// UnitName имя юнита и контейнера: <проект>-<сервис>-<слот>.
+// UnitName is the unit and container name: <project>-<service>-<slot>.
 func UnitName(project, service, slot string) string {
 	return project + "-" + service + "-" + slot
 }
 
-// SiteFileName имя файла сайта и upstream: <проект>-<сайт>.caddy.
+// SiteFileName is the name of the site and upstream file: <project>-<site>.caddy.
 func SiteFileName(project, site string) string { return project + "-" + site + ".caddy" }
 
-// UpstreamPath путь к файлу upstream сайта.
+// UpstreamPath is the path of the site upstream file.
 func UpstreamPath(project, site string) string {
 	return "/etc/caddy/upstreams/" + SiteFileName(project, site)
 }
 
-// Quadlet текст юнита одного слота сервиса (SPEC-v0.md, 4.3, install_quadlet).
+// Quadlet is the unit text of one service slot (SPEC-v0.md, 4.3, install_quadlet).
 func Quadlet(a actions.InstallQuadlet) string {
 	var b strings.Builder
 	name := UnitName(a.Project, a.Service, a.Slot)
@@ -49,18 +49,18 @@ func Quadlet(a actions.InstallQuadlet) string {
 	return b.String()
 }
 
-// DataDir каталог постоянных данных компонента внутри домашнего каталога пользователя проекта.
+// DataDir is the persistent data directory of a component inside the project user's home directory.
 func DataDir(name string) string { return ".local/share/lite-deploy/data/" + name }
 
-// AppDir каталог релиза слота внутри домашнего каталога пользователя проекта (для kind unit).
+// AppDir is the release directory of a slot inside the project user's home directory (for kind unit).
 func AppDir(service, slot string) string {
 	return ".local/share/lite-deploy/app/" + service + "/" + slot
 }
 
-// unitArg один аргумент для ExecStart: в двойных кавычках, с экранированием кавычек, обратной косой, % и $.
+// unitArg is one argument for ExecStart: in double quotes, with quotes, backslash, % and $ escaped.
 func unitArg(s string) string { return unitArgWith("", s) }
 
-// unitArgWith как unitArg, но prefix (например %h) вставляется как есть, чтобы systemd его раскрыл.
+// unitArgWith is like unitArg, but prefix (for example %h) is inserted as is so that systemd expands it.
 func unitArgWith(prefix, s string) string {
 	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "%", "%%", "$", "$$")
 	return `"` + prefix + r.Replace(s) + `"`
@@ -70,7 +70,7 @@ func systemdSize(s string) string { // 768m → 768M
 	return strings.ToUpper(s)
 }
 
-// Unit текст пользовательского юнита systemd одного слота компонента kind unit.
+// Unit is the text of the user systemd unit of one slot of a kind unit component.
 func Unit(a actions.InstallUnit) string {
 	var b strings.Builder
 	dir := "%h/" + AppDir(a.Service, a.Slot)
@@ -104,7 +104,7 @@ func Unit(a actions.InstallUnit) string {
 	return b.String()
 }
 
-// CaddySite текст файла сайта (SPEC-v0.md, 4.3, install_caddy_site).
+// CaddySite is the text of a site file (SPEC-v0.md, 4.3, install_caddy_site).
 func CaddySite(a actions.InstallCaddySite) string {
 	var b strings.Builder
 	up := UpstreamPath(a.Project, a.Site)
@@ -122,10 +122,10 @@ func CaddySite(a actions.InstallCaddySite) string {
 	return b.String()
 }
 
-// UpstreamNotDeployed начальное содержимое upstream до первой выкатки.
+// UpstreamNotDeployed is the initial upstream content before the first deploy.
 const UpstreamNotDeployed = "respond \"not deployed\" 503\n"
 
-// Upstream содержимое upstream после выкатки: трафик на порт слота (SPEC-v0.md, 5.2, шаг 8).
+// Upstream is the upstream content after a deploy: traffic to the slot port (SPEC-v0.md, 5.2, step 8).
 func Upstream(port int, trustedProxy string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "reverse_proxy 127.0.0.1:%d {\n", port)
@@ -136,25 +136,25 @@ func Upstream(port int, trustedProxy string) string {
 	return b.String()
 }
 
-// Sudoers правило, разрешающее проектному пользователю только reload Caddy.
+// Sudoers is the rule that lets a project user only reload Caddy.
 func Sudoers(project string) string {
 	return fmt.Sprintf("%s ALL=(root) NOPASSWD: /usr/bin/systemctl reload caddy\n", project)
 }
 
-// AuthorizedKey строка ключа CI с принудительной командой-привратником.
-// Исходный комментарий ключа отбрасывается: метка lite-deploy:<проект> нужна, чтобы позже заменить именно эту строку.
+// AuthorizedKey is a CI key line with a forced gatekeeper command.
+// The original key comment is dropped: the mark lite-deploy:<project> is needed to replace exactly this line later.
 func AuthorizedKey(a actions.InstallDeployKey) string {
 	f := strings.Fields(a.PublicKey)
 	return fmt.Sprintf("command=\"%s gate --project %s\",restrict %s %s lite-deploy:%s\n", BinaryPath, a.Project, f[0], f[1], a.Project)
 }
 
-// KeyMarker метка строки в authorized_keys.
+// KeyMarker is the mark of a line in authorized_keys.
 func KeyMarker(project string) string { return "lite-deploy:" + project }
 
-// EnvLine одна строка env-файла.
+// EnvLine is one line of an env file.
 type EnvLine struct{ Name, Value string }
 
-// EnvFile формат EnvironmentFile: NAME=value без кавычек. Значения с переводом строки отклоняются.
+// EnvFile is the EnvironmentFile format: NAME=value without quotes. Values with a line break are rejected.
 func EnvFile(lines []EnvLine) (string, error) {
 	sorted := append([]EnvLine(nil), lines...)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
@@ -168,7 +168,7 @@ func EnvFile(lines []EnvLine) (string, error) {
 	return b.String(), nil
 }
 
-// DatabaseURL строка подключения к базе по unix-сокету PostgreSQL (SPEC-v0.md, 2.1).
+// DatabaseURL is the connection string for the database over the PostgreSQL unix socket (SPEC-v0.md, 2.1).
 func DatabaseURL(format, role, db, password string) (string, error) {
 	switch format {
 	case "npgsql":
@@ -181,7 +181,7 @@ func DatabaseURL(format, role, db, password string) (string, error) {
 	return "", fmt.Errorf("unknown connection string format %q", format)
 }
 
-// RemoteDatabaseURL строка подключения к PostgreSQL на другом сервере: по сети и только с шифрованием (sslmode=require).
+// RemoteDatabaseURL is a connection string for PostgreSQL on another server: over the network and only encrypted (sslmode=require).
 func RemoteDatabaseURL(format, host string, port int, role, db, password string) (string, error) {
 	if port == 0 {
 		port = 5432

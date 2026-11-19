@@ -17,7 +17,7 @@ func init() {
 
 var versionRe = regexp.MustCompile(`^(\d+)\.(\d+)`)
 
-// verifyHost только читает (SPEC-v0.md, 4.3). Список проблем собирается целиком.
+// verifyHost only reads (SPEC-v0.md, 4.3). The whole list of problems is collected.
 func verifyHost(ctx context.Context, r *run, _ any) (outcome, error) {
 	var problems, warns []string
 	osr, err := r.FS.ReadFile(OSRelease)
@@ -87,7 +87,7 @@ func parseOSRelease(s string) map[string]string {
 
 func atoi(s string) int { n, _ := strconv.Atoi(s); return n }
 
-// createProjectUser (SPEC-v0.md, 4.3): пользователь без пароля и sudo, linger, права, subuid/subgid, каталоги.
+// createProjectUser (SPEC-v0.md, 4.3): a user without a password and sudo, linger, permissions, subuid/subgid, directories.
 func createProjectUser(ctx context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.CreateProjectUser)
 	u, h := p.Project, home(p.Project)
@@ -152,7 +152,7 @@ func createProjectUser(ctx context.Context, r *run, v any) (outcome, error) {
 	return outcome{changed: true, detail: strings.Join(did, ", ")}, nil
 }
 
-// installHint подсказывает, как поставить недостающий компонент.
+// installHint tells how to install a missing component.
 func installHint(tool string) string {
 	switch tool {
 	case "caddy", "podman":

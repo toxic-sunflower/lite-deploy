@@ -16,7 +16,7 @@ import (
 
 var armorRe = regexp.MustCompile(secrets.ArmorPattern)
 
-// Коды ошибок построения плана (SPEC-v0.md, 6.3).
+// Plan building error codes (SPEC-v0.md, 6.3).
 const (
 	CodeInvalidProject           = "invalid_project"
 	CodeSecretMissing            = "secret_missing"
@@ -32,7 +32,7 @@ const (
 	defaultPortLo, defaultPortHi = project.PortMin, project.PortMax
 )
 
-// BuildError ошибка построения плана.
+// BuildError is a plan building error.
 type BuildError struct {
 	Code    string
 	Message string
@@ -42,7 +42,7 @@ type BuildError struct {
 
 func (e *BuildError) Error() string { return e.Code + ": " + e.Message }
 
-// ProjectState несекретное состояние уже управляемого проекта (state/projects/<имя>.json).
+// ProjectState is the non-secret state of an already managed project (state/projects/<name>.json).
 type ProjectState struct {
 	Hash     string        `json:"hash"`
 	Ports    actions.Ports `json:"ports"`
@@ -50,7 +50,7 @@ type ProjectState struct {
 	Deployed bool          `json:"deployed"`
 }
 
-// State всё, что план знает о сервере. Строится из файлов в state/ (см. LoadState), в тестах задаётся напрямую.
+// State is everything the plan knows about the server. It is built from the files in state/ (see LoadState), and set directly in tests.
 type State struct {
 	ServerID       string
 	Now            time.Time
@@ -58,15 +58,15 @@ type State struct {
 	NewID          func(now time.Time) (string, error)
 	PortRange      [2]int
 	MaxProjects    int
-	Projects       map[string]ProjectState // управляемые проекты
-	ExistingUsers  map[string]bool         // системные пользователи, существующие на сервере
-	Ciphertexts    map[string]string       // шифртекст секретов, которые владелец передаёт в этом плане
-	RotatePassword bool                    // для adopt: сменить пароль существующей роли
-	Servers        map[string]string       // реестр серверов: имя → адрес (lite server add)
+	Projects       map[string]ProjectState // managed projects
+	ExistingUsers  map[string]bool         // system users that exist on the server
+	Ciphertexts    map[string]string       // the ciphertext of the secrets the owner passes in this plan
+	RotatePassword bool                    // for adopt: change the password of the existing role
+	Servers        map[string]string       // server registry: name → address (lite server add)
 }
 
-// Build строит план project.create из проверенного описания (SPEC-v0.md, раздел 3).
-// Ничего на системе не меняет и значений секретов не знает: на входе только шифртекст.
+// Build builds a project.create plan from a validated description (SPEC-v0.md, section 3).
+// It changes nothing on the system and knows no secret values: the input is ciphertext only.
 func Build(p *project.Project, st State) (*Plan, *BuildError) {
 	if issues := project.Validate(p); len(issues) > 0 {
 		return nil, &BuildError{Code: CodeInvalidProject, Message: "the project description did not pass validation", Issues: issues, Hint: "fix the fields listed in details"}
@@ -129,7 +129,7 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 	b.add(actions.VerifyHostName, actions.VerifyHost{NoPodman: !hasContainers}, "Server check: OS, podman, caddy, postgresql, Caddy rules and ufw")
 	b.add(actions.CreateProjectUserName, actions.CreateProjectUser{Project: name}, fmt.Sprintf("User %s without a password and sudo, linger, configuration directories", name))
 
-	// В режиме adopt пароль существующей роли должен быть записан до provision_postgres.
+	// In adopt mode the password of the existing role must be written before provision_postgres.
 	for _, s := range secretSteps {
 		if s.Name == DBPasswordSecret {
 			b.add(actions.SetSecretName, s, "Internal secret _db_password (the existing role password), ciphertext only")
@@ -238,7 +238,7 @@ func (b *builder) add(action string, params any, summary string) {
 	b.steps = append(b.steps, Step{ID: fmt.Sprintf("s%02d", len(b.steps)+1), Action: action, Class: def.Class, Params: raw, Summary: summary})
 }
 
-// ProjectHash хэш канонического описания проекта.
+// ProjectHash is the hash of the canonical project description.
 func ProjectHash(p *project.Project) (string, error) {
 	c, err := CanonicalValue(p)
 	if err != nil {
@@ -284,7 +284,7 @@ func envFor(s project.Service, d *project.Project, st State) []actions.EnvVar {
 	return out
 }
 
-// planSecrets решает, какие шаги set_secret нужны: значение передано в этом плане, либо секрет уже есть на сервере.
+// planSecrets decides which set_secret steps are needed: the value is passed in this plan, or the secret is already on the server.
 func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) ([]actions.SetSecret, *BuildError) {
 	need := map[string]bool{}
 	for _, s := range d.Services {
@@ -348,7 +348,7 @@ func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) (
 	return steps, nil
 }
 
-// allocatePorts оставляет заданные порты и выбирает свободные для остальных; чужие порты не трогает.
+// allocatePorts keeps the given ports and picks free ones for the rest; it does not touch other projects' ports.
 func allocatePorts(d *project.Project, st State, cur ProjectState) (actions.Ports, *BuildError) {
 	lo, hi := st.PortRange[0], st.PortRange[1]
 	taken := map[int]string{}
@@ -365,7 +365,7 @@ func allocatePorts(d *project.Project, st State, cur ProjectState) (actions.Port
 			taken[x] = pn + "/" + sn
 		}
 	}
-	mine := map[int]bool{} // явные порты этого проекта
+	mine := map[int]bool{} // the explicit ports of this project
 	for _, s := range d.Services {
 		for _, hp := range s.HostPorts {
 			mine[hp] = true

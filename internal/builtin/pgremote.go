@@ -16,14 +16,14 @@ const (
 	pgPort   = 5432
 )
 
-// hbaRule одно правило удалённого доступа.
+// hbaRule is one remote access rule.
 type hbaRule struct{ DB, Role, From string }
 
 func (r hbaRule) line() string {
 	return fmt.Sprintf("hostssl %s %s %s scram-sha-256", r.DB, r.Role, r.From)
 }
 
-// normalizeFrom проверяет источник и приводит одиночный адрес к сети /32 или /128. Любой адрес и 0.0.0.0/0 отклоняются.
+// normalizeFrom validates a source and turns a single address into a /32 or /128 network. Any address and 0.0.0.0/0 are rejected.
 func normalizeFrom(s string) (string, error) {
 	if a, err := netip.ParseAddr(s); err == nil {
 		if a.IsUnspecified() {
@@ -41,7 +41,7 @@ func normalizeFrom(s string) (string, error) {
 	return p.Masked().String(), nil
 }
 
-// hbaSplit делит файл на текст вне блока lite-deploy и правила внутри блока.
+// hbaSplit splits the file into the text outside the lite-deploy block and the rules inside the block.
 func hbaSplit(content string) (outside string, rules []hbaRule) {
 	var keep []string
 	in := false
@@ -62,7 +62,7 @@ func hbaSplit(content string) (outside string, rules []hbaRule) {
 	return strings.TrimRight(strings.Join(keep, "\n"), "\n"), rules
 }
 
-// hbaJoin собирает файл: прежний текст и блок правил в конце (пустой блок не пишется).
+// hbaJoin builds the file: the previous text and the rule block at the end (an empty block is not written).
 func hbaJoin(outside string, rules []hbaRule) string {
 	s := outside + "\n"
 	if len(rules) == 0 {
@@ -87,7 +87,7 @@ func (t tools) hbaFile() (string, error) {
 	return p, nil
 }
 
-// applyHBA записывает новые правила, перечитывает конфигурацию и при ошибках в файле возвращает прежнее содержимое.
+// applyHBA writes the new rules, reloads the configuration and restores the previous content if the file has errors.
 func (t tools) applyHBA(path, old string, outside string, rules []hbaRule) error {
 	if err := t.env.FS.Overwrite(path, []byte(hbaJoin(outside, rules))); err != nil {
 		return plugin.Errorf("step_failed", "write %s: %v", path, err)
@@ -189,7 +189,7 @@ func (t tools) pgDeny(args []string) (plugin.Output, error) {
 	if err := t.applyHBA(path, string(b), outside, keep); err != nil {
 		return plugin.Output{}, err
 	}
-	if !stillFrom { // порт закрываем, только если с этого адреса больше ничего не разрешено
+	if !stillFrom { // the port is closed only if nothing else is allowed from this address
 		if _, fe := t.fw().Remove(t.ctx, pgPort, "tcp", from, "allow"); fe != nil && fe.Code != firewall.CodeNotFound {
 			return plugin.Output{}, fwErr(fe)
 		}
@@ -219,7 +219,7 @@ func (t tools) pgAccess() (plugin.Output, error) {
 	return plugin.Output{Text: sb.String(), Data: map[string]any{"rules": list}}, nil
 }
 
-// pgListen задаёт адрес, на котором PostgreSQL принимает соединения кроме localhost, и перезапускает службу.
+// pgListen sets the address PostgreSQL accepts connections on besides localhost, and restarts the service.
 func (t tools) pgListen(args []string) (plugin.Output, error) {
 	if len(args) != 1 {
 		return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg listen ADDRESS (this server's address on the internal network) or lite pg listen localhost")

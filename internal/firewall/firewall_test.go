@@ -56,7 +56,7 @@ func TestStatus(t *testing.T) {
 	if !st.Active || st.SSHPort != 22 {
 		t.Fatalf("state: %+v", st)
 	}
-	// IPv6-дубли склеены; диапазон показан как есть, но без порта
+	// IPv6 duplicates are merged; a range is shown as is, but without a port
 	if len(st.Rules) != 6 {
 		t.Fatalf("%d rules: %+v", len(st.Rules), st.Rules)
 	}

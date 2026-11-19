@@ -19,11 +19,11 @@ type world struct {
 	fs      *host.MemFS
 	calls   []string
 	out     bytes.Buffer
-	noPass  map[string]bool // у кого нет пароля
+	noPass  map[string]bool // who has no password
 	failOn  string
 	noUfw   bool
 	created []string
-	pkgs    map[string]bool // установленные пакеты
+	pkgs    map[string]bool // installed packages
 }
 
 func newWorld() *world {
@@ -62,7 +62,7 @@ func (w *world) env(input string) Env {
 		case line == "sshd -T":
 			return host.Result{Stdout: []byte("port 2222\n")}, nil
 		case c.Name == "gpg":
-			w.fs.Files[c.Args[len(c.Args)-1]] = c.Stdin // настоящий gpg создаёт файл ключей
+			w.fs.Files[c.Args[len(c.Args)-1]] = c.Stdin // the real gpg creates the key file
 		case c.Name == "useradd":
 			name := c.Args[len(c.Args)-1]
 			w.created = append(w.created, name)
@@ -121,7 +121,7 @@ func TestNewUserFullFlow(t *testing.T) {
 	if !strings.Contains(drop, "Match User serafim\n") || !strings.Contains(drop, "PasswordAuthentication no") {
 		t.Fatalf("sshd: %q", drop)
 	}
-	// порядок: правило SSH до включения файервола; запрет пароля после ключа и файервола
+	// order: the SSH rule before enabling the firewall; the password ban after the key and the firewall
 	if w.index("ufw limit") >= w.index("ufw --force enable") || w.index("ufw --force enable") >= w.index("sshd -t") {
 		t.Fatalf("order: %v", w.calls)
 	}

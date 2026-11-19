@@ -8,7 +8,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// Redis плагин `redis`: Redis на хосте, доступный только с этого сервера.
+// Redis is the `redis` plugin: Redis on the host, reachable from this server only.
 type Redis struct{}
 
 func (Redis) Name() string       { return "redis" }
@@ -31,7 +31,7 @@ func redisPackages(manager string) []string {
 	return []string{"redis"}
 }
 
-// redisService имя службы systemd: в Debian redis-server, в остальных redis.
+// redisService is the systemd service name: redis-server on Debian, redis elsewhere.
 func (t tools) redisService() string {
 	if t.manager() == "apt" {
 		return "redis-server"
@@ -39,7 +39,7 @@ func (t tools) redisService() string {
 	return "redis"
 }
 
-// InstallRedis ставит Redis и включает службу.
+// InstallRedis installs Redis and enables the service.
 func InstallRedis(ctx context.Context, env plugin.Env, say Say) error {
 	t := tools{ctx, env}
 	say.say("Plugin redis: installing packages...")
@@ -49,7 +49,7 @@ func InstallRedis(ctx context.Context, env plugin.Env, say Say) error {
 	return t.must("systemctl", "enable", "--now", t.redisService())
 }
 
-// redisBind возвращает значение bind из работающего Redis.
+// redisBind returns the bind value from a running Redis.
 func (t tools) redisBind() (string, bool) {
 	res, err := t.run("redis-cli", "config", "get", "bind")
 	if err != nil || res.ExitCode != 0 {
@@ -62,7 +62,7 @@ func (t tools) redisBind() (string, bool) {
 	return strings.TrimSpace(lines[1]), true
 }
 
-// bindLocalOnly истинно, если все адреса bind (без ведущего «-») лежат на 127.0.0.1 или ::1.
+// bindLocalOnly is true if all bind addresses (without a leading "-") are 127.0.0.1 or ::1.
 func bindLocalOnly(bind string) bool {
 	if strings.TrimSpace(bind) == "" {
 		return false

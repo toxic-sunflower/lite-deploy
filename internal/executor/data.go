@@ -29,7 +29,7 @@ const dbPasswordName = "_db_password"
 
 func secretKey(project, name string) string { return project + "/" + name }
 
-// getSecret читает значение; в dry-run секрет, который запишет предыдущий шаг, считается «будет».
+// getSecret reads a value; in dry-run a secret that an earlier step will write counts as "will be".
 func (r *run) getSecret(project, name string) (val []byte, pending bool, err error) {
 	v, err := r.Secrets.Get(project, name)
 	if err == nil {
@@ -41,7 +41,7 @@ func (r *run) getSecret(project, name string) (val []byte, pending bool, err err
 	return nil, false, err
 }
 
-// setSecret (SPEC-v0.md, 4.3): расшифровывает и пишет значение в хранилище.
+// setSecret (SPEC-v0.md, 4.3): decrypts and writes the value to the store.
 func setSecret(_ context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.SetSecret)
 	if strings.HasPrefix(p.Name, "_") && p.Name != dbPasswordName {
@@ -80,7 +80,7 @@ func (r *run) psql(ctx context.Context, db, query string, stdin []byte, env []st
 	return r.must(ctx, host.Cmd{Name: "runuser", Args: args, Stdin: stdin, Env: env})
 }
 
-// newPassword 24 случайных байта, base64 без символов / + =.
+// newPassword is 24 random bytes, base64 without the characters / + =.
 func (r *run) newPassword() (string, error) {
 	b := make([]byte, 24)
 	if _, err := r.Rand.Read(b); err != nil {
@@ -90,7 +90,7 @@ func (r *run) newPassword() (string, error) {
 	return strings.NewReplacer("/", "A", "+", "B", "=", "C").Replace(s), nil
 }
 
-// provisionPostgres (SPEC-v0.md, 4.3 и 4.2): роль, база, правило pg_hba для пары, проверка входа.
+// provisionPostgres (SPEC-v0.md, 4.3 and 4.2): the role, the database, a pg_hba rule for the pair, a login check.
 func provisionPostgres(ctx context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.ProvisionPostgres)
 	role := project.RoleName(p.Project)
@@ -175,7 +175,7 @@ func provisionPostgres(ctx context.Context, r *run, v any) (outcome, error) {
 		did = append(did, "pg_hba")
 	}
 
-	// Проверка входа: пароль передаётся переменной окружения дочернего процесса, не аргументом.
+	// Login check: the password is passed in an environment variable of the child process, not as an argument.
 	if !r.dry && password != "" || r.dry && roleExists && haveSecret && !p.RotatePassword {
 		pw := password
 		if r.dry {
@@ -192,7 +192,7 @@ func provisionPostgres(ctx context.Context, r *run, v any) (outcome, error) {
 	return outcome{changed: true, detail: strings.Join(did, ", ")}, nil
 }
 
-// ensureHba держит строку «local ROLE ROLE scram-sha-256» между маркерами, выше общего правила local all all.
+// ensureHba keeps the line "local ROLE ROLE scram-sha-256" between markers, above the general rule local all all.
 func (r *run) ensureHba(ctx context.Context, role string) (bool, error) {
 	res, err := r.psql(ctx, "postgres", "SHOW hba_file", nil, nil)
 	if err != nil {
@@ -262,7 +262,7 @@ type authFile struct {
 	} `json:"auths"`
 }
 
-// registryLogin (SPEC-v0.md, 4.3): podman login от имени проектного пользователя, токен на стандартном вводе.
+// registryLogin (SPEC-v0.md, 4.3): podman login as the project user, the token on standard input.
 func registryLogin(ctx context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.RegistryLogin)
 	token, pending, err := r.getSecret(p.Project, p.Secret)
@@ -298,7 +298,7 @@ func registryLogin(ctx context.Context, r *run, v any) (outcome, error) {
 	return outcome{changed: true}, nil
 }
 
-// writeServiceEnv (SPEC-v0.md, 4.3): env-файл сервиса из литералов, секретов и строки подключения к базе.
+// writeServiceEnv (SPEC-v0.md, 4.3): the service env file from literals, secrets and the database connection string.
 func writeServiceEnv(_ context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.WriteServiceEnv)
 	var lines []render.EnvLine
@@ -365,7 +365,7 @@ func bakNote(bak string) string {
 	return "the old file was saved: " + bak
 }
 
-// writeReleaseAuth: заголовок Authorization для скачивания релиза; файл 600 у пользователя проекта.
+// writeReleaseAuth: the Authorization header for downloading a release; a 600 file owned by the project user.
 func writeReleaseAuth(_ context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.WriteReleaseAuth)
 	token, pending, err := r.getSecret(p.Project, p.Secret)

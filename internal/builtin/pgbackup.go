@@ -14,19 +14,19 @@ import (
 )
 
 const (
-	// PGBackupDir каталог копий баз; в нём файлы вида БАЗА-20261119T031500Z.dump.
+	// PGBackupDir is the directory of database backups; it holds files like DATABASE-20261119T031500Z.dump.
 	PGBackupDir = "/var/backups/lite-deploy/pg"
-	pgKeep      = 7              // сколько последних копий каждой базы хранить
-	pgStale     = 36 * time.Hour // старше этого копия считается устаревшей
+	pgKeep      = 7              // how many latest backups of each database to keep
+	pgStale     = 36 * time.Hour // a backup older than this counts as stale
 	stampLayout = "20060102T150405Z"
 )
 
 var backupFileRe = regexp.MustCompile(`^([a-z][a-z0-9_]{0,39})-(\d{8}T\d{6}Z)\.dump(\.age)?$`)
 
-// passwordRe допустимый пароль роли: подставляется в SQL в кавычках, поэтому без кавычек и пробелов.
+// passwordRe is an acceptable role password: it is put into SQL in quotes, so no quotes and no spaces.
 var passwordRe = regexp.MustCompile(`^[A-Za-z0-9_.~-]{16,128}$`)
 
-// readPassword читает пароль из стандартного ввода (одна строка).
+// readPassword reads a password from standard input (one line).
 func readPassword(in io.Reader) (string, error) {
 	if in == nil {
 		return "", plugin.Errorf("usage", "the password is read from standard input: echo PASSWORD | lite pg ... --password-stdin")
@@ -42,7 +42,7 @@ func readPassword(in io.Reader) (string, error) {
 	return p, nil
 }
 
-// extractPasswordFlag убирает флаг --password-stdin из аргументов.
+// extractPasswordFlag removes the --password-stdin flag from the arguments.
 func extractPasswordFlag(args []string) ([]string, bool) {
 	var rest []string
 	found := false
@@ -61,7 +61,7 @@ type backupFile struct {
 	At       time.Time
 }
 
-// backups перечисляет копии, новые первыми внутри базы.
+// backups lists backups, newest first within a database.
 func (t tools) backups() []backupFile {
 	names, err := t.env.FS.ReadDir(PGBackupDir)
 	if err != nil {
@@ -95,7 +95,7 @@ func (t tools) now() time.Time {
 	return time.Now()
 }
 
-// userDBs базы проектов: все, кроме шаблонов и служебной postgres.
+// userDBs are the project databases: all except templates and the system postgres.
 func (t tools) userDBs() ([]string, error) {
 	out, err := t.psql("select datname from pg_database where not datistemplate and datname <> 'postgres' order by 1")
 	if err != nil {
@@ -110,7 +110,7 @@ func (t tools) userDBs() ([]string, error) {
 	return list, nil
 }
 
-// pgBackup снимает копию указанной базы (или всех баз) и удаляет копии сверх pgKeep.
+// pgBackup takes a backup of the given database (or all databases) and deletes backups beyond pgKeep.
 func (t tools) pgBackup(args []string) (plugin.Output, error) {
 	if len(args) > 1 {
 		return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg backup [DATABASE]")
@@ -124,7 +124,7 @@ func (t tools) pgBackup(args []string) (plugin.Output, error) {
 	} else if !pgNameRe.MatchString(args[0]) {
 		return plugin.Output{}, plugin.Errorf("usage", "invalid database name")
 	}
-	// postgres должен дойти до своего каталога: родителю нужно право входа (x) для остальных, читать его содержимое по-прежнему нельзя
+	// postgres must be able to reach its directory: the parent needs the enter right (x) for others, reading its content is still not allowed
 	if err := t.env.FS.MkdirAll(backupRoot, 0o711); err != nil {
 		return plugin.Output{}, plugin.Errorf("step_failed", "directory %s: %v", backupRoot, err)
 	}
@@ -144,7 +144,7 @@ func (t tools) pgBackup(args []string) (plugin.Output, error) {
 		path := PGBackupDir + "/" + name
 		res, err := t.run("runuser", "-u", "postgres", "--", "pg_dump", "-Fc", "-f", path, db)
 		if err != nil || res.ExitCode != 0 {
-			_ = t.env.FS.Remove(path) // неполный файл хуже, чем его отсутствие
+			_ = t.env.FS.Remove(path) // an incomplete file is worse than no file
 			msg := ""
 			if err != nil {
 				msg = err.Error()
@@ -159,7 +159,7 @@ func (t tools) pgBackup(args []string) (plugin.Output, error) {
 				_ = t.env.FS.Remove(path)
 				return plugin.Output{}, plugin.Errorf("step_failed", "encrypting the backup of database %s: %v", db, err)
 			}
-			_ = t.env.FS.Remove(path) // открытая копия не остаётся
+			_ = t.env.FS.Remove(path) // the plain backup does not remain
 			name += ".age"
 		}
 		made = append(made, name)
@@ -175,11 +175,11 @@ func (t tools) pgBackup(args []string) (plugin.Output, error) {
 	return plugin.Output{Text: sb.String(), Data: map[string]any{"created": made, "removed": removed}}, nil
 }
 
-// rotate оставляет pgKeep последних копий каждой базы.
+// rotate keeps the pgKeep latest backups of each database.
 func (t tools) rotate() []string {
 	seen := map[string]int{}
 	var removed []string
-	for _, b := range t.backups() { // новые первыми
+	for _, b := range t.backups() { // newest first
 		seen[b.DB]++
 		if seen[b.DB] > pgKeep {
 			if t.env.FS.Remove(PGBackupDir+"/"+b.Name) == nil {
@@ -203,7 +203,7 @@ func (t tools) pgBackupsList() (plugin.Output, error) {
 	return plugin.Output{Text: sb.String(), Data: map[string]any{"backups": list}}, nil
 }
 
-// pgRestore возвращает данные базы из копии (существующие объекты заменяются).
+// pgRestore restores database data from a backup (existing objects are replaced).
 func (t tools) pgRestore(args []string) (plugin.Output, error) {
 	args, identStdin := extractFlag(args, "--identity-stdin")
 	if len(args) != 2 || !pgNameRe.MatchString(args[0]) {
@@ -246,7 +246,7 @@ const (
 	backupTimer   = "/etc/systemd/system/lite-pg-backup.timer"
 )
 
-// pgSchedule включает или выключает ежедневную копию (таймер systemd).
+// pgSchedule turns the daily backup on or off (a systemd timer).
 func (t tools) pgSchedule(args []string) (plugin.Output, error) {
 	if len(args) != 1 || (args[0] != "on" && args[0] != "off") {
 		return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg schedule on|off")
@@ -275,13 +275,13 @@ func (t tools) pgSchedule(args []string) (plugin.Output, error) {
 	return textOut("Database backups will run daily around 03:30; the latest ones are kept: " + fmt.Sprint(pgKeep) + " latest.\n"), nil
 }
 
-// backupFindings проверки свежести копий.
+// backupFindings are the backup freshness checks.
 func (t tools) backupFindings() []plugin.Finding {
 	all, err := t.userDBs()
 	if err != nil || len(all) == 0 {
 		return nil
 	}
-	// проверяются базы проектов lite и базы, созданные через lite pg create-db; чужие (вручную, тестовые) считаются вместе
+	// the databases of lite projects and databases created through lite pg create-db are checked; foreign ones (by hand, test) are counted together
 	ours := map[string]bool{}
 	for _, p := range t.env.Projects {
 		ours[strings.ReplaceAll(p, "-", "_")] = true
@@ -339,7 +339,7 @@ func extractFlag(args []string, flag string) ([]string, bool) {
 	return rest, found
 }
 
-// encryptFile шифрует файл ключом age потоком (большие дампы не читаются в память целиком) и возвращает путь результата.
+// encryptFile encrypts a file with an age key as a stream (large dumps are not read into memory whole) and returns the path of the result.
 func (t tools) encryptFile(src, dst, recipient string) (string, error) {
 	r, err := age.ParseX25519Recipient(recipient)
 	if err != nil {
@@ -370,7 +370,7 @@ func (t tools) encryptFile(src, dst, recipient string) (string, error) {
 	return dst, out.Close()
 }
 
-// decryptToTemp расшифровывает копию во временный файл, доступный postgres, закрытый ключ читается из stdin команды.
+// decryptToTemp decrypts a backup into a temporary file readable by postgres; the private key is read from the command stdin.
 func (t tools) decryptToTemp(src, db string) (string, error) {
 	if t.env.Stdin == nil {
 		return "", plugin.Errorf("usage", "the age private key is read from stdin")
@@ -412,7 +412,7 @@ func (t tools) decryptToTemp(src, db string) (string, error) {
 	return tmp, nil
 }
 
-// parseIdentity берёт закрытый ключ из текста: файл age-keygen содержит комментарии (# …), их пропускаем.
+// parseIdentity takes the private key from text: an age-keygen file contains comments (# …), which are skipped.
 func parseIdentity(text string) (*age.X25519Identity, error) {
 	for _, l := range strings.Split(text, "\n") {
 		l = strings.TrimSpace(l)

@@ -14,7 +14,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/ui"
 )
 
-// cmdUI запускает локальный веб-интерфейс и ждёт Ctrl+C.
+// cmdUI starts the local web interface and waits for Ctrl+C.
 func cmdUI(args []string, env Env) result {
 	fs := flag.NewFlagSet("ui", flag.ContinueOnError)
 	hostFlag := fs.String("host", "", "user@server: manage the server over SSH (without the flag: this computer)")

@@ -17,14 +17,14 @@ import (
 
 const backupRoot = "/var/backups/lite-deploy"
 
-// RcloneStore место хранения копий вне сервера, работающее через rclone (Backblaze B2, S3, SFTP).
-// Все места ведут себя одинаково: setup, upload, list, fetch, schedule, status, проверки; отличается только setup.
+// RcloneStore is a storage location for backups outside the server, working through rclone (Backblaze B2, S3, SFTP).
+// All locations behave the same way: setup, upload, list, fetch, schedule, status, checks; only setup differs.
 type RcloneStore struct {
-	PluginName string // имя плагина: backblaze, s3, sftp
-	Title      string // для сообщений
-	Remote     string // имя remote в rclone.conf
+	PluginName string // the plugin name: backblaze, s3, sftp
+	Title      string // for messages
+	Remote     string // the remote name in rclone.conf
 	Describe   string
-	SetupArgs  string // подсказка по аргументам setup
+	SetupArgs  string // a hint about the setup arguments
 	SetupHelp  string
 	setupLocal func(t tools, s *RcloneStore, args []string, in string) (conf string, path string, files map[string]string, err error)
 }
@@ -37,13 +37,13 @@ func (s *RcloneStore) lastFile() string {
 }
 func (s *RcloneStore) unitBase() string { return "lite-" + s.PluginName + "-upload" }
 
-// Name, Kind, Requires, Description реализуют plugin.Plugin.
+// Name, Kind, Requires, Description implement plugin.Plugin.
 func (s *RcloneStore) Name() string        { return s.PluginName }
 func (s *RcloneStore) Kind() string        { return "builtin" }
 func (s *RcloneStore) Requires() []string  { return nil }
 func (s *RcloneStore) Description() string { return s.Describe }
 
-// Commands реализует plugin.Plugin.
+// Commands implements plugin.Plugin.
 func (s *RcloneStore) Commands() []plugin.Command {
 	return []plugin.Command{
 		{Name: "install", Help: "install rclone", Confirm: true},
@@ -56,7 +56,7 @@ func (s *RcloneStore) Commands() []plugin.Command {
 	}
 }
 
-// InstallRclone ставит rclone.
+// InstallRclone installs rclone.
 func InstallRclone(ctx context.Context, env plugin.Env, say Say) error {
 	say.say("Installing rclone...")
 	return tools{ctx, env}.install("rclone")
@@ -83,7 +83,7 @@ func (s *RcloneStore) load(t tools) (storeConfig, error) {
 	return c, nil
 }
 
-// Configured истинно, если место хранения настроено.
+// Configured is true if the storage location is configured.
 func (s *RcloneStore) Configured(env plugin.Env) bool {
 	_, err := s.load(tools{context.Background(), env})
 	return err == nil
@@ -140,7 +140,7 @@ func (s *RcloneStore) setup(t tools, args []string) (plugin.Output, error) {
 	return textOut(s.Title + " configured: " + s.remote(cfg) + ". Access check passed.\n"), nil
 }
 
-// Upload отправляет копии: copy, а не sync, чтобы ротация локальных копий не стирала их на месте хранения.
+// Upload sends the backups: copy, not sync, so that rotating local backups does not erase them at the storage.
 func (s *RcloneStore) Upload(t tools) (plugin.Output, error) {
 	cfg, err := s.load(t)
 	if err != nil {
@@ -226,7 +226,7 @@ func (s *RcloneStore) fetch(t tools, args []string) (plugin.Output, error) {
 	return textOut("Downloaded from " + src + " in " + dst + ".\n"), nil
 }
 
-// Run реализует plugin.Plugin.
+// Run implements plugin.Plugin.
 func (s *RcloneStore) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (plugin.Output, error) {
 	t := tools{ctx, env}
 	switch cmd {
@@ -274,7 +274,7 @@ func (s *RcloneStore) Run(ctx context.Context, env plugin.Env, cmd string, args 
 	return plugin.Output{}, plugin.Errorf("usage", "plugin %s has no command %q", s.PluginName, cmd)
 }
 
-// Check реализует plugin.Plugin.
+// Check implements plugin.Plugin.
 func (s *RcloneStore) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	t := tools{ctx, env}
 	if _, err := s.load(t); err != nil {
@@ -364,7 +364,7 @@ var Backblaze = &RcloneStore{
 	},
 }
 
-// S3: любое S3-совместимое хранилище (AWS S3, Wasabi, MinIO, Cloudflare R2 и т.д.).
+// S3: any S3-compatible storage (AWS S3, Wasabi, MinIO, Cloudflare R2 and so on).
 var S3 = &RcloneStore{
 	PluginName: "s3", Title: "S3", Remote: "s3",
 	Describe:  "backups outside the server: upload /var/backups/lite-deploy to S3-compatible storage",
@@ -385,7 +385,7 @@ var S3 = &RcloneStore{
 	},
 }
 
-// SFTP: сервер по SFTP (проверка ключа хоста обязательна).
+// SFTP: a server over SFTP (checking the host key is mandatory).
 var SFTP = &RcloneStore{
 	PluginName: "sftp", Title: "SFTP", Remote: "sftp",
 	Describe:  "backups outside the server: upload /var/backups/lite-deploy to a server over SFTP",
@@ -406,5 +406,5 @@ var SFTP = &RcloneStore{
 	},
 }
 
-// Stores все места хранения копий вне сервера.
+// Stores are all storage locations for backups outside the server.
 var Stores = []*RcloneStore{Backblaze, S3, SFTP}

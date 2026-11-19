@@ -8,7 +8,7 @@ import (
 	"syscall"
 )
 
-// PeerUID возвращает uid процесса на другом конце unix-соединения (SO_PEERCRED; ядро подтверждает его само).
+// PeerUID returns the uid of the process at the other end of a unix connection (SO_PEERCRED; the kernel vouches for it).
 func PeerUID(c net.Conn) (int, error) {
 	uc, ok := c.(*net.UnixConn)
 	if !ok {
@@ -21,7 +21,7 @@ func PeerUID(c net.Conn) (int, error) {
 	var cred *syscall.Ucred
 	var serr error
 	if err := raw.Control(func(fd uintptr) {
-		cred, serr = syscall.GetsockoptUcred(int(fd), syscall.SOL_SOCKET, syscall.SO_PEERCRED) //nolint:gosec // дескриптор помещается в int
+		cred, serr = syscall.GetsockoptUcred(int(fd), syscall.SOL_SOCKET, syscall.SO_PEERCRED) //nolint:gosec // the descriptor fits into an int
 	}); err != nil {
 		return -1, err
 	}

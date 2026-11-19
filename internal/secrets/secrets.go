@@ -1,9 +1,9 @@
-// Package secrets: шифрование значений секретов ключом исполнителя и хранилище значений
-// (SPEC-v0.md, раздел 7; D-10, D-38, D-41).
+// Package secrets: encrypting secret values with the executor key and the value store
+// (SPEC-v0.md, section 7; D-10, D-38, D-41).
 //
-// Значение секрета в открытом виде существует только у владельца в момент ввода и у исполнителя в момент
-// расшифровки. Формат шифртекста: age (X25519 + ChaCha20-Poly1305) в текстовой обёртке armor. В age нет связанных
-// данных, поэтому внутрь шифруется JSON с именем проекта и секрета, и расшифровка проверяет совпадение.
+// A secret value in clear text exists only with the owner at the moment of input and with the executor at the moment
+// decryption. The ciphertext format: age (X25519 + ChaCha20-Poly1305) in a text armor wrapper. age has no associated
+// the data, so a JSON with the project and secret names is encrypted inside, and decryption checks that they match.
 package secrets
 
 import (
@@ -26,7 +26,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
-// Пути и пределы (SPEC-v0.md, разделы 7 и 9).
+// Paths and limits (SPEC-v0.md, sections 7 and 9).
 const (
 	DefaultKeyPath    = "/etc/lite-deploy/exec.age"
 	DefaultPubPath    = "/etc/lite-deploy/exec.pub"
@@ -39,11 +39,11 @@ const (
 var (
 	projectRe = regexp.MustCompile(`\A[a-z][a-z0-9-]{1,30}\z`)
 	nameRe    = regexp.MustCompile(`\A_?[a-z][a-z0-9_]{1,63}\z`)
-	// ArmorPattern форма шифртекста для проверки в плане и параметрах действий.
+	// ArmorPattern is the ciphertext shape for checks in the plan and in action parameters.
 	ArmorPattern = `^-----BEGIN AGE ENCRYPTED FILE-----\n[A-Za-z0-9+/=\n]{20,}-----END AGE ENCRYPTED FILE-----$`
 )
 
-// Ошибки проверки.
+// Validation errors.
 var (
 	ErrInvalid  = errors.New("secrets: invalid value")
 	ErrBinding  = errors.New("secrets: the ciphertext belongs to another project or name")
@@ -59,13 +59,13 @@ type payload struct {
 	CreatedAt string `json:"created_at"`
 }
 
-// ValidName проверяет имя секрета; служебные имена с «_» разрешены.
+// ValidName validates a secret name; internal names with "_" are allowed.
 func ValidName(name string) bool { return nameRe.MatchString(name) }
 
-// ValidProject проверяет имя проекта.
+// ValidProject validates a project name.
 func ValidProject(p string) bool { return projectRe.MatchString(p) }
 
-// ValidateValue проверяет значение: не пусто, до 8 КиБ, без NUL.
+// ValidateValue validates a value: not empty, up to 8 KiB, no NUL.
 func ValidateValue(v []byte) error {
 	switch {
 	case len(v) == 0:
@@ -78,7 +78,7 @@ func ValidateValue(v []byte) error {
 	return nil
 }
 
-// GenerateIdentity создаёт пару X25519: закрытый ключ (AGE-SECRET-KEY-1…) и открытый (age1…).
+// GenerateIdentity creates an X25519 pair: a private key (AGE-SECRET-KEY-1…) and a public one (age1…).
 func GenerateIdentity() (secret, public string, err error) {
 	id, err := age.GenerateX25519Identity()
 	if err != nil {
@@ -87,7 +87,7 @@ func GenerateIdentity() (secret, public string, err error) {
 	return id.String(), id.Recipient().String(), nil
 }
 
-// Encrypt шифрует значение открытым ключом исполнителя (age1…) и привязывает его к проекту и имени.
+// Encrypt encrypts a value with the executor public key (age1…) and binds it to the project and name.
 func Encrypt(pubkey, project, name string, value []byte, now time.Time) (string, error) {
 	if !ValidProject(project) {
 		return "", fmt.Errorf("%w: project name", ErrInvalid)
@@ -133,7 +133,7 @@ func Encrypt(pubkey, project, name string, value []byte, now time.Time) (string,
 
 func utf8Valid(b []byte) bool { return bytes.Equal(bytes.ToValidUTF8(b, []byte{0xEF, 0xBF, 0xBD}), b) }
 
-// Decrypt расшифровывает шифртекст закрытым ключом и проверяет привязку к проекту и имени.
+// Decrypt decrypts a ciphertext with the private key and checks the binding to the project and name.
 func Decrypt(secretKey, ciphertext, project, name string) ([]byte, error) {
 	if len(ciphertext) > MaxCiphertextSize {
 		return nil, fmt.Errorf("%w: ciphertext is larger than %d bytes", ErrDecrypt, MaxCiphertextSize)
@@ -166,16 +166,16 @@ func Decrypt(secretKey, ciphertext, project, name string) ([]byte, error) {
 	return v, nil
 }
 
-// Store хранилище значений: <Dir>/<проект>/<имя>, файлы 600, каталоги 700. Работает от root.
+// Store is a value store: <Dir>/<project>/<name>, files 600, directories 700. Runs as root.
 type Store struct {
 	FS  host.FS
 	Dir string
 }
 
-// NewStore хранилище по умолчанию.
+// NewStore is the default store.
 func NewStore(fsys host.FS) *Store { return &Store{FS: fsys, Dir: DefaultStoreDir} }
 
-// NewStoreAt хранилище в заданном каталоге.
+// NewStoreAt is a store in the given directory.
 func NewStoreAt(fsys host.FS, dir string) *Store { return &Store{FS: fsys, Dir: dir} }
 
 func (s *Store) path(project, name string) (string, error) {
@@ -185,7 +185,7 @@ func (s *Store) path(project, name string) (string, error) {
 	return s.Dir + "/" + project + "/" + name, nil
 }
 
-// Put записывает значение. Возвращает true, если значение изменилось (сравнение по хэшу, а не по тексту).
+// Put writes a value. It returns true if the value changed (compared by hash, not by text).
 func (s *Store) Put(project, name string, value []byte) (bool, error) {
 	if err := ValidateValue(value); err != nil {
 		return false, err
@@ -211,7 +211,7 @@ func (s *Store) Put(project, name string, value []byte) (bool, error) {
 	return true, s.FS.WriteFile(p, value, 0o600)
 }
 
-// Get читает значение (нужно исполнителю при записи env-файлов; в CLI и API такой команды нет, D-10).
+// Get reads a value (the executor needs it to write env files; the CLI and API have no such command, D-10).
 func (s *Store) Get(project, name string) ([]byte, error) {
 	p, err := s.path(project, name)
 	if err != nil {
@@ -224,13 +224,13 @@ func (s *Store) Get(project, name string) ([]byte, error) {
 	return b, err
 }
 
-// Entry имя секрета и время записи.
+// Entry is a secret name and the time it was written.
 type Entry struct {
 	Name      string    `json:"name"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// List перечисляет имена и время записи; значений не читает.
+// List lists names and write times; it does not read values.
 func (s *Store) List(project string) ([]Entry, error) {
 	if !ValidProject(project) {
 		return nil, fmt.Errorf("%w: project name", ErrInvalid)
@@ -257,8 +257,8 @@ func (s *Store) List(project string) ([]Entry, error) {
 	return out, nil
 }
 
-// EnsureKey создаёт пару ключей исполнителя, если её ещё нет. Существующий закрытый ключ не перезаписывается никогда:
-// иначе все ранее выданные шифртексты перестали бы расшифровываться. Возвращает открытый ключ и признак «создан сейчас».
+// EnsureKey creates the executor key pair if there is none yet. An existing private key is never overwritten:
+// otherwise all previously issued ciphertexts would stop decrypting. It returns the public key and a "created now" flag.
 func EnsureKey(fsys host.FS, keyPath, pubPath string) (pub string, created bool, err error) {
 	if old, err := fsys.ReadFile(keyPath); err == nil {
 		id, perr := age.ParseX25519Identity(strings.TrimSpace(string(old)))
@@ -266,7 +266,7 @@ func EnsureKey(fsys host.FS, keyPath, pubPath string) (pub string, created bool,
 			return "", false, fmt.Errorf("%s exists but could not be parsed: %w", keyPath, perr)
 		}
 		pub = id.Recipient().String()
-		// открытый ключ можно восстановить из закрытого
+		// the public key can be restored from the private one
 		if cur, err := fsys.ReadFile(pubPath); err != nil || strings.TrimSpace(string(cur)) != pub {
 			if err := fsys.WriteFile(pubPath, []byte(pub+"\n"), 0o644); err != nil {
 				return "", false, err

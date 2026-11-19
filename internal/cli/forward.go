@@ -14,9 +14,9 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// Команды, которым нужны права root, обычный администратор (группа sudo или wheel) выполняет без sudo:
-// CLI передаёт их агенту, а исполнитель (root, запускается systemd) выполняет только действия из фиксированного списка.
-// Под root (sudo) команды по-прежнему выполняются на месте.
+// Commands that need root rights are run by a regular administrator (group sudo or wheel) without sudo:
+// the CLI hands them to the agent, and the executor (root, started by systemd) performs only actions from a fixed list.
+// Under root (sudo) commands still run in place.
 
 func (e Env) agentSock() string {
 	if e.Getenv != nil && e.Getenv("LITE_DEPLOY_SOCK") != "" {
@@ -25,7 +25,7 @@ func (e Env) agentSock() string {
 	return agent.APISocket
 }
 
-// callAgent отправляет запрос агенту и возвращает конверт ответа.
+// callAgent sends a request to the agent and returns the response envelope.
 func callAgent(env Env, method, path string, body any) ([]byte, *ErrorBody) {
 	var raw []byte
 	if body != nil {
@@ -43,7 +43,7 @@ func callAgent(env Env, method, path string, body any) ([]byte, *ErrorBody) {
 	return []byte(strings.TrimSpace(string(out))), nil
 }
 
-// fromEnvelope превращает ответ агента в результат команды (для читаемого вывода данные печатаются как есть).
+// fromEnvelope turns an agent answer into a command result (for readable output the data is printed as is).
 func fromEnvelope(raw []byte, command string) result {
 	var e Envelope
 	if err := json.Unmarshal(raw, &e); err != nil {
@@ -72,7 +72,7 @@ func renderData(d any) string {
 	return string(b) + "\n"
 }
 
-// pipedStdin читает стандартный ввод, если он не терминал (так передаются пароли и ключи, а не аргументами).
+// pipedStdin reads standard input if it is not a terminal (this is how passwords and keys are passed, not as arguments).
 func pipedStdin(env Env) (string, error) {
 	if env.Stdin == nil || (env.Interactive != nil && env.Interactive()) {
 		return "", nil
@@ -87,7 +87,7 @@ func pipedStdin(env Env) (string, error) {
 	return string(b), nil
 }
 
-// forwardPlugin выполняет команду плагина через агента.
+// forwardPlugin runs a plugin command through the agent.
 func forwardPlugin(env Env, command, plug, cmd string, args []string) result {
 	in, err := pipedStdin(env)
 	if err != nil {
@@ -107,7 +107,7 @@ func forwardPlugin(env Env, command, plug, cmd string, args []string) result {
 	return fromEnvelope(raw, command)
 }
 
-// forwardFix выполняет безопасные исправления через агента.
+// forwardFix runs the safe fixes through the agent.
 func forwardFix(env Env) result {
 	raw, bad := callAgent(env, "POST", "/v1/fix", map[string]string{})
 	if bad != nil {
@@ -116,7 +116,7 @@ func forwardFix(env Env) result {
 	return fromEnvelope(raw, "fix")
 }
 
-// forwardProjectCreate создаёт проект без sudo: предпросмотр плана и создание идут через агента.
+// forwardProjectCreate creates a project without sudo: the plan preview and the creation go through the agent.
 func forwardProjectCreate(env Env, file string, yes, rotate bool, cts []string) result {
 	const command = "project.create"
 	data, err := readInput(env, file)
@@ -178,7 +178,7 @@ func previewSteps(d any) string {
 	return sb.String()
 }
 
-// forwardVerify выполняет verify через агента. false: агент недоступен, проверку нужно делать на месте (с неполными правами).
+// forwardVerify runs verify through the agent. false: the agent is unavailable, the check has to run on the spot (with incomplete rights).
 func forwardVerify(env Env) (result, bool) {
 	raw, bad := callAgent(env, "GET", "/v1/verify", nil)
 	if bad != nil {
@@ -211,8 +211,8 @@ func (e Env) currentUser() string {
 	return ""
 }
 
-// viaAgent: выкатку и откат проекта выполняет сам пользователь проекта (CI через привратник) или root.
-// Администратор, не являющийся ни тем ни другим, передаёт команду агенту: исполнитель выполнит её от имени проекта.
+// viaAgent: a deploy and a rollback of a project are run by the project user itself (CI through the gatekeeper) or by root.
+// An administrator who is neither passes the command to the agent: the executor runs it as the project.
 func (e Env) viaAgent(project string) bool { return !e.root() && e.currentUser() != project }
 
 func forwardProject(env Env, command, path string, body map[string]string) result {
@@ -232,7 +232,7 @@ func forwardProject(env Env, command, path string, body map[string]string) resul
 	return r
 }
 
-// forwardStatus показывает состояние проектов через агента.
+// forwardStatus shows the state of projects through the agent.
 func forwardStatus(env Env, pos []string) result {
 	path := "/v1/status"
 	if len(pos) == 1 {

@@ -17,7 +17,7 @@ import (
 
 type ctxKey struct{}
 
-// WithUID кладёт uid вызывающего в контекст запроса (в работе его ставит ConnContext по SO_PEERCRED).
+// WithUID puts the caller uid into the request context (in production ConnContext sets it from SO_PEERCRED).
 func WithUID(ctx context.Context, uid int) context.Context {
 	return context.WithValue(ctx, ctxKey{}, uid)
 }
@@ -29,17 +29,17 @@ func uidOf(ctx context.Context) int {
 	return -1
 }
 
-// Agent HTTP-агент. Сам систему не меняет: все действия идут через исполнитель.
+// Agent is the HTTP agent. It does not change the system itself: every action goes through the executor.
 type Agent struct {
-	// ExecDial соединение с исполнителем (сокет systemd /run/lite-deploy/exec.sock).
+	// ExecDial connects to the executor (the systemd socket /run/lite-deploy/exec.sock).
 	ExecDial func(ctx context.Context) (net.Conn, error)
-	// Allowed по uid вызывающего возвращает имя и разрешение.
+	// Allowed returns the name and the permission for the caller uid.
 	Allowed func(uid int) (string, bool)
-	// Audit журнал запросов агента (по строке JSON), может быть nil.
+	// Audit is the agent request journal (one JSON line each), may be nil.
 	Audit   io.Writer
 	Now     func() time.Time
 	Version string
-	// Timeout обмена с исполнителем; выкатка может идти минуты.
+	// Timeout of the exchange with the executor; a deploy can take minutes.
 	Timeout time.Duration
 }
 
@@ -69,7 +69,7 @@ func (a *Agent) audit(name string, uid int, method, path string, status int, res
 	_, _ = a.Audit.Write(append(b, '\n'))
 }
 
-// exec отправляет запрос исполнителю и возвращает его ответ (конверт JSON).
+// exec sends a request to the executor and returns its answer (a JSON envelope).
 func (a *Agent) exec(ctx context.Context, req Request) []byte {
 	to := a.Timeout
 	if to == 0 {
@@ -98,7 +98,7 @@ func (a *Agent) exec(ctx context.Context, req Request) []byte {
 	return out
 }
 
-// readBundle читает тело запроса целиком (JSON-пакет) с пределом MaxBody.
+// readBundle reads the whole request body (a JSON bundle) with the MaxBody limit.
 func readBundle(r *http.Request) (string, bool) {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 		return "", false
@@ -119,7 +119,7 @@ func readJSON(r *http.Request, v any) bool {
 	return dec.Decode(v) == nil
 }
 
-// Handler HTTP-обработчик API /v1.
+// Handler is the HTTP handler of the /v1 API.
 func (a *Agent) Handler() http.Handler {
 	mux := http.NewServeMux()
 	route := func(method, path string, build func(r *http.Request) (Request, bool)) {
@@ -249,7 +249,7 @@ func (a *Agent) Handler() http.Handler {
 	return mux
 }
 
-// Serve обслуживает соединения, пока не отменён ctx. uid вызывающего определяется ядром (SO_PEERCRED).
+// Serve handles connections until ctx is canceled. The caller uid is determined by the kernel (SO_PEERCRED).
 func (a *Agent) Serve(ctx context.Context, ln net.Listener) error {
 	srv := &http.Server{Handler: a.Handler(), ReadHeaderTimeout: 10 * time.Second,
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
@@ -266,7 +266,7 @@ func (a *Agent) Serve(ctx context.Context, ln net.Listener) error {
 	return nil
 }
 
-// GroupAllowed разрешает пользователей, входящих в группу (основная или дополнительная), по /etc/passwd и /etc/group.
+// GroupAllowed allows users who belong to the group (primary or supplementary), per /etc/passwd and /etc/group.
 func GroupAllowed(fs host.FS, group string) func(uid int) (string, bool) {
 	return func(uid int) (string, bool) {
 		pw, err := fs.ReadFile("/etc/passwd")
@@ -307,7 +307,7 @@ func GroupAllowed(fs host.FS, group string) func(uid int) (string, bool) {
 	}
 }
 
-// Call выполняет запрос к агенту через unix-сокет и возвращает тело ответа.
+// Call sends a request to the agent over a unix socket and returns the response body.
 func Call(ctx context.Context, sock, method, path string, body []byte) ([]byte, error) {
 	tr := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", sock)

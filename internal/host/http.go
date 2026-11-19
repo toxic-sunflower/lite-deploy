@@ -8,22 +8,22 @@ import (
 	"time"
 )
 
-// HTTPResponse ответ на GET.
+// HTTPResponse is the answer to a GET.
 type HTTPResponse struct {
 	Status int
 	Header http.Header
 	Body   []byte
 }
 
-// HTTPClient выполняет GET с заданным заголовком Host. Нужен для проверок Caddy и здоровья сервисов.
+// HTTPClient performs GET with a given Host header. It is needed for Caddy and service health checks.
 type HTTPClient interface {
 	Get(ctx context.Context, url, hostHeader string) (HTTPResponse, error)
 }
 
-// NetHTTP настоящий клиент: без переходов по редиректам, таймаут 5 секунд, тело до 64 КиБ.
+// NetHTTP is the real client: no redirects, a 5 second timeout, a body of up to 64 KiB.
 type NetHTTP struct{}
 
-// Get выполняет запрос.
+// Get performs the request.
 func (NetHTTP) Get(ctx context.Context, url, hostHeader string) (HTTPResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -47,13 +47,13 @@ func (NetHTTP) Get(ctx context.Context, url, hostHeader string) (HTTPResponse, e
 	return HTTPResponse{Status: resp.StatusCode, Header: resp.Header, Body: body}, nil
 }
 
-// FakeHTTP подмена для тестов.
+// FakeHTTP is a test double.
 type FakeHTTP struct {
 	Calls   []string
 	Handler func(url, hostHeader string) (HTTPResponse, error)
 }
 
-// Get записывает вызов и вызывает Handler.
+// Get records the call and calls Handler.
 func (f *FakeHTTP) Get(_ context.Context, url, hostHeader string) (HTTPResponse, error) {
 	f.Calls = append(f.Calls, url+" Host="+hostHeader)
 	if f.Handler == nil {

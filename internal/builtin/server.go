@@ -9,7 +9,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/servers"
 )
 
-// Server плагин `server`: реестр других серверов (имя и адрес), на которые ссылаются проекты.
+// Server is the `server` plugin: the registry of other servers (name and address) that projects refer to.
 type Server struct{}
 
 func (Server) Name() string       { return "server" }

@@ -12,14 +12,14 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// Пути Caddy.
+// Caddy paths.
 const (
 	caddyfile    = "/etc/caddy/Caddyfile"
 	caddyConfDir = "/etc/caddy/conf.d"
 	caddyMark    = "# managed-by: lite-deploy"
 )
 
-// Caddy плагин `caddy`: входящий трафик (HTTP) для проектов.
+// Caddy is the `caddy` plugin: incoming (HTTP) traffic for projects.
 type Caddy struct{}
 
 func (Caddy) Name() string       { return "caddy" }
@@ -38,8 +38,8 @@ func (Caddy) Commands() []plugin.Command {
 	}
 }
 
-// InstallCaddy ставит Caddy (на Debian и Ubuntu из официального репозитория) и главный Caddyfile,
-// который подключает сайты проектов из /etc/caddy/conf.d, затем запускает службу.
+// InstallCaddy installs Caddy (on Debian and Ubuntu from the official repository) and the main Caddyfile,
+// which serves the project sites from /etc/caddy/conf.d, then starts the service.
 func InstallCaddy(ctx context.Context, env plugin.Env, say Say) error {
 	t := tools{ctx, env}
 	m := t.manager()
@@ -97,7 +97,7 @@ func InstallCaddy(ctx context.Context, env plugin.Env, say Say) error {
 	return t.must("systemctl", "reload", "caddy")
 }
 
-// caddyApt подключает официальный репозиторий Caddy и ставит пакет (как в официальной инструкции).
+// caddyApt adds the official Caddy repository and installs the package (as in the official instructions).
 func (t tools) caddyApt() error {
 	if err := t.install("debian-keyring", "debian-archive-keyring", "apt-transport-https", "curl", "gnupg"); err != nil {
 		return err

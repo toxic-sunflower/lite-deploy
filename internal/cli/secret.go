@@ -18,7 +18,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/secrets"
 )
 
-// CodeInvalidSecret недопустимое имя или значение секрета.
+// CodeInvalidSecret is an invalid secret name or value.
 const CodeInvalidSecret = "invalid_secret"
 
 func (e Env) keyPath() string {
@@ -44,12 +44,12 @@ func (e Env) secretsDir() string {
 
 func (e Env) root() bool { return e.IsRoot != nil && e.IsRoot() }
 
-// readSecretValue читает значение секрета: скрыто с терминала или со стандартного ввода.
-// Значение никогда не берётся из аргументов или переменных окружения (SPEC-v0.md, 6.1).
+// readSecretValue reads a secret value: hidden from the terminal or from standard input.
+// The value is never taken from arguments or environment variables (SPEC-v0.md, 6.1).
 func readSecretValue(env Env) ([]byte, error) {
-	if f, ok := env.Stdin.(*os.File); ok && term.IsTerminal(int(f.Fd())) { //nolint:gosec // дескриптор терминала помещается в int
+	if f, ok := env.Stdin.(*os.File); ok && term.IsTerminal(int(f.Fd())) { //nolint:gosec // the terminal descriptor fits into an int
 		_, _ = fmt.Fprint(env.Stderr, "Secret value (input hidden): ")
-		b, err := term.ReadPassword(int(f.Fd())) //nolint:gosec // см. выше
+		b, err := term.ReadPassword(int(f.Fd())) //nolint:gosec // see above
 		_, _ = fmt.Fprintln(env.Stderr)
 		return b, err
 	}
@@ -68,8 +68,8 @@ func readSecretValue(env Env) ([]byte, error) {
 
 const initUsage = "usage: lite init [--user name[,name…]] [--all-users] [--ufw keep|off|http|max] [--plugins caddy,podman,pg,security] [--yes]"
 
-// cmdInit готовит сервер к работе: ключ исполнителя и каталоги, пользователи-администраторы с SSH-ключами,
-// вход по SSH только по ключу, режим файервола, плагины. Единственная команда, которую можно запускать прямо от root.
+// cmdInit prepares the server for work: the executor key and directories, administrator users with SSH keys,
+// SSH login by key only, the firewall mode, the plugins. The only command that may be run directly as root.
 func cmdInit(args []string, env Env) result {
 	fl := flag.NewFlagSet("init", flag.ContinueOnError)
 	var users listFlag
@@ -216,7 +216,7 @@ func secretSet(args []string, env Env) result {
 	if changed {
 		word = "saved"
 	}
-	// значение и шифртекст не печатаются
+	// the value and the ciphertext are not printed
 	return result{command: "secret.set", data: map[string]any{"project": pos[0], "name": pos[1], "changed": changed},
 		text: fmt.Sprintf("Secret %s of project %s %s.\n", pos[1], pos[0], word)}
 }
@@ -240,7 +240,7 @@ func secretList(args []string, env Env) result {
 	} else if errors.Is(err, secrets.ErrInvalid) {
 		return fail("secret.list", CodeInvalidSecret, err.Error())
 	} else {
-		// без прав root каталог секретов недоступен: имена берём из несекретного состояния проекта (D-49), времени там нет
+		// without root the secrets directory is not accessible: names are taken from the non-secret project state (D-49), there is no time there
 		st, serr := plan.LoadState(env.FS, env.Paths)
 		if serr != nil {
 			return fail("secret.list", plan.CodePrecondition, serr.Error())

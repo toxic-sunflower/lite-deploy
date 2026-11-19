@@ -13,7 +13,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// Podman плагин `podman`: движок контейнеров для проектов.
+// Podman is the `podman` plugin: the container engine for projects.
 type Podman struct{}
 
 func (Podman) Name() string       { return "podman" }
@@ -30,7 +30,7 @@ func (Podman) Commands() []plugin.Command {
 	}
 }
 
-// projectsOf проекты для команды: указанный или все.
+// projectsOf are the projects for a command: the given one or all.
 func projectsOf(env plugin.Env, args []string) ([]string, error) {
 	if len(args) == 0 {
 		return env.Projects, nil
@@ -45,12 +45,12 @@ func projectsOf(env plugin.Env, args []string) ([]string, error) {
 
 func podmanPackages(manager string) []string {
 	if manager == "apt" {
-		return []string{"podman", "uidmap", "dbus-user-session", "libpam-systemd"} // две последние нужны пользовательским службам systemd (rootless Quadlet)
+		return []string{"podman", "uidmap", "dbus-user-session", "libpam-systemd"} // the last two are needed by user systemd services (rootless Quadlet)
 	}
 	return []string{"podman"}
 }
 
-// InstallPodman ставит podman.
+// InstallPodman installs podman.
 func InstallPodman(ctx context.Context, env plugin.Env, say Say) error {
 	t := tools{ctx, env}
 	say.say("Plugin podman: installing packages...")
@@ -114,7 +114,7 @@ func (Podman) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 		return []plugin.Finding{finding("podman", "installed", plugin.LevelOK, "podman is not installed (not in use)", "")}
 	}
 	v := strings.TrimSpace(string(res.Stdout))
-	// podman 4.4+ допустим, ниже 5.0 есть предупреждение (как в verify_host)
+	// podman 4.4+ is acceptable, below 5.0 there is a warning (as in verify_host)
 	var maj, min int
 	if _, err := fmt.Sscanf(v, "podman version %d.%d", &maj, &min); err == nil && (maj < 4 || (maj == 4 && min < 4)) {
 		return []plugin.Finding{finding("podman", "version", plugin.LevelFail, v+": version 4.4 or newer is required", "sudo lite package update podman")}
@@ -134,7 +134,7 @@ func (Podman) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	return out
 }
 
-// PG плагин `pg`: PostgreSQL на хосте, общий для проектов.
+// PG is the `pg` plugin: PostgreSQL on the host, shared by projects.
 type PG struct{}
 
 func (PG) Name() string       { return "pg" }
@@ -163,8 +163,8 @@ func (PG) Commands() []plugin.Command {
 	}
 }
 
-// pgSecretDir каталог паролей ролей; читает только root.
-const pgSecretDir = "/etc/lite-deploy/secrets" //nolint:gosec // это путь к каталогу, а не пароль
+// pgSecretDir is the directory of role passwords; only root reads it.
+const pgSecretDir = "/etc/lite-deploy/secrets" //nolint:gosec // this is a directory path, not a password
 
 var pgNameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
 
@@ -176,7 +176,7 @@ func randomHex(n int) (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// createDB создаёт роль (с паролем из файла, который создаётся при необходимости) и базу. Повторный вызов безопасен.
+// createDB creates a role (with a password from a file that is created if needed) and a database. A repeated call is safe.
 func (t tools) createDB(db, role, given string) error {
 	if !pgNameRe.MatchString(db) || !pgNameRe.MatchString(role) {
 		return plugin.Errorf("usage", "database and role names: lowercase Latin letters, digits and _, up to 40 characters, starting with a letter")
@@ -203,7 +203,7 @@ func (t tools) createDB(db, role, given string) error {
 			return plugin.Errorf("step_failed", "file %s: %v", secret, err)
 		}
 	}
-	// имена проверены выше, пароль шестнадцатеричный: подстановка в SQL безопасна
+	// the names were checked above, the password is hexadecimal: substitution into SQL is safe
 	exists, err := t.psql(fmt.Sprintf("select 1 from pg_roles where rolname='%s'", role))
 	if err != nil {
 		return err
@@ -237,14 +237,14 @@ func pgPackages(manager string) []string {
 	return []string{"postgresql-server"}
 }
 
-// InstallPG ставит PostgreSQL.
+// InstallPG installs PostgreSQL.
 func InstallPG(ctx context.Context, env plugin.Env, say Say) error {
 	t := tools{ctx, env}
 	say.say("Plugin pg: installing packages...")
 	return t.install(pgPackages(t.manager())...)
 }
 
-// psqlSecret выполняет SQL с паролем: текст идёт через stdin и не попадает в список процессов.
+// psqlSecret runs SQL with a password: the text goes through stdin and does not appear in the process list.
 func (t tools) psqlSecret(sql string) error {
 	res, err := t.env.Runner.Run(t.ctx, host.Cmd{Name: "runuser", Args: []string{"-u", "postgres", "--", "psql", "-At", "-v", "ON_ERROR_STOP=1"}, Stdin: []byte(sql + "\n"), Timeout: 5 * time.Minute})
 	if err != nil {
@@ -393,12 +393,12 @@ func (PG) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	return out
 }
 
-// PluginNames имена плагинов, которые ставит lite init --plugins (postgres принимается как прежнее имя pg).
+// PluginNames are the names of the plugins that lite init --plugins installs (postgres is accepted as the old name of pg).
 func PluginNames() []string {
 	return []string{"caddy", "pg", "podman", "redis", "security", "backblaze", "s3", "sftp"}
 }
 
-// InstallPlugin ставит плагин по имени для lite init. Для security включается вся защита сервера.
+// InstallPlugin installs a plugin by name for lite init. For security the whole server protection is enabled.
 func InstallPlugin(ctx context.Context, env plugin.Env, name string, say Say) error {
 	switch name {
 	case "caddy":
@@ -419,7 +419,7 @@ func InstallPlugin(ctx context.Context, env plugin.Env, name string, say Say) er
 	return plugin.Errorf("usage", "unknown plugin %q (available: %s)", name, strings.Join(PluginNames(), ", "))
 }
 
-// setPassword меняет пароль существующей роли и обновляет файл секрета.
+// setPassword changes the password of an existing role and updates the secret file.
 func (t tools) setPassword(role, pass string) error {
 	have, err := t.psql(fmt.Sprintf("select 1 from pg_roles where rolname='%s'", role))
 	if err != nil {

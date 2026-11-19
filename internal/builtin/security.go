@@ -14,8 +14,8 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// Файлы, которыми управляет плагин security. Файл sshd назван так, чтобы читаться раньше cloud-init (50-cloud-init.conf):
-// sshd берёт первое значение параметра, и более ранний файл побеждает.
+// The files managed by the security plugin. The sshd file is named so that it is read before cloud-init (50-cloud-init.conf):
+// sshd takes the first value of a parameter, and an earlier file wins.
 const (
 	sshdDir        = "/etc/ssh/sshd_config.d"
 	SSHSecurity    = sshdDir + "/01-lite-security.conf"
@@ -47,10 +47,10 @@ fs.protected_hardlinks = 1
 fs.protected_symlinks = 1
 `
 
-// sysctlChecks параметры ядра, которые проверяет verify.
+// sysctlChecks are the kernel parameters that verify checks.
 var sysctlChecks = [][2]string{{"net.ipv4.tcp_syncookies", "1"}, {"net.ipv4.conf.all.rp_filter", "1"}, {"net.ipv4.conf.all.accept_redirects", "0"}, {"net.ipv4.conf.all.accept_source_route", "0"}}
 
-// Security плагин `security`: защита сервера (R-23).
+// Security is the `security` plugin: server protection (R-23).
 type Security struct{}
 
 func (Security) Name() string       { return "security" }
@@ -78,7 +78,7 @@ type sec struct{ tools }
 
 func newSec(ctx context.Context, env plugin.Env) *sec { return &sec{tools{ctx, env}} }
 
-// sshdEffective действующие настройки sshd (`sshd -T`), имена в нижнем регистре.
+// sshdEffective is the effective sshd settings (`sshd -T`), names in lower case.
 func (s *sec) sshdEffective() (map[string]string, error) {
 	res, err := s.run("sshd", "-T")
 	if err != nil {
@@ -96,7 +96,7 @@ func (s *sec) sshdEffective() (map[string]string, error) {
 			}
 		}
 	}
-	// в новых версиях OpenSSH sshd -T печатает prohibit-password как without-password: это одно значение
+	// in newer OpenSSH versions sshd -T prints prohibit-password as without-password: it is one value
 	if m["permitrootlogin"] == "without-password" {
 		m["permitrootlogin"] = "prohibit-password"
 	}
@@ -112,7 +112,7 @@ func (s *sec) sshPort() int {
 	return 22
 }
 
-// account запись /etc/passwd.
+// account is an /etc/passwd entry.
 type account struct {
 	Name, Home, Shell string
 	UID               int
@@ -135,7 +135,7 @@ func (s *sec) accounts() []account {
 	return out
 }
 
-// admins пользователи групп sudo и wheel.
+// admins are the users of the sudo and wheel groups.
 func (s *sec) admins() []string {
 	b, err := s.env.FS.ReadFile("/etc/group")
 	if err != nil {
@@ -178,9 +178,9 @@ func (s *sec) hasKey(user string) bool {
 	return false
 }
 
-// sshConf то, что plugin security хранит в файле sshd.
+// sshConf is what the security plugin keeps in the sshd file.
 type sshConf struct {
-	Root       string // prohibit-password или no
+	Root       string // prohibit-password or no
 	AllowUsers []string
 }
 
@@ -212,7 +212,7 @@ func (c sshConf) body() string {
 	return sb.String()
 }
 
-// guardSSH не даёт запереть сервер: должен остаться администратор с ключом, а у вызывающего должен быть ключ.
+// guardSSH keeps the server from being locked out: an administrator with a key must remain, and the caller must have a key.
 func (s *sec) guardSSH(c sshConf) error {
 	var keyed []string
 	for _, a := range s.admins() {
@@ -253,8 +253,8 @@ func (s *sec) guardSSH(c sshConf) error {
 	return nil
 }
 
-// applySSH записывает файл sshd, проверяет конфигурацию и действующие значения, перечитывает sshd.
-// При любой неудаче прежнее состояние возвращается.
+// applySSH writes the sshd file, checks the configuration and the effective values, reloads sshd.
+// On any failure the previous state is restored.
 func (s *sec) applySSH(c sshConf) error {
 	if err := s.guardSSH(c); err != nil {
 		return err
@@ -281,7 +281,7 @@ func (s *sec) applySSH(c sshConf) error {
 			_ = fs.Remove(SSHSecurity)
 		}
 	}
-	// каталог разделения привилегий создаёт служба ssh при старте; при запуске по сокету его может ещё не быть
+	// the privilege separation directory is created by the ssh service at start; with socket activation it may not exist yet
 	_ = fs.MkdirAll("/run/sshd", 0o755)
 	if err := s.must("sshd", "-t"); err != nil {
 		restore()
@@ -298,8 +298,8 @@ func (s *sec) applySSH(c sshConf) error {
 		e.Hint = "check sshd -T and the files in " + sshdDir + " and /etc/ssh/sshd_config"
 		return e
 	}
-	// служба называется ssh (Debian, Ubuntu) или sshd; если ни одна не запущена (запуск по сокету), перечитывать нечего:
-	// настройки применятся при старте
+	// the service is called ssh (Debian, Ubuntu) or sshd; if neither is running (socket activation) there is nothing to reload:
+	// the settings take effect at start
 	for _, unit := range []string{"ssh", "sshd"} {
 		if !s.ok("systemctl", "is-active", "--quiet", unit) {
 			continue
@@ -313,7 +313,7 @@ func (s *sec) applySSH(c sshConf) error {
 	return nil
 }
 
-// waitStep пауза между повторами шагов, которые ждут службу; в тестах подменяется.
+// waitStep is the pause between repeats of steps that wait for a service; replaced in tests.
 var waitStep = time.Sleep
 
 func (s *sec) fail2ban() error {
@@ -333,7 +333,7 @@ func (s *sec) fail2ban() error {
 	if err := s.must("systemctl", "restart", "fail2ban"); err != nil {
 		return err
 	}
-	// после restart fail2ban поднимает сокет не сразу: ждём до 20 секунд
+	// after restart fail2ban brings up its socket not at once: wait up to 20 seconds
 	var jailErr error
 	for i := 0; i < 20; i++ {
 		if jailErr = s.must("fail2ban-client", "status", "sshd"); jailErr == nil {
@@ -347,7 +347,7 @@ func (s *sec) fail2ban() error {
 	return nil
 }
 
-// setINI задаёт key = value в разделе section файла в формате ini (раздел и ключ создаются, если их нет).
+// setINI sets key = value in section of an ini-format file (the section and the key are created if missing).
 func setINI(text, section, key, value string) string {
 	lines := strings.Split(text, "\n")
 	in, secAt := false, -1
@@ -373,7 +373,7 @@ func setINI(text, section, key, value string) string {
 	return strings.TrimRight(text, "\n") + "\n[" + section + "]\n" + key + " = " + value + "\n"
 }
 
-// updates включает автоматическую установку обновлений безопасности; возвращает пояснение, если менеджер не поддерживается.
+// updates turns on automatic installation of security updates; it returns an explanation if the package manager is not supported.
 func (s *sec) updates() (string, error) {
 	switch s.manager() {
 	case "apt":
@@ -555,7 +555,7 @@ func contains(l []string, s string) bool {
 	return false
 }
 
-// logins: последние успешные входы и неудачные попытки по журналу sshd.
+// logins: recent successful logins and failed attempts from the sshd journal.
 func (s *sec) logins(args []string) (plugin.Output, error) {
 	n := 20
 	if len(args) > 1 {
@@ -657,7 +657,7 @@ func (s *sec) findings() []plugin.Finding {
 		add("fail2ban", plugin.LevelOK, "fail2ban protects SSH", "")
 	}
 
-	// автообновления и ожидающие обновления безопасности
+	// automatic updates and pending security updates
 	switch s.manager() {
 	case "apt":
 		if res, err := s.run("apt-config", "dump"); err == nil && strings.Contains(string(res.Stdout), `APT::Periodic::Unattended-Upgrade "1"`) {
@@ -688,7 +688,7 @@ func (s *sec) findings() []plugin.Finding {
 		add("auto-updates", plugin.LevelWarn, "automatic security updates are off", "sudo lite security updates")
 	}
 
-	// параметры ядра
+	// kernel parameters
 	var bad []string
 	for _, kv := range sysctlChecks {
 		if res, err := s.run("sysctl", "-n", kv[0]); err == nil && res.ExitCode == 0 && strings.TrimSpace(string(res.Stdout)) != kv[1] {
@@ -701,7 +701,7 @@ func (s *sec) findings() []plugin.Finding {
 		add("sysctl", plugin.LevelOK, "protective kernel parameters are applied", "")
 	}
 
-	// администраторы
+	// administrators
 	if adm := s.admins(); len(adm) == 0 {
 		add("admins", plugin.LevelWarn, "the sudo and wheel groups are empty", "sudo lite init --user NAME")
 	} else {
@@ -718,12 +718,12 @@ func (s *sec) findings() []plugin.Finding {
 		}
 	}
 
-	// порты, слушающие снаружи
+	// ports that listen to the outside
 	out = append(out, s.portFindings()...)
 	return out
 }
 
-// portFindings порты, которые слушают на всех интерфейсах, кроме SSH и веб-портов.
+// portFindings are ports that listen on all interfaces, except SSH and the web ports.
 func (s *sec) portFindings() []plugin.Finding {
 	res, err := s.run("ss", "-Htuln")
 	if err != nil || res.ExitCode != 0 {
@@ -752,7 +752,7 @@ func (s *sec) portFindings() []plugin.Finding {
 			continue
 		}
 		proto := f[0]
-		if proto == "udp" && (skipUDP[n] || n >= 32768) { // 32768 и выше: временные порты клиентов
+		if proto == "udp" && (skipUDP[n] || n >= 32768) { // 32768 and above: ephemeral client ports
 			continue
 		}
 		k := port + "/" + proto

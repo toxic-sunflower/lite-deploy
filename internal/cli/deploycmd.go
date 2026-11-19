@@ -11,7 +11,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/deploy"
 )
 
-// deployEnv собирает окружение выкатки из окружения CLI.
+// deployEnv builds the deploy environment from the CLI environment.
 func deployEnv(env Env) deploy.Env {
 	asUser := env.IsRoot != nil && env.IsRoot()
 	sleep := env.Sleep
@@ -96,7 +96,7 @@ func cmdStatus(args []string, env Env) result {
 }
 
 func doStatus(pos []string, env Env) result {
-	// состояние слотов лежит в домашних каталогах проектов: администратору без root его показывает исполнитель
+	// the slot state lives in the project home directories: without root the executor shows it to the administrator
 	if !env.root() && (len(pos) == 0 || env.viaAgent(pos[0])) {
 		return forwardStatus(env, pos)
 	}
@@ -162,7 +162,7 @@ func statusText(st *deploy.StatusResult) string {
 	return sb.String()
 }
 
-// cmdGate привратник: команда из SSH_ORIGINAL_COMMAND (SPEC-v0.md, 5.5).
+// cmdGate is the gatekeeper: the command from SSH_ORIGINAL_COMMAND (SPEC-v0.md, 5.5).
 func cmdGate(args []string, env Env) result {
 	fs := flag.NewFlagSet("gate", flag.ContinueOnError)
 	name := fs.String("project", "", "")

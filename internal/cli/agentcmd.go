@@ -15,7 +15,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
-// Служебные команды: их запускают install.sh и systemd, вручную они не нужны.
+// Internal commands: install.sh and systemd run them, they are not needed by hand.
 const agentUsage = "usage: lite-deploy agent install | agent uninstall (internal, called by liteup) | agent serve (started by systemd)"
 
 func cmdAgent(args []string, env Env) result {
@@ -88,7 +88,7 @@ func agentServe(args []string, env Env) result {
 		}
 	}
 	var audit io.Writer
-	if f, err := os.OpenFile(agent.AuditPath(env.Getenv("STATE_DIRECTORY")), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640); err == nil { //nolint:gosec // путь из каталога состояния службы
+	if f, err := os.OpenFile(agent.AuditPath(env.Getenv("STATE_DIRECTORY")), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640); err == nil { //nolint:gosec // a path from the service state directory
 		defer func() { _ = f.Close() }()
 		audit = f
 	} else {
@@ -106,7 +106,7 @@ func agentServe(args []string, env Env) result {
 	return result{command: "agent.serve", text: "Agent stopped.\n"}
 }
 
-// cmdExec исполнитель: один запрос на стандартном вводе (сокет systemd), ответ на стандартный вывод.
+// cmdExec is the executor: one request on standard input (a systemd socket), the answer on standard output.
 func cmdExec(env Env) result {
 	if !env.root() {
 		return fail("exec", "permission_denied", "the executor is started by systemd as root")
@@ -123,7 +123,7 @@ func cmdExec(env Env) result {
 	return result{command: "exec", raw: bytes.TrimSpace(out.Bytes())}
 }
 
-// cmdCall клиент агента: lite-deploy call GET|POST /v1/путь (тело POST со стандартного ввода). Ответ агента выводится как есть.
+// cmdCall is the agent client: lite-deploy call GET|POST /v1/path (the POST body on standard input). The agent answer is printed as is.
 func cmdCall(args []string, env Env) result {
 	fs := flag.NewFlagSet("call", flag.ContinueOnError)
 	pos, err := parseArgs(fs, args)

@@ -30,7 +30,7 @@ func TestCanonicalRejects(t *testing.T) {
 }
 
 func TestCanonicalKeyOrderUTF16(t *testing.T) {
-	// суррогатная пара U+1F600 (0xD83D…) идёт раньше U+FF5E (0xFF5E) по кодовым единицам UTF-16
+	// the surrogate pair U+1F600 (0xD83D…) comes before U+FF5E (0xFF5E) by UTF-16 code units
 	got, err := Canonical([]byte("{\"\uff5e\":1,\"\U0001F600\":2}"))
 	if err != nil || string(got) != "{\"\U0001F600\":2,\"\uff5e\":1}" {
 		t.Fatalf("%s %v", got, err)

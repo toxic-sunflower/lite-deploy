@@ -1,7 +1,7 @@
-// Package schema проверяет Go-структуры и строит из них JSON Schema по тегам.
+// Package schema validates Go structs and builds a JSON Schema from them by tags.
 //
-// Одни и те же теги (pattern, enum, min, max, ...) служат и для проверки, и для
-// схемы, поэтому схема и Validate не расходятся (SPEC-v0.md, раздел 0).
+// The same tags (pattern, enum, min, max, ...) serve both for validation and for
+// schemas, so the schema and Validate do not diverge (SPEC-v0.md, section 0).
 package schema
 
 import (
@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 )
 
-// Issue описывает одну найденную ошибку (SPEC-v0.md, 2.2).
+// Issue describes one error found (SPEC-v0.md, 2.2).
 type Issue struct {
 	Path    string `json:"path" maxLen:"512" doc:"JSON Pointer to the field; slash for the whole document"`
 	Code    string `json:"code" maxLen:"32" doc:"error code"`
@@ -104,7 +104,7 @@ func ptr(parent, key string) string {
 	return parent + "/" + key
 }
 
-// Check проверяет значение v (структуру или указатель на структуру).
+// Check validates the value v (a struct or a pointer to a struct).
 func Check(v any) []Issue {
 	var out []Issue
 	checkValue(reflect.ValueOf(v), rules{}, true, "", &out)
@@ -194,7 +194,7 @@ func checkValue(v reflect.Value, r rules, required bool, path string, out *[]Iss
 			e := v.MapIndex(k)
 			if e.Kind() == reflect.String {
 				if e.String() == "" {
-					// пустое значение допустимо только если шаблон его пропускает
+					// an empty value is allowed only if the pattern lets it through
 					checkStringAllowEmpty(e.String(), r.valPattern, r.valMaxLen, kp, out)
 					continue
 				}
@@ -228,7 +228,7 @@ func checkString(s, pattern string, enum []string, maxLen *int, path string, out
 	}
 }
 
-// Reflect строит JSON Schema (draft 2020-12) для типа значения v.
+// Reflect builds a JSON Schema (draft 2020-12) for the type of the value v.
 func Reflect(v any, id, title string) map[string]any {
 	s := reflectType(reflect.TypeOf(v), rules{})
 	s["$schema"] = "https://json-schema.org/draft/2020-12/schema"

@@ -41,7 +41,7 @@ func TestLoadAndRun(t *testing.T) {
 	}
 	env := Env{Runner: fr, FS: m, User: "anna"}
 	fr.Handler = func(c host.Cmd) (host.Result, error) { return host.Result{Stdout: []byte("line 1")}, nil }
-	// не хватает пакета jq
+	// the jq package is missing
 	_, err := p.Run(context.Background(), env, "tail", []string{"caddy"})
 	var pe *Error
 	_ = errors.As(err, &pe)
@@ -126,7 +126,7 @@ func TestBadManifests(t *testing.T) {
 
 func TestDirOwnershipAndBrokenPlugin(t *testing.T) {
 	m, _, _, _ := setup(t, goodManifest)
-	m.Perms["/etc/lite-deploy/plugins/logs"] = 0o777 // доступен для записи всем
+	m.Perms["/etc/lite-deploy/plugins/logs"] = 0o777 // writable by everyone
 	_ = m.MkdirAll("/etc/lite-deploy/plugins/mine", 0o755)
 	m.Files["/etc/lite-deploy/plugins/mine/plugin.json"] = []byte(goodManifest)
 	_ = m.Chown("/etc/lite-deploy/plugins/mine", "anna", "anna")

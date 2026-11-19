@@ -22,7 +22,7 @@ const projectJSON = `{"schema":"lite-deploy/project/v1","name":"shop",
 
 const stateJSON = `{"ports":{"services":{"api":[18001,18002]},"sites":{"main":18000}},"deployed":false}`
 
-// sim имитирует podman, systemd и HTTP-проверку.
+// sim imitates podman, systemd and the HTTP check.
 type sim struct {
 	t       *testing.T
 	fs      *host.MemFS
@@ -31,7 +31,7 @@ type sim struct {
 	lock    *host.FakeLocker
 	clock   time.Time
 	pulled  string
-	served  map[int]string // порт -> версия, которую отдаёт контейнер
+	served  map[int]string // port -> the version the container serves
 	fail    map[string]bool
 	reloads int
 }
@@ -43,7 +43,7 @@ func newSim(t *testing.T) (*sim, Env) {
 	s.fs.Files["/etc/caddy/upstreams/shop-main.caddy"] = []byte("respond \"not deployed\" 503\n")
 	s.fs.Perms["/etc/caddy/upstreams/shop-main.caddy"] = 0o644
 	s.runner = &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
-		if c.Name == "systemd-run" { // обёртка сессии пользователя: разбираем внутреннюю команду
+		if c.Name == "systemd-run" { // the user session wrapper: parse the inner command
 			for i, a := range c.Args {
 				if a == "--" {
 					c = host.Cmd{Name: c.Args[i+1], Args: c.Args[i+2:]}
@@ -149,7 +149,7 @@ func TestDeployUnhealthyKeepsTraffic(t *testing.T) {
 		t.Fatal(e)
 	}
 	before := s.upstream()
-	// контейнер запускается, но отдаёт другую версию: готовым не становится
+	// the container starts but serves another version: it does not become ready
 	s.http.Handler = func(url, _ string) (host.HTTPResponse, error) {
 		return host.HTTPResponse{Status: 200, Body: []byte(`{"version":"old"}`)}, nil
 	}
@@ -218,7 +218,7 @@ func TestRollbackErrors(t *testing.T) {
 	if _, e := m.Deploy(ctx, sha1); e != nil {
 		t.Fatal(e)
 	}
-	// прежний слот (green) никогда не запускался
+	// the previous slot (green) was never started
 	if _, e := m.Rollback(ctx); e == nil || e.Code != CodeRollbackNA {
 		t.Fatalf("rollback_unavailable: %v", e)
 	}

@@ -16,7 +16,7 @@ import (
 
 var now = time.Date(2026, 11, 4, 10, 0, 0, 0, time.UTC)
 
-// world подмена сервера: файловая система в памяти и список команд, на которые отвечает «система».
+// world is a server double: an in-memory file system and the list of commands the "system" answers.
 type world struct {
 	t         *testing.T
 	fsys      *host.MemFS
@@ -180,7 +180,7 @@ func (c counter) Read(p []byte) (int, error) {
 
 func randReader(n *int) counter { return counter{n} }
 
-// buildPlan строит план для проекта the example project (без adopt, чтобы пароль базы создавал исполнитель).
+// buildPlan builds a plan for the example project project (without adopt, so that the executor creates the database password).
 func (w *world) buildPlan(adopt bool, extra map[string]string) *plan.Plan {
 	w.t.Helper()
 	data, err := os.ReadFile("../../testdata/shop/project.json")
@@ -265,7 +265,7 @@ func TestApplyFromScratchThenIdempotent(t *testing.T) {
 		t.Fatalf("nothing was changed: %v", states(rep))
 	}
 
-	// файлы и права
+	// files and modes
 	check := func(path string, perm uint32, owner string) {
 		t.Helper()
 		info, err := w.fsys.Stat(path)
@@ -298,7 +298,7 @@ func TestApplyFromScratchThenIdempotent(t *testing.T) {
 	if info, _ := w.fsys.Stat("/etc/postgresql/18/main/pg_hba.conf"); info.Owner != "postgres" || info.Mode != 0o640 {
 		t.Errorf("pg_hba lost its owner or mode: %+v", info)
 	}
-	// секреты не в журнале и не в выводе
+	// secrets are neither in the journal nor in the output
 	j, _ := w.fsys.ReadFile(JournalPath)
 	for _, bad := range []string{"pa$$word", "ghp_token", w.rolePw} {
 		if strings.Contains(string(j), bad) {
@@ -316,7 +316,7 @@ func TestApplyFromScratchThenIdempotent(t *testing.T) {
 		}
 	}
 
-	// повторное применение: везде unchanged (кроме reload_caddy и probe, которые ничего не меняют)
+	// applying again: unchanged everywhere (except reload_caddy and probe, which change nothing)
 	again := w.apply(pl, false)
 	if again.Failed != "" {
 		t.Fatalf("the repeat failed: %+v", again.Steps)
@@ -346,7 +346,7 @@ func TestStopsOnFirstFailure(t *testing.T) {
 	if st[StateFailed] != 1 || st[StateSkipped] == 0 {
 		t.Fatalf("expected one failed step and skipped steps: %v", st)
 	}
-	// файлы сайтов этого применения возвращены (новые удалены)
+	// the site files of this apply are restored (the new ones deleted)
 	if ok, _ := exists(w.fsys, "/etc/caddy/conf.d/shop-main.caddy"); ok {
 		t.Error("the site file was left after a failed Caddy check")
 	}
@@ -355,7 +355,7 @@ func TestStopsOnFirstFailure(t *testing.T) {
 			t.Error("reload ran after a failed check")
 		}
 	}
-	// уже выполненные шаги остаются
+	// the steps already done stay
 	if !w.users["shop"] {
 		t.Error("the user must stay")
 	}
@@ -383,7 +383,7 @@ func TestProbeCatchesUnknownHost(t *testing.T) {
 
 func TestAdoptKeepsExistingAndBacksUp(t *testing.T) {
 	w := newWorld(t)
-	// «ручная» настройка: пользователь, роль, пароль известен владельцу, старый файл сайта и env
+	// a "manual" setup: the user, the role, the password known to the owner, the old site file and env
 	w.users["shop"] = true
 	_ = w.fsys.MkdirAll("/home/shop", 0o750)
 	_ = w.fsys.Chown("/home/shop", "shop", "shop")
@@ -429,7 +429,7 @@ func TestAdoptPasswordUnknown(t *testing.T) {
 	w.users["shop"] = true
 	w.role, w.db = true, true
 	pl := w.buildPlan(true, map[string]string{"_db_password": "x"})
-	// убираем шаг с известным паролем: роль есть, секрета нет
+	// remove the step with the known password: the role exists, the secret does not
 	rep := w.apply(&plan.Plan{ID: pl.ID, Hash: pl.Hash, Project: pl.Project, Steps: stepsOnly(pl, "provision_postgres")}, false)
 	if rep.Failed == "" || !strings.Contains(rep.Steps[0].Error, "adopt_password_unknown") {
 		t.Fatalf("adopt_password_unknown was expected: %+v", rep.Steps)
@@ -449,7 +449,7 @@ func stepsOnly(pl *plan.Plan, action string) []plan.Step {
 func TestSecretBoundToName(t *testing.T) {
 	w := newWorld(t)
 	pl := w.buildPlan(false, nil)
-	// подменяем шифртекст одного секрета шифртекстом другого имени
+	// replace the ciphertext of one secret with the ciphertext of another name
 	var a, b *plan.Step
 	for i := range pl.Steps {
 		if pl.Steps[i].Action == "set_secret" {

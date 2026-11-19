@@ -1,6 +1,6 @@
-// Package executor применяет проверенный план к системе: по одному обработчику на действие
-// (SPEC-v0.md, раздел 4). Каждый обработчик сравнивает желаемое с текущим состоянием и меняет только разницу;
-// в режиме dry-run ничего не меняет и сообщает, что бы сделал.
+// Package executor applies a validated plan to the system: one handler per action
+// (SPEC-v0.md, section 4). Each handler compares the wanted state with the current one and changes only the difference;
+// in dry-run mode it changes nothing and reports what it would do.
 package executor
 
 import (
@@ -21,7 +21,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/secrets"
 )
 
-// Состояния шага.
+// Step states.
 const (
 	StateChanged     = "changed"
 	StateUnchanged   = "unchanged"
@@ -31,7 +31,7 @@ const (
 	StateWouldFail   = "would_fail"
 )
 
-// Пути на сервере (SPEC-v0.md, раздел 9). Абсолютные: в тестах подменяется файловая система, а не пути.
+// Paths on the server (SPEC-v0.md, section 9). Absolute: tests replace the file system, not the paths.
 const (
 	ConfDir      = "/etc/caddy/conf.d"
 	UpstreamDir  = "/etc/caddy/upstreams"
@@ -48,22 +48,22 @@ const (
 	CaddyAPI     = "http://localhost:2019/config/"
 )
 
-// Env всё внешнее, от чего зависит исполнитель.
+// Env is everything external the executor depends on.
 type Env struct {
 	Runner   host.Runner
 	FS       host.FS
 	HTTP     host.HTTPClient
 	Secrets  *secrets.Store
-	KeyPath  string // закрытый ключ исполнителя
-	StateDir string // каталог state; пусто: plan.DefaultStateDir
+	KeyPath  string // the executor private key
+	StateDir string // the state directory; empty: plan.DefaultStateDir
 	Rand     io.Reader
 	Now      func() time.Time
-	UID      int // uid запустившего, для журнала
-	// ProjectJSON описание проекта (необязательно); вызывающий сверил его хэш с project_hash плана. record_project копирует его в /etc/lite-deploy/projects.
+	UID      int // uid of the caller, for the journal
+	// ProjectJSON is the project description (optional); the caller has checked its hash against the plan project_hash. record_project copies it to /etc/lite-deploy/projects.
 	ProjectJSON []byte
 }
 
-// StepResult итог одного шага.
+// StepResult is the outcome of one step.
 type StepResult struct {
 	ID     string `json:"id"`
 	Action string `json:"action"`
@@ -72,33 +72,33 @@ type StepResult struct {
 	Error  string `json:"error,omitempty"`
 }
 
-// Report итог применения.
+// Report is the outcome of applying.
 type Report struct {
 	PlanID   string       `json:"plan_id"`
 	PlanHash string       `json:"plan_hash"`
 	DryRun   bool         `json:"dry_run"`
 	Steps    []StepResult `json:"steps"`
-	// Failed это id первого упавшего шага (при dry-run: первого would_fail); пусто, если ошибок нет.
+	// Failed is the id of the first failed step (with dry-run: the first would_fail); empty if there are no errors.
 	Failed string `json:"failed,omitempty"`
 }
 
-// outcome результат обработчика действия.
+// outcome is the result of an action handler.
 type outcome struct {
 	changed bool
 	detail  string
 }
 
-// run состояние одного применения: что уже сделали предыдущие шаги.
+// run is the state of one apply: what the earlier steps have already done.
 type run struct {
 	Env
 	pl      *plan.Plan
 	dry     bool
-	managed bool // у проекта уже есть метка управления: существующие файлы считаются нашими
-	// что предыдущие шаги изменили или изменили бы (нужно dry-run, где шаги ничего не пишут)
-	wouldSet     map[string]bool // "проект/имя" секретов, которые будут записаны
+	managed bool // the project already has a management mark: the existing files are considered ours
+	// what earlier steps changed or would change (needs dry-run, where steps write nothing)
+	wouldSet     map[string]bool // the "project/name" of the secrets that will be written
 	unitsChanged bool
 	sitesChanged bool
-	undo         []siteUndo // для отката файлов сайтов при ошибке проверки Caddy
+	undo         []siteUndo // to restore the site files when the Caddy check fails
 	expectUnits  map[string][]string
 	needPostgres bool
 	noPodman     bool
@@ -115,8 +115,8 @@ type handler func(ctx context.Context, r *run, params any) (outcome, error)
 
 var handlers = map[string]handler{}
 
-// Apply выполняет план. План уже прошёл plan.Verify. Первая ошибка останавливает применение (кроме dry-run):
-// последующие шаги получают состояние skipped. Ошибка журнала до начала работы возвращается как error.
+// Apply executes a plan. The plan has already passed plan.Verify. The first error stops applying (except dry-run):
+// the following steps get the state skipped. A journal error before work starts is returned as an error.
 func Apply(ctx context.Context, e Env, pl *plan.Plan, dry bool) (*Report, error) {
 	if e.Rand == nil {
 		e.Rand = rand.Reader
@@ -131,7 +131,7 @@ func Apply(ctx context.Context, e Env, pl *plan.Plan, dry bool) (*Report, error)
 	if _, err := e.FS.Stat(path.Join(e.StateDir, "projects", pl.Project+".json")); err == nil {
 		r.managed = true
 	}
-	// Предварительный просмотр плана: что нужно предыдущим шагам знать о последующих.
+	// Plan preview: what earlier steps need to know about later ones.
 	for _, s := range pl.Steps {
 		switch s.Action {
 		case actions.VerifyHostName:
@@ -226,7 +226,7 @@ func Apply(ctx context.Context, e Env, pl *plan.Plan, dry bool) (*Report, error)
 	return rep, nil
 }
 
-// journal дописывает строку в журнал (SPEC-v0.md, раздел 9). Значений секретов в записи нет.
+// journal appends a line to the journal (SPEC-v0.md, section 9). There are no secret values in the record.
 func (r *run) journal(step, action, state, errMsg string) error {
 	line := map[string]any{"ts": r.Now().UTC().Format(time.RFC3339), "plan_id": r.pl.ID, "plan_hash": r.pl.Hash,
 		"project": r.pl.Project, "uid": r.UID, "state": state}
@@ -246,7 +246,7 @@ func (r *run) journal(step, action, state, errMsg string) error {
 	return r.FS.Append(JournalPath, append(b, '\n'), 0o600)
 }
 
-// ---- общие помощники ----
+// ---- shared helpers ----
 
 func home(user string) string { return "/home/" + user }
 
@@ -258,7 +258,7 @@ func exists(f host.FS, p string) (bool, error) {
 	return err == nil, err
 }
 
-// fileSpec желаемое состояние файла.
+// fileSpec is the wanted state of a file.
 type fileSpec struct {
 	path  string
 	data  []byte
@@ -267,8 +267,8 @@ type fileSpec struct {
 	group string
 }
 
-// ensureFile приводит файл к желаемому виду. Возвращает true, если файл изменён (или был бы изменён при dry).
-// Перед заменой чужого файла (проект ещё не под управлением) сохраняется копия .bak-<id плана>.
+// ensureFile brings a file to the wanted state. It returns true if the file was changed (or would be changed with dry).
+// Before replacing a foreign file (the project is not managed yet) a copy .bak-<plan id> is saved.
 func (r *run) ensureFile(s fileSpec) (changed bool, backup string, err error) {
 	info, serr := r.FS.Stat(s.path)
 	switch {
@@ -309,7 +309,7 @@ func (r *run) ensureFile(s fileSpec) (changed bool, backup string, err error) {
 	return true, backup, nil
 }
 
-// ensureDir создаёт каталог, если его нет, с владельцем и правами. Существующий каталог не трогает.
+// ensureDir creates a directory if it is missing, with an owner and mode. An existing directory is not touched.
 func (r *run) ensureDir(p string, perm fs.FileMode, owner, group string) (bool, error) {
 	ok, err := exists(r.FS, p)
 	if err != nil || ok {
@@ -324,8 +324,8 @@ func (r *run) ensureDir(p string, perm fs.FileMode, owner, group string) (bool, 
 	return true, r.FS.Chown(p, owner, group)
 }
 
-// asUser запускает команду в сессии пользовательского systemd проекта. Для rootless podman обычный sudo -u не годится
-// (нет XDG_RUNTIME_DIR и сессии), поэтому используется systemd-run --machine=<user>@.host --user (D-53).
+// asUser runs a command in the project user's systemd session. For rootless podman a plain sudo -u does not work
+// (there is no XDG_RUNTIME_DIR or session), so systemd-run --machine=<user>@.host --user is used (D-53).
 func (r *run) asUser(ctx context.Context, user string, stdin []byte, name string, args ...string) (host.Result, error) {
 	a := append([]string{"--machine=" + user + "@.host", "--user", "--pipe", "--wait", "--quiet", "--collect", "--", name}, args...)
 	return r.Runner.Run(ctx, host.Cmd{Name: "systemd-run", Args: a, Stdin: stdin, Timeout: 120 * time.Second})
@@ -342,7 +342,7 @@ func trimErr(res host.Result) string {
 	return s
 }
 
-// must запускает команду и превращает ненулевой код выхода в ошибку.
+// must runs a command and turns a non-zero exit code into an error.
 func (r *run) must(ctx context.Context, c host.Cmd) (host.Result, error) {
 	res, err := r.Runner.Run(ctx, c)
 	if err != nil {

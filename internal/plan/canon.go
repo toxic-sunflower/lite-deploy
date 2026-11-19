@@ -1,4 +1,4 @@
-// Package plan строит, хэширует и проверяет планы (SPEC-v0.md, раздел 3).
+// Package plan builds, hashes and validates plans (SPEC-v0.md, section 3).
 package plan
 
 import (
@@ -14,8 +14,8 @@ import (
 	"unicode/utf16"
 )
 
-// Canonical возвращает канонический JSON по RFC 8785 (JCS) для данных,
-// где числа только целые (все наши форматы такие). Дробные числа отклоняются.
+// Canonical returns canonical JSON per RFC 8785 (JCS) for data,
+// where numbers are whole only (all our formats are such). Fractional numbers are rejected.
 func Canonical(data []byte) ([]byte, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
@@ -33,7 +33,7 @@ func Canonical(data []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// CanonicalValue маршалит v и приводит результат к каноническому виду.
+// CanonicalValue marshals v and brings the result to the canonical form.
 func CanonicalValue(v any) ([]byte, error) {
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -42,7 +42,7 @@ func CanonicalValue(v any) ([]byte, error) {
 	return Canonical(raw)
 }
 
-// HashBytes возвращает «sha256:<hex>» от данных.
+// HashBytes returns "sha256:<hex>" of the data.
 func HashBytes(b []byte) string {
 	sum := sha256.Sum256(b)
 	return "sha256:" + hex.EncodeToString(sum[:])
@@ -78,7 +78,7 @@ func writeCanon(buf *bytes.Buffer, v any) error {
 		for k := range x {
 			keys = append(keys, k)
 		}
-		// JCS: сортировка по кодовым единицам UTF-16
+		// JCS: sort by UTF-16 code units
 		sort.Slice(keys, func(i, j int) bool { return lessUTF16(keys[i], keys[j]) })
 		buf.WriteByte('{')
 		for i, k := range keys {

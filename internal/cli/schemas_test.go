@@ -9,7 +9,7 @@ import (
 
 var update = flag.Bool("update", false, "overwrite schemas/*.json and the golden files")
 
-// Закоммиченные схемы обязаны совпадать с генерируемыми из Go-типов (SPEC-v0.md, раздел 0).
+// The committed schemas must match the ones generated from the Go types (SPEC-v0.md, section 0).
 func TestCommittedSchemasMatch(t *testing.T) {
 	for _, name := range SchemaNames {
 		want := Schemas()[name]

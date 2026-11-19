@@ -10,7 +10,7 @@ import (
 )
 
 func TestExecRunnerNoShell(t *testing.T) {
-	// аргументы не проходят через оболочку: «;» и «$(…)» остаются обычным текстом
+	// the arguments do not pass through a shell: ";" and "$(…)" stay plain text
 	res, err := ExecRunner{}.Run(context.Background(), Cmd{Name: "echo", Args: []string{"a; id", "$(id)"}})
 	if err != nil || res.ExitCode != 0 || string(res.Stdout) != "a; id $(id)\n" {
 		t.Fatalf("%q %v", res.Stdout, err)

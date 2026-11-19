@@ -12,27 +12,27 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
-// Пути на сервере (SPEC-v0.md, раздел 9).
+// Paths on the server (SPEC-v0.md, section 9).
 const (
 	DefaultStateDir  = "/var/lib/lite-deploy/state"
 	DefaultMachineID = "/etc/machine-id"
 	DefaultPasswd    = "/etc/passwd"
 )
 
-// Paths откуда читать состояние; в тестах и клиентском режиме можно подменить.
+// Paths is where to read state from; it can be replaced in tests and in client mode.
 type Paths struct {
 	StateDir  string
 	MachineID string
 	Passwd    string
 }
 
-// DefaultPaths пути по умолчанию.
+// DefaultPaths are the default paths.
 func DefaultPaths() Paths {
 	return Paths{StateDir: DefaultStateDir, MachineID: DefaultMachineID, Passwd: DefaultPasswd}
 }
 
-// LoadState читает несекретное состояние сервера: id сервера, управляемые проекты и существующих пользователей.
-// Права root не нужны. Отсутствие каталога state/projects означает «проектов ещё нет».
+// LoadState reads the non-secret server state: the server id, managed projects and existing users.
+// Root rights are not needed. A missing state/projects directory means "no projects yet".
 func LoadState(fsys host.FS, p Paths) (State, error) {
 	var st State
 	mid, err := fsys.ReadFile(p.MachineID)
@@ -77,8 +77,8 @@ func LoadState(fsys host.FS, p Paths) (State, error) {
 			if len(f) < 6 || f[0] == "" {
 				continue
 			}
-			// пользователь, которого уже создал незавершённый project create (есть наш каталог настроек), не считается чужим:
-			// повторный запуск продолжает работу
+			// a user already created by an interrupted project create (our settings directory exists) is not treated as foreign:
+			// running again continues the work
 			if _, managed := st.Projects[f[0]]; !managed && f[5] != "" {
 				if _, err := fsys.Stat(f[5] + "/.config/lite-deploy"); err == nil {
 					continue

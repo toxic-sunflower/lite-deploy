@@ -26,7 +26,7 @@ func init() {
 	handlers[actions.RecordProjectName] = recordProject
 }
 
-// ensureDataDirs создаёт постоянные каталоги компонента (общие для слотов).
+// ensureDataDirs creates the persistent directories of a component (shared by the slots).
 func (r *run) ensureDataDirs(project string, names []string) (bool, error) {
 	changed := false
 	for _, n := range names {
@@ -71,7 +71,7 @@ func installUnit(_ context.Context, r *run, v any) (outcome, error) {
 	return outcome{changed: changed, detail: bakNote(bak)}, nil
 }
 
-// reloadUserUnits: daemon-reload в сессии пользователя, затем проверка, что юниты видны.
+// reloadUserUnits: daemon-reload in the user session, then a check that the units are visible.
 func reloadUserUnits(ctx context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.ReloadUserUnits)
 	want := append([]string(nil), r.expectUnits[p.Project]...)
@@ -119,7 +119,7 @@ func hostLineRe(host string) *regexp.Regexp {
 	return regexp.MustCompile(`(?m)^\s*(https?://)?` + regexp.QuoteMeta(host) + `(:[0-9]+)?\s*[,{]`)
 }
 
-// installCaddySite (SPEC-v0.md, 4.3): файл сайта, upstream, каталог журнала. Не перезагружает Caddy.
+// installCaddySite (SPEC-v0.md, 4.3): the site file, the upstream, the log directory. It does not reload Caddy.
 func installCaddySite(_ context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.InstallCaddySite)
 	var notes []string
@@ -136,7 +136,7 @@ func installCaddySite(_ context.Context, r *run, v any) (outcome, error) {
 		changedAny = true
 	}
 
-	// Старые файлы с тем же адресом сайта (ручная настройка при adopt) заменяются, иначе будут два сайта на один адрес.
+	// Old files with the same site address (a manual setup under adopt) are replaced, otherwise two sites would share one address.
 	site := ConfDir + "/" + render.SiteFileName(p.Project, p.Site)
 	if names, err := r.FS.ReadDir(ConfDir); err == nil {
 		managed := r.managedProjects()
@@ -224,7 +224,7 @@ func (r *run) managedProjects() []string {
 	return out
 }
 
-// installReloadRule: sudoers пишется во временный файл (имя с точкой sudo игнорирует), проверяется visudo -cf, затем ставится.
+// installReloadRule: sudoers is written to a temporary file (sudo ignores names with a dot), checked with visudo -cf, then installed.
 func installReloadRule(ctx context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.InstallReloadRule)
 	final := SudoersDir + "/lite-deploy-" + p.Project
@@ -251,9 +251,9 @@ func installReloadRule(ctx context.Context, r *run, v any) (outcome, error) {
 	return outcome{changed: true}, r.FS.Chown(final, "root", "root")
 }
 
-// reloadCaddy: проверка конфигурации от пользователя caddy, затем reload. При ошибке проверки файлы сайтов
-// этого применения возвращаются в прежнее состояние. Reload безвреден, поэтому в реальном запуске выполняется всегда
-// (иначе прерванное применение оставило бы Caddy без новых файлов); `changed` только если сайты менялись.
+// reloadCaddy: check the configuration as user caddy, then reload. On a check error the site files
+// of this apply are returned to the previous state. A reload is harmless, so in a real run it always happens
+// (otherwise an interrupted apply would leave Caddy without the new files); `changed` only if the sites changed.
 func reloadCaddy(ctx context.Context, r *run, _ any) (outcome, error) {
 	if r.dry {
 		return outcome{changed: r.sitesChanged}, nil
@@ -282,7 +282,7 @@ func reloadCaddy(ctx context.Context, r *run, _ any) (outcome, error) {
 	return outcome{changed: r.sitesChanged}, nil
 }
 
-// probeSite: Caddy должен отвечать на имя сайта (DEPLOY-PATTERN.md, «Caddy не подхватил имя»).
+// probeSite: Caddy must answer for the site name (DEPLOY-PATTERN.md, "Caddy did not pick up the name").
 func probeSite(ctx context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.ProbeSite)
 	if r.dry && r.sitesChanged {
@@ -309,7 +309,7 @@ func probeSite(ctx context.Context, r *run, v any) (outcome, error) {
 	return outcome{}, nil
 }
 
-// installDeployKey: одна строка с меткой lite-deploy:<проект>, чужие строки не трогаются.
+// installDeployKey: one line with the mark lite-deploy:<project>, other lines are not touched.
 func installDeployKey(_ context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.InstallDeployKey)
 	dir := home(p.Project) + "/.ssh"
@@ -336,7 +336,7 @@ func installDeployKey(_ context.Context, r *run, v any) (outcome, error) {
 	return outcome{changed: changed || mk, detail: bakNote(bak)}, nil
 }
 
-// recordProject пишет метку управления и несекретное состояние (D-49). `deployed` сохраняется из прежнего файла.
+// recordProject writes the management mark and the non-secret state (D-49). `deployed` is kept from the previous file.
 func recordProject(_ context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.RecordProject)
 	path := r.StateDir + "/projects/" + p.Project + ".json"
@@ -376,7 +376,7 @@ func recordProject(_ context.Context, r *run, v any) (outcome, error) {
 		return outcome{}, err
 	}
 	if len(r.ProjectJSON) > 0 {
-		// Вызывающий (CLI) уже сверил хэш описания с project_hash плана.
+		// The caller (the CLI) has already checked the description hash against the plan project_hash.
 		if err := r.FS.MkdirAll(ProjectsCopy, 0o755); err != nil {
 			return outcome{}, err
 		}

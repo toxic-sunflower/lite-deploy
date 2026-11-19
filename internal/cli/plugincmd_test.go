@@ -32,7 +32,7 @@ func TestPackageCommands(t *testing.T) {
 		}
 		return host.Result{}, nil
 	}}
-	// без --yes и без терминала команда не выполняется
+	// without --yes and without a terminal the command does not run
 	if c := run(t, env, "package", "install", "nginx", "--json"); c != 4 {
 		t.Fatalf("code %d: %s", c, out.String())
 	}
@@ -63,7 +63,7 @@ func TestPackageCommands(t *testing.T) {
 		t.Fatalf("invalid name: code %d %s", c, out.String())
 	}
 	out.Reset()
-	// не root: изменяющая команда уходит агенту (без sudo), чтение выполняется на месте
+	// not root: a changing command goes to the agent (without sudo), reading runs in place
 	env.IsRoot = func() bool { return false }
 	var sentPath, sentBody string
 	env.AgentCall = func(_ context.Context, _, method, path string, body []byte) ([]byte, error) {
@@ -120,7 +120,7 @@ func TestInfoVerifyAndExternalPlugin(t *testing.T) {
 		t.Fatalf("%d %s", c, out.String())
 	}
 	out.Reset()
-	// в этом окружении у security есть ошибки (нет fail2ban), поэтому verify завершается кодом 8; предупреждение плагина logs видно
+	// in this environment security has errors (no fail2ban), so verify ends with code 8; the logs plugin warning is visible
 	if c := run(t, env, "verify", "--json"); c != 8 {
 		t.Fatalf("%d %s", c, out.String())
 	}
@@ -138,7 +138,7 @@ func TestInfoVerifyAndExternalPlugin(t *testing.T) {
 }
 
 func TestVerifyFails(t *testing.T) {
-	env, out, _ := testEnv(t) // менеджера пакетов нет: проверка package даёт ошибку
+	env, out, _ := testEnv(t) // no package manager: the package check gives an error
 	if c := run(t, env, "verify", "--json"); c != 8 {
 		t.Fatalf("code %d %s", c, out.String())
 	}
@@ -171,7 +171,7 @@ func TestProjectRequirementsInVerify(t *testing.T) {
 	for _, f := range projectRequirements(context.Background(), env) {
 		got[f.Check] = f.Level
 	}
-	// на тестовом сервере ничего не установлено (команды возвращают 127)
+	// nothing is installed on the test server (the commands return 127)
 	for _, k := range []string{"shop/podman", "shop/pg", "shop/caddy"} {
 		if got[k] != plugin.LevelFail {
 			t.Errorf("%s: %q, expected an error", k, got[k])

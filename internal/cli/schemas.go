@@ -9,10 +9,10 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/schema"
 )
 
-// SchemaNames имена схем в порядке вывода; файлы лежат в schemas/<имя>.schema.json.
+// SchemaNames are the schema names in output order; the files are schemas/<name>.schema.json.
 var SchemaNames = []string{"project", "plan", "result", "error"}
 
-// Schemas строит все JSON Schema из Go-типов. Закоммиченные файлы обязаны совпадать с результатом (тест).
+// Schemas builds all JSON Schemas from the Go types. The committed files must match the result (a test).
 func Schemas() map[string][]byte {
 	raw := map[string]map[string]any{
 		"project": schema.Reflect(project.Project{}, project.SchemaID, "lite-deploy project description"),

@@ -1,4 +1,4 @@
-// Package lint содержит проверки правил репозитория, которые удобнее держать тестами.
+// Package lint holds checks of repository rules that are easier to keep as tests.
 package lint
 
 import (
@@ -10,8 +10,8 @@ import (
 	"testing"
 )
 
-// Любая внешняя команда запускается только через host.Runner (SPEC-v0.md, раздел 1):
-// os/exec и syscall можно импортировать только в internal/host; unsafe и cgo нельзя нигде.
+// Any external command is run only through host.Runner (SPEC-v0.md, section 1):
+// os/exec and syscall may be imported only in internal/host; unsafe and cgo nowhere.
 func TestExecOnlyInHostPackage(t *testing.T) {
 	root := filepath.Join("..", "..")
 	fset := token.NewFileSet()

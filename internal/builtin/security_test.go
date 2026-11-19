@@ -15,15 +15,15 @@ func init() { waitStep = func(time.Duration) {} }
 
 const pubKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFakeFakeFakeFake anna@laptop"
 
-// server притворяется сервером: файлы в памяти, а sshd -T отражает записанные файлы.
+// server pretends to be a server: files in memory, and sshd -T reflects the written files.
 type server struct {
 	fs        *host.MemFS
 	calls     []string
-	sshdTfail bool   // sshd -t сообщает об ошибке
-	override  bool   // другой файл sshd переопределяет наши настройки
-	listen    string // вывод ss
-	ufw       string // вывод ufw status
-	f2b       bool   // fail2ban работает
+	sshdTfail bool   // sshd -t reports an error
+	override  bool   // another sshd file overrides our settings
+	listen    string // ss output
+	ufw       string // ufw status output
+	f2b       bool   // fail2ban is working
 	installed map[string]bool
 	sysctl    map[string]string
 }
@@ -167,11 +167,11 @@ func TestEnableFull(t *testing.T) {
 	if _, err := s.fs.ReadFile(sysctlFile); err != nil {
 		t.Error("no sysctl file")
 	}
-	// порядок: SSH в самом конце, после остальных защит (чтобы сбой раньше не запер сервер)
+	// order: SSH last, after the other protections (so that an earlier failure does not lock the server)
 	if s.did("systemctl restart fail2ban") >= s.did("sysctl -e") || s.did("sysctl -e") >= s.did("sshd -t") || s.did("sshd -t") >= s.did("systemctl reload ssh") {
 		t.Errorf("step order:\n%s", strings.Join(s.calls, "\n"))
 	}
-	// всё применено: проверки зелёные
+	// everything is applied: the checks are green
 	for _, f := range (Security{}).Check(context.Background(), s.env("anna", "shop")) {
 		if f.Level == plugin.LevelFail || (f.Level == plugin.LevelWarn && f.Check != "ssh-allow" && f.Check != "admins" && f.Check != "pending-updates") {
 			t.Errorf("after enable: %+v", f)
@@ -188,7 +188,7 @@ func TestSSHGuards(t *testing.T) {
 	if _, err := s.fs.ReadFile(SSHSecurity); err == nil {
 		t.Fatal("the file must not appear")
 	}
-	s = newServer() // у bob нет ключа, вызывает bob
+	s = newServer() // bob has no key, bob is the caller
 	if _, err := runSec(s, "bob", "ssh"); code(err) != "precondition_failed" || !strings.Contains(err.Error(), "bob") {
 		t.Fatalf("the caller has no key: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestSSHRollbacks(t *testing.T) {
 		t.Fatal("sshd must not be reloaded")
 	}
 	s = newServer()
-	s.override = true // cloud-init или другой файл побеждает
+	s.override = true // cloud-init or another file wins
 	if _, err := runSec(s, "anna", "ssh"); code(err) != "step_failed" || !strings.Contains(err.Error(), "overrides") {
 		t.Fatalf("%v", err)
 	}
@@ -236,7 +236,7 @@ func TestNoRootAndAllowUsers(t *testing.T) {
 	if _, err := runSec(s, "anna", "ssh", "extra"); code(err) != "usage" {
 		t.Fatalf("%v", err)
 	}
-	// allow-users сохраняет настройку root и добавляет пользователей проектов
+	// allow-users keeps the root setting and adds the project users
 	if _, err := runSec(s, "anna", "allow-users", "anna"); err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestNoRootAndAllowUsers(t *testing.T) {
 	if !strings.Contains(string(b), "AllowUsers anna shop") || !strings.Contains(string(b), "PermitRootLogin no") {
 		t.Fatalf("%s", b)
 	}
-	// нельзя исключить себя или всех администраторов с ключом
+	// you cannot exclude yourself or all administrators with a key
 	if _, err := runSec(s, "anna", "allow-users", "bob"); code(err) != "precondition_failed" {
 		t.Fatalf("%v", err)
 	}
@@ -278,7 +278,7 @@ func TestVerifyFindsProblems(t *testing.T) {
 	if !strings.Contains(got["pending-updates"].Message, "1") {
 		t.Errorf("updates: %s", got["pending-updates"].Message)
 	}
-	// файервол включён и порт 5432 в нём открыт: предупреждение; не открыт: порядок
+	// the firewall is on and port 5432 is open in it: a warning; not open: fine
 	s.ufw = "Status: active\n\nTo                         Action      From\n--                         ------      ----\n22/tcp                     ALLOW       Anywhere\n5432/tcp                   ALLOW       Anywhere\n"
 	for _, f := range (Security{}).Check(context.Background(), s.env("anna")) {
 		if f.Check == "ports" && f.Level != plugin.LevelWarn {

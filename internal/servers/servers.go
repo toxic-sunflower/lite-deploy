@@ -1,5 +1,5 @@
-// Package servers реестр серверов, известных этому серверу: имя и адрес во внутренней сети (R-26).
-// Проект живёт на одном сервере; чужие ресурсы (например, база) подключаются по адресу из реестра.
+// Package servers is the registry of servers known to this server: a name and an address on the internal network (R-26).
+// A project lives on one server; foreign resources (for example a database) are connected by an address from the registry.
 package servers
 
 import (
@@ -14,7 +14,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
-// Path файл реестра; читает любой пользователь (адреса не секрет), пишет root.
+// Path is the registry file; any user can read it (addresses are not secret), root writes it.
 const Path = "/etc/lite-deploy/servers.json"
 
 var (
@@ -22,13 +22,13 @@ var (
 	hostRe = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 )
 
-// Local зарезервированное имя этого сервера.
+// Local is the reserved name of this server.
 const Local = "local"
 
-// ValidName проверяет имя сервера.
+// ValidName validates a server name.
 func ValidName(n string) bool { return nameRe.MatchString(n) && n != Local }
 
-// ValidAddress проверяет адрес: IP или имя хоста. Адреса 0.0.0.0, loopback и пустой не принимаются.
+// ValidAddress validates an address: an IP or a host name. 0.0.0.0, loopback and an empty address are not accepted.
 func ValidAddress(a string) error {
 	if ip, err := netip.ParseAddr(a); err == nil {
 		if ip.IsUnspecified() || ip.IsLoopback() || ip.IsMulticast() {
@@ -42,7 +42,7 @@ func ValidAddress(a string) error {
 	return nil
 }
 
-// Load читает реестр: имя → адрес. Нет файла: пустой реестр.
+// Load reads the registry: name → address. No file: an empty registry.
 func Load(f host.FS) (map[string]string, error) {
 	b, err := f.ReadFile(Path)
 	if err != nil {
@@ -63,7 +63,7 @@ func Load(f host.FS) (map[string]string, error) {
 	return j.Servers, nil
 }
 
-// Save записывает реестр.
+// Save writes the registry.
 func Save(f host.FS, m map[string]string) error {
 	b, _ := json.MarshalIndent(map[string]any{"servers": m}, "", "  ")
 	if err := f.MkdirAll("/etc/lite-deploy", 0o755); err != nil {
@@ -72,7 +72,7 @@ func Save(f host.FS, m map[string]string) error {
 	return f.WriteFile(Path, append(b, '\n'), 0o644)
 }
 
-// Names имена по алфавиту.
+// Names returns names in alphabetical order.
 func Names(m map[string]string) []string {
 	out := make([]string, 0, len(m))
 	for n := range m {

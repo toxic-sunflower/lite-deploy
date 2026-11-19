@@ -67,7 +67,7 @@ func TestGoldenFiles(t *testing.T) {
 		PublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDtqJ7zOtqQtYqOo0CpvDXNlMhV3HeJDpjrASKGLWdop github-actions"}))
 }
 
-// settings возвращает строки файла без пустых и без комментариев, с обрезанными краями.
+// settings returns the file lines without empty ones and without comments, trimmed.
 func settings(s string) []string {
 	var out []string
 	for _, l := range strings.Split(s, "\n") {
@@ -89,8 +89,8 @@ func contains(lines []string, want string) bool {
 	return false
 }
 
-// Строки настроек прежних юнитов the example project (SPEC-v0.md, раздел 11) должны быть в сгенерированных,
-// кроме тех, что осознанно изменились: переменные окружения переехали в env-файл.
+// The settings lines of the previous the example project units (SPEC-v0.md, section 11) must be in the generated ones,
+// except those that changed on purpose: environment variables moved to the env file.
 func TestQuadletMatchesLegacy(t *testing.T) {
 	moved := regexp.MustCompile(`^(Environment|EnvironmentFile)=`)
 	for _, c := range []struct {
@@ -111,7 +111,7 @@ func TestQuadletMatchesLegacy(t *testing.T) {
 			if moved.MatchString(l) || strings.HasPrefix(l, "Description=") {
 				continue
 			}
-			// Memory= есть только в Quadlet podman 5; PodmanArgs=--memory работает и в podman 4.x (Ubuntu 24.04)
+			// Memory= exists only in Quadlet of podman 5; PodmanArgs=--memory works in podman 4.x too (Ubuntu 24.04)
 			if m, ok := strings.CutPrefix(l, "Memory="); ok {
 				l = "PodmanArgs=--memory=" + m
 			}
@@ -138,7 +138,7 @@ func TestCaddyMatchesLegacy(t *testing.T) {
 		gen := settings(CaddySite(c.gen))
 		oldBase := strings.TrimSuffix(c.file, ".caddy")
 		for _, l := range settings(string(old)) {
-			// имена файлов изменились: <проект>-<сайт>.caddy
+			// the file names changed: <project>-<site>.caddy
 			l = strings.ReplaceAll(l, oldBase+".caddy", c.name+".caddy")
 			l = strings.ReplaceAll(l, oldBase+".log", c.name+".log")
 			if strings.HasPrefix(l, "@upload") {

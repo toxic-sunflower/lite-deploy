@@ -1,4 +1,4 @@
-// Package builtin встроенные плагины lite.
+// Package builtin holds the built-in lite plugins.
 package builtin
 
 import (
@@ -11,7 +11,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// Pkg плагин `package`: системные пакеты (R-18, R-21, R-22).
+// Pkg is the `package` plugin: system packages (R-18, R-21, R-22).
 type Pkg struct{}
 
 func (Pkg) Name() string       { return "package" }

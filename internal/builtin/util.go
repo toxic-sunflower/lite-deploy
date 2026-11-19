@@ -10,7 +10,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// tools общие действия встроенных плагинов: запуск команд и пакеты.
+// tools are the shared actions of the built-in plugins: running commands and packages.
 type tools struct {
 	ctx context.Context
 	env plugin.Env
@@ -56,7 +56,7 @@ func finding(plug, check, level, msg, fix string) plugin.Finding {
 	return plugin.Finding{Plugin: plug, Check: check, Level: level, Message: msg, Fix: fix}
 }
 
-// textOut вывод с текстом и данными {"output": текст}.
+// textOut is output with text and the data {"output": text}.
 func textOut(text string) plugin.Output {
 	return plugin.Output{Text: text, Data: map[string]any{"output": strings.TrimSpace(text)}}
 }
@@ -68,7 +68,7 @@ func noArgs(args []string, cmd, plug string) error {
 	return nil
 }
 
-// Say получает сообщения о ходе установки; может быть nil.
+// Say receives messages about the progress of the installation; may be nil.
 type Say func(format string, a ...any)
 
 func (s Say) say(format string, a ...any) {

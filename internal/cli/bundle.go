@@ -12,7 +12,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/schema"
 )
 
-// bundle пакет для создания проекта из интерфейса: описание, шифртексты секретов и хэш, который человек видел при просмотре.
+// bundle is the package for creating a project from the interface: the description, the secret ciphertexts and the hash the person saw in the preview.
 type bundle struct {
 	Project        json.RawMessage   `json:"project"`
 	Ciphertexts    map[string]string `json:"ciphertexts"`
@@ -22,8 +22,8 @@ type bundle struct {
 
 const bundleUsage = "usage: lite-deploy project bundle --dry-run|--yes (a JSON bundle on standard input)"
 
-// cmdProjectBundle: project.json, шифртексты и флаги одним JSON со стандартного ввода. С --dry-run возвращает предпросмотр шагов
-// и хэш описания, с --yes применяет план. Запускается исполнителем (root) по запросу агента.
+// cmdProjectBundle: project.json, ciphertexts and flags as one JSON on standard input. With --dry-run it returns the step preview
+// and the description hash, with --yes it applies the plan. It is run by the executor (root) on the agent request.
 func cmdProjectBundle(args []string, env Env) result {
 	const command = "project.bundle"
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
