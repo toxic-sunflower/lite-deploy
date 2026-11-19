@@ -201,3 +201,7 @@ Taken from the documentation of the projects themselves, 2026-10-29:
 
 **D-71. Two publishing modes, one loopback listener.** `tunnel` and `direct` differ only by an extra public Caddy site block (`host { … }`, automatic HTTPS) that imports the same upstream file as the 127.0.0.1 block, so deploys, rollback and the upstream switch are unchanged and a tunnel keeps working in `direct` mode. On the public block `CF-Connecting-IP` is overwritten with the real peer address when `trusted_proxy` is `cloudflare`. Status: accepted by the owner (2026-11-20).
 
+
+
+**D-72. Protection is on by default.** `lite init` enables the `security` basics (fail2ban, automatic security updates, protective kernel parameters) unless `--no-security` is given. Restricting SSH (`security ssh`, `allow-users`) is not automatic: it can lock a person out, so it stays a separate confirmed step after the second login is checked. Caddy, podman, PostgreSQL and Redis remain opt-in plugins. Status: accepted by the owner (2026-11-20).
+\n
