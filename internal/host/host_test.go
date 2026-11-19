@@ -28,20 +28,20 @@ func TestExecRunnerExitCodeStdinTimeout(t *testing.T) {
 	start := time.Now()
 	_, err := r.Run(context.Background(), Cmd{Name: "sleep", Args: []string{"5"}, Timeout: 100 * time.Millisecond})
 	if err == nil || time.Since(start) > 3*time.Second {
-		t.Fatalf("таймаут не сработал: %v", err)
+		t.Fatalf("the timeout did not fire: %v", err)
 	}
 	if _, err := r.Run(context.Background(), Cmd{}); err == nil {
-		t.Fatal("пустая команда")
+		t.Fatal("an empty command")
 	}
 	if _, err := r.Run(context.Background(), Cmd{Name: "/nonexistent-binary"}); err == nil {
-		t.Fatal("несуществующая команда")
+		t.Fatal("a nonexistent command")
 	}
 }
 
 func TestFakeRunner(t *testing.T) {
 	f := &FakeRunner{}
 	if _, err := f.Run(context.Background(), Cmd{Name: "x"}); err == nil {
-		t.Fatal("без обработчика ожидали ошибку")
+		t.Fatal("without a handler an error was expected")
 	}
 	f.Handler = func(c Cmd) (Result, error) { return Result{Stdout: []byte(c.Name)}, nil }
 	res, _ := f.Run(context.Background(), Cmd{Name: "y", Args: []string{"1"}})
@@ -73,7 +73,7 @@ func TestMemFS(t *testing.T) {
 func TestOSFS(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := (OSFS{}).ReadFile(dir + "/none"); err == nil {
-		t.Fatal("ожидали ошибку")
+		t.Fatal("an error was expected")
 	}
 	if names, err := (OSFS{}).ReadDir(dir); err != nil || len(names) != 0 {
 		t.Fatalf("%v %v", names, err)

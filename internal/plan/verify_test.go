@@ -63,37 +63,37 @@ func TestVerifyRejects(t *testing.T) {
 		now    time.Time
 		f      func(m map[string]any)
 	}{
-		{"правка без пересчёта хэша", CodeHashMismatch, false, testNow, func(m map[string]any) { m["project"] = "other" }},
-		{"правка параметров без хэша", CodeHashMismatch, false, testNow, func(m map[string]any) {
+		{"an edit without recomputing the hash", CodeHashMismatch, false, testNow, func(m map[string]any) { m["project"] = "other" }},
+		{"a parameter edit without the hash", CodeHashMismatch, false, testNow, func(m map[string]any) {
 			steps(m)[1].(map[string]any)["params"].(map[string]any)["project"] = "evil"
 		}},
-		{"срок истёк", CodeExpired, false, testNow.Add(25 * time.Hour), func(m map[string]any) {}},
-		{"срок ровно сейчас", CodeExpired, false, testNow.Add(24 * time.Hour), func(m map[string]any) {}},
-		{"другой сервер", CodeWrongServer, true, testNow, func(m map[string]any) { m["server_id"] = ServerID("other") }},
-		{"неизвестное действие", CodeInvalidPlan, true, testNow, func(m map[string]any) {
+		{"expired", CodeExpired, false, testNow.Add(25 * time.Hour), func(m map[string]any) {}},
+		{"expires right now", CodeExpired, false, testNow.Add(24 * time.Hour), func(m map[string]any) {}},
+		{"another server", CodeWrongServer, true, testNow, func(m map[string]any) { m["server_id"] = ServerID("other") }},
+		{"unknown action", CodeInvalidPlan, true, testNow, func(m map[string]any) {
 			steps(m)[0].(map[string]any)["action"] = "run_shell"
 		}},
-		{"чужой проект в шаге", CodeInvalidPlan, true, testNow, func(m map[string]any) {
+		{"a foreign project in the step", CodeInvalidPlan, true, testNow, func(m map[string]any) {
 			steps(m)[1].(map[string]any)["params"].(map[string]any)["project"] = "evil"
 		}},
-		{"плохое имя проекта в параметрах", CodeInvalidPlan, true, testNow, func(m map[string]any) {
+		{"a bad project name in the parameters", CodeInvalidPlan, true, testNow, func(m map[string]any) {
 			steps(m)[1].(map[string]any)["params"].(map[string]any)["project"] = "../etc"
 		}},
-		{"лишний параметр", CodeInvalidPlan, true, testNow, func(m map[string]any) {
+		{"an extra parameter", CodeInvalidPlan, true, testNow, func(m map[string]any) {
 			steps(m)[1].(map[string]any)["params"].(map[string]any)["path"] = "/etc/passwd"
 		}},
-		{"неверный класс", CodeInvalidPlan, true, testNow, func(m map[string]any) {
+		{"an invalid class", CodeInvalidPlan, true, testNow, func(m map[string]any) {
 			steps(m)[0].(map[string]any)["class"] = "safe"
 		}},
-		{"сбой нумерации", CodeInvalidPlan, true, testNow, func(m map[string]any) {
+		{"a numbering failure", CodeInvalidPlan, true, testNow, func(m map[string]any) {
 			steps(m)[2].(map[string]any)["id"] = "s09"
 		}},
-		{"неизвестное поле плана", CodeInvalidPlan, false, testNow, func(m map[string]any) { m["extra"] = 1 }},
-		{"чужая схема", CodeInvalidPlan, true, testNow, func(m map[string]any) { m["schema"] = "x" }},
-		{"пустые шаги", CodeInvalidPlan, true, testNow, func(m map[string]any) { m["steps"] = []any{} }},
-		{"TTL больше 7 суток", CodeInvalidPlan, true, testNow, func(m map[string]any) { m["expires_at"] = "2026-12-01T12:00:00Z" }},
-		{"expires раньше created", CodeInvalidPlan, true, testNow, func(m map[string]any) { m["expires_at"] = "2026-11-01T12:00:00Z" }},
-		{"произвольный путь в параметре", CodeInvalidPlan, true, testNow, func(m map[string]any) {
+		{"unknown plan field", CodeInvalidPlan, false, testNow, func(m map[string]any) { m["extra"] = 1 }},
+		{"a foreign schema", CodeInvalidPlan, true, testNow, func(m map[string]any) { m["schema"] = "x" }},
+		{"empty steps", CodeInvalidPlan, true, testNow, func(m map[string]any) { m["steps"] = []any{} }},
+		{"TTL longer than 7 days", CodeInvalidPlan, true, testNow, func(m map[string]any) { m["expires_at"] = "2026-12-01T12:00:00Z" }},
+		{"expires before created", CodeInvalidPlan, true, testNow, func(m map[string]any) { m["expires_at"] = "2026-11-01T12:00:00Z" }},
+		{"an arbitrary path in a parameter", CodeInvalidPlan, true, testNow, func(m map[string]any) {
 			for _, s := range steps(m) {
 				sm := s.(map[string]any)
 				if sm["action"] == "install_caddy_site" {
@@ -106,7 +106,7 @@ func TestVerifyRejects(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			err := verifyAt(t, mutate(t, pl, c.f, c.reseal), st, c.now)
 			if err == nil || err.Code != c.code {
-				t.Fatalf("ожидали %s, получили %v", c.code, err)
+				t.Fatalf("expected %s, got %v", c.code, err)
 			}
 		})
 	}
@@ -116,16 +116,16 @@ func TestVerifyLimits(t *testing.T) {
 	pl, st := goodPlan(t)
 	raw, _ := json.Marshal(pl)
 	if _, err := Verify(raw, VerifyOptions{Now: testNow, ServerID: st.ServerID, Limits: Limits{PlanBytes: 1000, PlanSteps: 200, PlanTTLHours: 168}}); err == nil || err.Code != CodeInvalidPlan {
-		t.Fatalf("размер: %v", err)
+		t.Fatalf("size: %v", err)
 	}
 	if _, err := Verify(raw, VerifyOptions{Now: testNow, ServerID: st.ServerID, Limits: Limits{PlanBytes: 1 << 20, PlanSteps: 5, PlanTTLHours: 168}}); err == nil || err.Code != CodeInvalidPlan {
-		t.Fatalf("шаги: %v", err)
+		t.Fatalf("steps: %v", err)
 	}
 	if _, err := Verify(append(raw, []byte(" {}")...), VerifyOptions{Now: testNow, ServerID: st.ServerID}); err == nil {
-		t.Fatal("лишние данные")
+		t.Fatal("extra data")
 	}
-	if _, err := Verify([]byte("не json"), VerifyOptions{Now: testNow, ServerID: st.ServerID}); err == nil {
-		t.Fatal("не JSON")
+	if _, err := Verify([]byte("not json"), VerifyOptions{Now: testNow, ServerID: st.ServerID}); err == nil {
+		t.Fatal("not JSON")
 	}
 }
 
@@ -143,11 +143,11 @@ func TestULID(t *testing.T) {
 		t.Fatal(id, err)
 	}
 	if id[0] > '7' {
-		t.Errorf("первый символ ULID не больше 7: %s", id)
+		t.Errorf("the first character of the ULID is not greater than 7: %s", id)
 	}
 	id2, _ := NewULID(testNow.Add(time.Millisecond), zeroReader{})
 	if id2 <= id {
-		t.Errorf("ULID должны расти со временем: %s %s", id, id2)
+		t.Errorf("ULIDs must grow with time: %s %s", id, id2)
 	}
 	// первые 10 символов кодируют время в мс (Crockford base32)
 	var ms uint64
@@ -155,14 +155,14 @@ func TestULID(t *testing.T) {
 		ms = ms<<5 | uint64(strings.IndexRune(crockford, c))
 	}
 	if ms != uint64(testNow.UnixMilli()) {
-		t.Errorf("время в ULID %d, ожидали %d", ms, testNow.UnixMilli())
+		t.Errorf("time in the ULID %d, expected %d", ms, testNow.UnixMilli())
 	}
 	if id[10:] != strings.Repeat("0", 16) {
-		t.Errorf("случайная часть при нулевом источнике: %s", id[10:])
+		t.Errorf("the random part with a zero source: %s", id[10:])
 	}
 	ff, _ := NewULID(testNow, onesReader{})
 	if ff[10:] != strings.Repeat("Z", 16) {
-		t.Errorf("случайная часть при 0xFF: %s", ff[10:])
+		t.Errorf("the random part at 0xFF: %s", ff[10:])
 	}
 }
 
@@ -197,11 +197,11 @@ func TestLoadState(t *testing.T) {
 		t.Error("ServerID")
 	}
 	if !st.ExistingUsers["shop"] || !st.ExistingUsers["root"] || st.ExistingUsers["x"] {
-		t.Errorf("пользователи: %v", st.ExistingUsers)
+		t.Errorf("users: %v", st.ExistingUsers)
 	}
 	ps := st.Projects["shop"]
 	if !ps.Deployed || ps.Ports.Sites["main"] != 18000 || ps.Secrets[0] != "a_b" {
-		t.Errorf("проект: %+v", ps)
+		t.Errorf("project: %+v", ps)
 	}
 
 	// без каталога проектов: проектов нет, ошибки нет
@@ -209,15 +209,15 @@ func TestLoadState(t *testing.T) {
 	m2.Files["/etc/machine-id"] = []byte("abc")
 	st2, err := LoadState(m2, DefaultPaths())
 	if err != nil || len(st2.Projects) != 0 {
-		t.Fatalf("пустое состояние: %v %v", st2.Projects, err)
+		t.Fatalf("an empty state: %v %v", st2.Projects, err)
 	}
 	// нет machine-id: ошибка
 	if _, err := LoadState(host.NewMemFS(), DefaultPaths()); err == nil {
-		t.Fatal("ожидали ошибку без machine-id")
+		t.Fatal("an error without machine-id was expected")
 	}
 	// повреждённый файл состояния
 	m.Files["/var/lib/lite-deploy/state/projects/bad.json"] = []byte("{")
 	if _, err := LoadState(m, DefaultPaths()); err == nil {
-		t.Fatal("ожидали ошибку для повреждённого состояния")
+		t.Fatal("an error for a corrupt state was expected")
 	}
 }

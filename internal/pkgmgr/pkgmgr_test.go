@@ -21,7 +21,7 @@ func (f *fakeApt) run(c host.Cmd) (host.Result, error) {
 	line := c.Name + " " + strings.Join(c.Args, " ")
 	f.calls = append(f.calls, line)
 	if f.failOn != "" && strings.Contains(line, f.failOn) {
-		return host.Result{ExitCode: 100, Stderr: []byte("не найден")}, nil
+		return host.Result{ExitCode: 100, Stderr: []byte("not found")}, nil
 	}
 	switch c.Name {
 	case "apt-get":
@@ -70,7 +70,7 @@ func TestInstallJournalCheckRemove(t *testing.T) {
 	}
 	es, _ := m.List()
 	if len(es) != 1 || es[0].Name != "nginx" || es[0].By != "anna" || es[0].InstalledAt != "2026-11-18T12:00:00Z" {
-		t.Fatalf("в журнал попадают только новые пакеты: %+v", es)
+		t.Fatalf("only new packages go into the journal: %+v", es)
 	}
 	in, err := m.Check(ctx, "nginx")
 	if err != nil || !in.Installed || !in.ByLite || in.Version != "1.0" {
@@ -78,7 +78,7 @@ func TestInstallJournalCheckRemove(t *testing.T) {
 	}
 	in, _ = m.Check(ctx, "curl")
 	if !in.Installed || in.ByLite {
-		t.Fatalf("curl поставлен не через lite: %+v", in)
+		t.Fatalf("curl installed not through lite: %+v", in)
 	}
 	in, _ = m.Check(ctx, "redis")
 	if in.Installed {
@@ -88,10 +88,10 @@ func TestInstallJournalCheckRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 	if es, _ := m.List(); len(es) != 0 {
-		t.Fatalf("после удаления журнал пуст: %+v", es)
+		t.Fatalf("after removal the journal is empty: %+v", es)
 	}
 	if _, ok := f.installed["nginx"]; ok {
-		t.Fatal("nginx должен быть удалён")
+		t.Fatal("nginx must be removed")
 	}
 }
 
@@ -107,7 +107,7 @@ func TestUpdateRefreshesVersion(t *testing.T) {
 		t.Fatalf("%+v", es)
 	}
 	if code(m.Update(ctx, "redis")) != "precondition_failed" {
-		t.Fatal("обновлять неустановленный пакет нельзя")
+		t.Fatal("an uninstalled package cannot be updated")
 	}
 }
 
@@ -116,23 +116,23 @@ func TestRejects(t *testing.T) {
 	ctx := context.Background()
 	for _, n := range []string{"", "-y", "a b", "x;id", "../x", "$(id)"} {
 		if code(m.Install(ctx, n)) != "usage" {
-			t.Errorf("имя %q должно отклоняться", n)
+			t.Errorf("the name %q must be rejected", n)
 		}
 	}
 	if code(m.Install(ctx)) != "usage" {
-		t.Error("без имён отказ")
+		t.Error("without names: a refusal")
 	}
 	for _, n := range []string{"openssh-server", "sudo", "systemd", "bash"} {
 		if code(m.Remove(ctx, n)) != "protected_rule" {
-			t.Errorf("%s удалять нельзя", n)
+			t.Errorf("%s cannot be removed", n)
 		}
 	}
 	if code(m.Remove(ctx, "redis")) != "precondition_failed" {
-		t.Error("удалять неустановленный пакет нельзя")
+		t.Error("an uninstalled package cannot be removed")
 	}
 	for _, c := range f.calls {
 		if strings.Contains(c, "remove") && strings.Contains(c, "sudo") {
-			t.Fatalf("команда удаления защищённого пакета дошла до системы: %s", c)
+			t.Fatalf("the command to remove a protected package reached the system: %s", c)
 		}
 	}
 }
@@ -141,7 +141,7 @@ func TestInstallFailureLeavesJournalAlone(t *testing.T) {
 	m, f := newMgr()
 	f.failOn = "install -y -qq nginx"
 	if code(m.Install(context.Background(), "nginx")) != "step_failed" {
-		t.Fatal("ошибка менеджера пакетов")
+		t.Fatal("a package manager error")
 	}
 	if es, _ := m.List(); len(es) != 0 {
 		t.Fatalf("%+v", es)
@@ -155,10 +155,10 @@ func TestOtherManagers(t *testing.T) {
 			line := c.Name + " " + strings.Join(c.Args, " ")
 			calls = append(calls, line)
 			if c.Name == "apt-get" {
-				return host.Result{}, errors.New("нет")
+				return host.Result{}, errors.New("none")
 			}
 			if c.Name != mgr && len(c.Args) > 0 && c.Args[0] == "--version" {
-				return host.Result{}, errors.New("нет")
+				return host.Result{}, errors.New("none")
 			}
 			if c.Name == "rpm" || (c.Name == "pacman" && c.Args[0] == "-Q") {
 				if mgr == "pacman" {
@@ -171,7 +171,7 @@ func TestOtherManagers(t *testing.T) {
 		m := &Manager{Runner: r, FS: host.NewMemFS(), Now: time.Now}
 		got, _ := m.Detect(context.Background())
 		if got != mgr {
-			t.Fatalf("%s: определён %q", mgr, got)
+			t.Fatalf("%s: defined %q", mgr, got)
 		}
 		in, err := m.Check(context.Background(), "htop")
 		if err != nil || !in.Installed || in.Version != map[string]string{"pacman": "3.3"}[mgr]+map[string]string{"dnf": "3.3-1", "zypper": "3.3-1"}[mgr] {
@@ -192,6 +192,6 @@ func TestDockerIsForbidden(t *testing.T) {
 		}
 	}
 	if forbidden.MatchString("podman") || forbidden.MatchString("docker-clean") {
-		t.Error("лишние пакеты попали под запрет")
+		t.Error("extra packages fell under the ban")
 	}
 }

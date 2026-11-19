@@ -107,7 +107,7 @@ func TestDeployFirstThenSecondThenRollback(t *testing.T) {
 		t.Fatal(e)
 	}
 	if r.Slot != "blue" || r.PreviousSlot != "none" || !r.Switched {
-		t.Fatalf("первая выкатка: %+v", r)
+		t.Fatalf("first deploy: %+v", r)
 	}
 	if !strings.Contains(s.upstream(), "127.0.0.1:18001") || !strings.Contains(s.upstream(), "CF-Connecting-IP") {
 		t.Fatalf("upstream: %q", s.upstream())
@@ -121,7 +121,7 @@ func TestDeployFirstThenSecondThenRollback(t *testing.T) {
 		t.Fatal(e)
 	}
 	if r.Slot != "green" || r.PreviousSlot != "blue" || !strings.Contains(s.upstream(), "127.0.0.1:18002") {
-		t.Fatalf("вторая выкатка: %+v %q", r, s.upstream())
+		t.Fatalf("second deploy: %+v %q", r, s.upstream())
 	}
 
 	rb, e := m.Rollback(ctx)
@@ -129,15 +129,15 @@ func TestDeployFirstThenSecondThenRollback(t *testing.T) {
 		t.Fatal(e)
 	}
 	if rb.Slot != "blue" || rb.Version != sha1 || !strings.Contains(s.upstream(), "127.0.0.1:18001") || m.Active() != "blue" {
-		t.Fatalf("откат: %+v %q", rb, s.upstream())
+		t.Fatalf("rollback: %+v %q", rb, s.upstream())
 	}
 
 	st, _ := m.Status(ctx)
 	if st.Active != "blue" || st.Slots["green"]["api"].Version == nil || *st.Slots["green"]["api"].Version != sha2 || len(st.History) != 3 {
-		t.Fatalf("статус: %+v", st)
+		t.Fatalf("status: %+v", st)
 	}
 	if st.History[2].Event != "rollback" {
-		t.Fatalf("история: %+v", st.History)
+		t.Fatalf("history: %+v", st.History)
 	}
 }
 
@@ -155,10 +155,10 @@ func TestDeployUnhealthyKeepsTraffic(t *testing.T) {
 	}
 	_, e := m.Deploy(ctx, sha2)
 	if e == nil || e.Code != CodeUnhealthy {
-		t.Fatalf("ожидали deploy_unhealthy: %v", e)
+		t.Fatalf("expected deploy_unhealthy: %v", e)
 	}
 	if s.upstream() != before || m.Active() != "blue" {
-		t.Fatal("трафик должен остаться на прежнем слоте")
+		t.Fatal("traffic must stay on the previous slot")
 	}
 	var stopped, logs bool
 	for _, c := range s.runner.Calls {
@@ -167,10 +167,10 @@ func TestDeployUnhealthyKeepsTraffic(t *testing.T) {
 		logs = logs || strings.Contains(line, "logs --tail 40 shop-api-green")
 	}
 	if !stopped || !logs {
-		t.Fatalf("слот должен быть остановлен, журнал показан: stop=%v logs=%v", stopped, logs)
+		t.Fatalf("the slot must be stopped and the log shown: stop=%v logs=%v", stopped, logs)
 	}
 	if h := m.lastHistory(5); h[len(h)-1].Event != "deploy-failed" {
-		t.Fatalf("история: %+v", h)
+		t.Fatalf("history: %+v", h)
 	}
 }
 
@@ -204,7 +204,7 @@ func TestPullFailureAndCaddyReloadFailureRestore(t *testing.T) {
 		t.Fatalf("reload: %v", e)
 	}
 	if s.upstream() != before || m.Active() != "none" {
-		t.Fatalf("файлы должны вернуться: %q active=%s", s.upstream(), m.Active())
+		t.Fatalf("the files must come back: %q active=%s", s.upstream(), m.Active())
 	}
 }
 
@@ -246,21 +246,21 @@ func TestAsUserUsesSystemdRunAndChown(t *testing.T) {
 	for _, c := range s.runner.Calls {
 		wrapped = wrapped || c.Name == "systemd-run"
 		if c.Name == "podman" || (c.Name == "systemctl" && len(c.Args) > 0 && c.Args[0] == "--user") {
-			t.Fatalf("от root команды должны идти через systemd-run: %s %v", c.Name, c.Args)
+			t.Fatalf("from root the commands must go through systemd-run: %s %v", c.Name, c.Args)
 		}
 	}
 	if !wrapped {
-		t.Fatal("нет вызовов systemd-run")
+		t.Fatal("no systemd-run calls")
 	}
 	if own := s.fs.Owners["/home/shop/.local/state/lite-deploy/active"]; own != [2]string{"shop", "shop"} {
-		t.Fatalf("владелец active: %v", own)
+		t.Fatalf("owner of active: %v", own)
 	}
 	var reload bool
 	for _, c := range s.runner.Calls {
 		reload = reload || (c.Name == "systemctl" && strings.Join(c.Args, " ") == "reload caddy")
 	}
 	if !reload {
-		t.Fatal("от root reload без sudo")
+		t.Fatal("reload from root without sudo")
 	}
 }
 

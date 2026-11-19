@@ -18,7 +18,7 @@ func TestUnitText(t *testing.T) {
 		"MemoryMax=768M", "TasksMax=256", "NoNewPrivileges=true", "WantedBy=default.target",
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("нет %q в:\n%s", want, got)
+			t.Errorf("no %q in:\n%s", want, got)
 		}
 	}
 }
@@ -49,7 +49,7 @@ func TestRemoteDatabaseURL(t *testing.T) {
 		t.Errorf("ipv6: %s", got)
 	}
 	if _, err := RemoteDatabaseURL("x", "h", 0, "a", "b", "c"); err == nil {
-		t.Error("неизвестный формат")
+		t.Error("unknown format")
 	}
 }
 
@@ -63,7 +63,7 @@ func TestUnitStopAndData(t *testing.T) {
 		"Environment=LITE_DATA_TMP_FILES=%h/.local/share/lite-deploy/data/tmp-files",
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("нет %q в:\n%s", want, got)
+			t.Errorf("no %q in:\n%s", want, got)
 		}
 	}
 }

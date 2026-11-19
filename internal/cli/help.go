@@ -26,6 +26,9 @@ Everything else runs as a regular administrator, no sudo needed:
   ui                           start the web interface
   version                      show the version
 
+Install and update (run as root with sudo):
+  liteup install|update|reinstall|uninstall|status   manage lite-deploy itself
+
 Plugins add their own commands: lite PLUGIN COMMAND [arguments]
   Run "lite info" to see them all (pg, redis, caddy, podman, firewall, security,
   backup, backblaze, s3, sftp, server, package).

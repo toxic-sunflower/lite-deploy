@@ -37,10 +37,10 @@ func TestExecOnlyInHostPackage(t *testing.T) {
 		for _, imp := range f.Imports {
 			switch imp.Path.Value {
 			case `"unsafe"`, `"C"`:
-				t.Errorf("%s импортирует %s: unsafe и cgo запрещены везде (D-23)", rel, imp.Path.Value)
+				t.Errorf("%s imports %s: unsafe and cgo are forbidden everywhere (D-23)", rel, imp.Path.Value)
 			case `"os/exec"`, `"syscall"`:
 				if !inHost {
-					t.Errorf("%s импортирует %s: разрешено только в internal/host", rel, imp.Path.Value)
+					t.Errorf("%s imports %s: only allowed in internal/host", rel, imp.Path.Value)
 				}
 			}
 		}

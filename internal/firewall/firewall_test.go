@@ -58,20 +58,20 @@ func TestStatus(t *testing.T) {
 	}
 	// IPv6-дубли склеены; диапазон показан как есть, но без порта
 	if len(st.Rules) != 6 {
-		t.Fatalf("правил %d: %+v", len(st.Rules), st.Rules)
+		t.Fatalf("%d rules: %+v", len(st.Rules), st.Rules)
 	}
 	byPort := map[int]Rule{}
 	for _, r := range st.Rules {
 		byPort[r.Port] = r
 	}
 	if !byPort[22].Protected || byPort[22].Action != "limit" || !byPort[80].Protected || !byPort[443].Protected {
-		t.Fatalf("защита: %+v", byPort)
+		t.Fatalf("protection: %+v", byPort)
 	}
 	if byPort[8080].Protected || byPort[8080].From != "10.0.0.0/8" || byPort[5432].From != "any" {
-		t.Fatalf("правила: %+v", byPort)
+		t.Fatalf("rules: %+v", byPort)
 	}
 	if r := byPort[0]; r.Port != 0 || r.Proto != "tcp" && !strings.Contains(r.Raw, "6000") {
-		t.Fatalf("диапазон: %+v", r)
+		t.Fatalf("range: %+v", r)
 	}
 }
 
@@ -84,7 +84,7 @@ func TestStatusNonStandardSSHAndInactive(t *testing.T) {
 	f = &fake{status: "Status: inactive\n", ssh: ""}
 	st, _ = (&Manager{Runner: f.runner()}).Status(context.Background())
 	if st.SSHPort != 22 {
-		t.Fatalf("порт по умолчанию: %d", st.SSHPort)
+		t.Fatalf("default port: %d", st.SSHPort)
 	}
 }
 
@@ -100,7 +100,7 @@ func TestAllow(t *testing.T) {
 	joined := strings.Join(f.calls, "\n")
 	for _, want := range []string{"ufw allow 9000/tcp", "ufw allow proto udp from 192.168.1.5 to any port 9001"} {
 		if !strings.Contains(joined, want) {
-			t.Errorf("нет вызова %q в\n%s", want, joined)
+			t.Errorf("no call %q in\n%s", want, joined)
 		}
 	}
 }
@@ -112,11 +112,11 @@ func TestAllowValidation(t *testing.T) {
 		proto, from string
 	}{{0, "tcp", ""}, {70000, "tcp", ""}, {80, "icmp", ""}, {80, "tcp", "evil; rm -rf /"}, {80, "tcp", "10.0.0.0/99"}} {
 		if _, e := m.Allow(context.Background(), c.port, c.proto, c.from); e == nil || e.Code != CodeUsage {
-			t.Errorf("%+v: ожидалась ошибка usage, получено %v", c, e)
+			t.Errorf("%+v: expected a usage error, got %v", c, e)
 		}
 	}
 	if len(m.Runner.(*host.FakeRunner).Calls) != 0 {
-		t.Fatal("при неверном вводе ufw вызываться не должен")
+		t.Fatal("on wrong input ufw must not be called")
 	}
 }
 
@@ -132,7 +132,7 @@ func TestRemove(t *testing.T) {
 	joined := strings.Join(f.calls, "\n")
 	for _, want := range []string{"ufw delete allow proto tcp from 10.0.0.0/8 to any port 8080", "ufw delete allow 5432/tcp"} {
 		if !strings.Contains(joined, want) {
-			t.Errorf("нет вызова %q в\n%s", want, joined)
+			t.Errorf("no call %q in\n%s", want, joined)
 		}
 	}
 }
@@ -142,18 +142,18 @@ func TestRemoveProtectedAndMissing(t *testing.T) {
 	m := &Manager{Runner: f.runner()}
 	for _, p := range []int{22, 80, 443} {
 		if _, e := m.Remove(context.Background(), p, "tcp", "", "allow"); e == nil || e.Code != CodeProtected {
-			t.Errorf("порт %d: %v", p, e)
+			t.Errorf("port %d: %v", p, e)
 		}
 	}
 	if _, e := m.Remove(context.Background(), 7777, "tcp", "", "allow"); e == nil || e.Code != CodeNotFound {
-		t.Errorf("нет правила: %v", e)
+		t.Errorf("no rule: %v", e)
 	}
 	if _, e := m.Remove(context.Background(), 8080, "tcp", "", "allow"); e == nil || e.Code != CodeNotFound {
-		t.Errorf("другой источник: %v", e)
+		t.Errorf("another source: %v", e)
 	}
 	for _, c := range f.calls {
 		if strings.Contains(c, "delete") {
-			t.Fatalf("удаление не должно вызываться: %s", c)
+			t.Fatalf("removal must not be called: %s", c)
 		}
 	}
 }
@@ -162,7 +162,7 @@ func TestProtectedFollowsSSHPort(t *testing.T) {
 	status := strings.ReplaceAll(statusOut, "22/tcp", "2222/tcp")
 	f := &fake{status: status, ssh: "port 2222\n"}
 	if _, e := (&Manager{Runner: f.runner()}).Remove(context.Background(), 2222, "tcp", "", "limit"); e == nil || e.Code != CodeProtected {
-		t.Fatalf("порт SSH 2222 должен быть защищён: %v", e)
+		t.Fatalf("SSH port 2222 must be protected: %v", e)
 	}
 }
 
@@ -180,18 +180,18 @@ func TestEnableOrderAndFailure(t *testing.T) {
 	}
 	last := ufwCalls[len(ufwCalls)-1]
 	if last != "ufw --force enable" {
-		t.Fatalf("включение должно быть последним: %v", ufwCalls)
+		t.Fatalf("enabling must be last: %v", ufwCalls)
 	}
 	if !strings.Contains(strings.Join(ufwCalls[:len(ufwCalls)-1], "|"), "ufw limit 2222/tcp") {
-		t.Fatalf("правило для SSH должно появиться до включения: %v", ufwCalls)
+		t.Fatalf("the SSH rule must appear before enabling: %v", ufwCalls)
 	}
 	f = &fake{status: statusOut, ssh: "port 22\n", failOn: "limit"}
 	if _, e := (&Manager{Runner: f.runner()}).Enable(context.Background()); e == nil || e.Code != CodeFailed {
-		t.Fatalf("сбой правила: %v", e)
+		t.Fatalf("a rule failure: %v", e)
 	}
 	for _, c := range f.calls {
 		if strings.Contains(c, "enable") {
-			t.Fatal("при сбое правила для SSH брандмауэр включаться не должен")
+			t.Fatal("if the SSH rule fails the firewall must not be enabled")
 		}
 	}
 }

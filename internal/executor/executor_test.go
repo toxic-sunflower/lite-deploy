@@ -151,7 +151,7 @@ func (w *world) handle(c host.Cmd) (host.Result, error) {
 		}
 		return ok()
 	}
-	w.t.Fatalf("неожиданная команда: %s", line)
+	w.t.Fatalf("unexpected command: %s", line)
 	return host.Result{}, nil
 }
 
@@ -240,17 +240,17 @@ func TestApplyFromScratchThenIdempotent(t *testing.T) {
 	filesBefore, dirsBefore := len(w.fsys.Files), len(w.fsys.Dirs)
 	dry := w.apply(pl, true)
 	if dry.Failed != "" {
-		t.Fatalf("dry-run упал: %+v", dry.Steps)
+		t.Fatalf("dry-run failed: %+v", dry.Steps)
 	}
 	if n := states(dry)[StateWouldChange]; n < 10 {
-		t.Fatalf("dry-run должен обещать изменения: %v", states(dry))
+		t.Fatalf("dry-run must promise changes: %v", states(dry))
 	}
 	if w.users["shop"] || w.role || len(w.fsys.Files) != filesBefore || len(w.fsys.Dirs) != dirsBefore {
-		t.Fatal("dry-run изменил систему")
+		t.Fatal("dry-run changed the system")
 	}
 	for _, c := range w.cmds {
 		if strings.HasPrefix(c, "adduser") || strings.Contains(c, "daemon-reload") || strings.Contains(c, "reload caddy") {
-			t.Fatalf("dry-run выполнил %q", c)
+			t.Fatalf("dry-run ran %q", c)
 		}
 	}
 
@@ -259,10 +259,10 @@ func TestApplyFromScratchThenIdempotent(t *testing.T) {
 		for _, s := range rep.Steps {
 			t.Logf("%s %s %s %s %s", s.ID, s.Action, s.State, s.Detail, s.Error)
 		}
-		t.Fatalf("apply упал на %s", rep.Failed)
+		t.Fatalf("apply failed on %s", rep.Failed)
 	}
 	if states(rep)[StateChanged] == 0 {
-		t.Fatalf("ничего не изменено: %v", states(rep))
+		t.Fatalf("nothing was changed: %v", states(rep))
 	}
 
 	// файлы и права
@@ -270,10 +270,10 @@ func TestApplyFromScratchThenIdempotent(t *testing.T) {
 		t.Helper()
 		info, err := w.fsys.Stat(path)
 		if err != nil {
-			t.Fatalf("нет %s: %v", path, err)
+			t.Fatalf("no %s: %v", path, err)
 		}
 		if uint32(info.Mode) != perm || info.Owner != owner {
-			t.Errorf("%s: права %o владелец %s, ожидались %o %s", path, info.Mode, info.Owner, perm, owner)
+			t.Errorf("%s: mode %o owner %s, expected %o %s", path, info.Mode, info.Owner, perm, owner)
 		}
 	}
 	check("/home/shop/.config/lite-deploy/env/api.env", 0o600, "shop")
@@ -285,51 +285,51 @@ func TestApplyFromScratchThenIdempotent(t *testing.T) {
 	check("/var/lib/lite-deploy/secrets/shop/_db_password", 0o600, "root")
 	check("/var/lib/lite-deploy/state/projects/shop.json", 0o644, "root")
 	if ok, _ := exists(w.fsys, "/etc/sudoers.d/lite-deploy-shop.tmp"); ok {
-		t.Error("временный файл sudoers остался")
+		t.Error("the temporary sudoers file is left over")
 	}
 	env, _ := w.fsys.ReadFile("/home/shop/.config/lite-deploy/env/api.env")
 	if !strings.Contains(string(env), "ConnectionStrings__Default=Host=/var/run/postgresql;Database=shop;Username=shop;Password="+w.rolePw) {
-		t.Errorf("env без строки подключения:\n%s", env)
+		t.Errorf("env without a connection string:\n%s", env)
 	}
 	hba, _ := w.fsys.ReadFile("/etc/postgresql/18/main/pg_hba.conf")
 	if i, j := strings.Index(string(hba), "lite-deploy:begin shop"), strings.Index(string(hba), "local   all   all"); i < 0 || i > j {
-		t.Errorf("правило pg_hba не выше общего:\n%s", hba)
+		t.Errorf("the pg_hba rule is not above the general one:\n%s", hba)
 	}
 	if info, _ := w.fsys.Stat("/etc/postgresql/18/main/pg_hba.conf"); info.Owner != "postgres" || info.Mode != 0o640 {
-		t.Errorf("pg_hba потерял владельца или права: %+v", info)
+		t.Errorf("pg_hba lost its owner or mode: %+v", info)
 	}
 	// секреты не в журнале и не в выводе
 	j, _ := w.fsys.ReadFile(JournalPath)
 	for _, bad := range []string{"pa$$word", "ghp_token", w.rolePw} {
 		if strings.Contains(string(j), bad) {
-			t.Fatalf("значение секрета попало в журнал: %s", bad)
+			t.Fatalf("the secret value ended up in the journal: %s", bad)
 		}
 	}
 	for _, s := range rep.Steps {
 		if strings.Contains(s.Detail+s.Error, "pa$$word") || strings.Contains(s.Detail+s.Error, w.rolePw) {
-			t.Fatalf("значение секрета в выводе шага %s", s.ID)
+			t.Fatalf("the secret value is in the output of step %s", s.ID)
 		}
 	}
 	for _, c := range w.cmds {
 		if strings.Contains(c, w.rolePw) || strings.Contains(c, "ghp_token") {
-			t.Fatalf("секрет в аргументах команды: %s", c)
+			t.Fatalf("a secret in the command arguments: %s", c)
 		}
 	}
 
 	// повторное применение: везде unchanged (кроме reload_caddy и probe, которые ничего не меняют)
 	again := w.apply(pl, false)
 	if again.Failed != "" {
-		t.Fatalf("повтор упал: %+v", again.Steps)
+		t.Fatalf("the repeat failed: %+v", again.Steps)
 	}
 	for _, s := range again.Steps {
 		if s.State != StateUnchanged {
-			t.Errorf("повтор: %s %s = %s (%s)", s.ID, s.Action, s.State, s.Detail)
+			t.Errorf("repeat: %s %s = %s (%s)", s.ID, s.Action, s.State, s.Detail)
 		}
 	}
 	dry2 := w.apply(pl, true)
 	for _, s := range dry2.Steps {
 		if s.State != StateUnchanged {
-			t.Errorf("dry-run после apply: %s %s = %s", s.ID, s.Action, s.State)
+			t.Errorf("dry-run after apply: %s %s = %s", s.ID, s.Action, s.State)
 		}
 	}
 }
@@ -340,24 +340,24 @@ func TestStopsOnFirstFailure(t *testing.T) {
 	pl := w.buildPlan(false, nil)
 	rep := w.apply(pl, false)
 	if rep.Failed == "" {
-		t.Fatal("ожидалась ошибка проверки Caddy")
+		t.Fatal("a Caddy validation error was expected")
 	}
 	st := states(rep)
 	if st[StateFailed] != 1 || st[StateSkipped] == 0 {
-		t.Fatalf("ожидался один failed и пропущенные шаги: %v", st)
+		t.Fatalf("expected one failed step and skipped steps: %v", st)
 	}
 	// файлы сайтов этого применения возвращены (новые удалены)
 	if ok, _ := exists(w.fsys, "/etc/caddy/conf.d/shop-main.caddy"); ok {
-		t.Error("файл сайта остался после неудачной проверки Caddy")
+		t.Error("the site file was left after a failed Caddy check")
 	}
 	for _, c := range w.cmds {
 		if c == "systemctl reload caddy" {
-			t.Error("reload выполнен после неудачной проверки")
+			t.Error("reload ran after a failed check")
 		}
 	}
 	// уже выполненные шаги остаются
 	if !w.users["shop"] {
-		t.Error("пользователь должен остаться")
+		t.Error("the user must stay")
 	}
 }
 
@@ -377,7 +377,7 @@ func TestProbeCatchesUnknownHost(t *testing.T) {
 		}
 	}
 	if failed == nil || failed.Action != "probe_site" || !strings.Contains(failed.Error, "did not pick up") {
-		t.Fatalf("probe_site должен ловить пустой ответ Caddy: %+v", failed)
+		t.Fatalf("probe_site must catch an empty Caddy answer: %+v", failed)
 	}
 }
 
@@ -403,24 +403,24 @@ func TestAdoptKeepsExistingAndBacksUp(t *testing.T) {
 		for _, s := range rep.Steps {
 			t.Logf("%s %s %s %s %s", s.ID, s.Action, s.State, s.Detail, s.Error)
 		}
-		t.Fatalf("adopt упал на %s", rep.Failed)
+		t.Fatalf("adopt failed on %s", rep.Failed)
 	}
 	for _, c := range w.cmds {
 		if strings.HasPrefix(c, "adduser") || strings.Contains(c, "CREATE") {
-			t.Errorf("adopt пересоздаёт существующее: %s", c)
+			t.Errorf("adopt recreates what exists: %s", c)
 		}
 	}
 	if b, err := w.fsys.ReadFile("/home/shop/.config/lite-deploy/env/api.env.bak-" + pl.ID); err != nil || string(b) != "OLD=1\n" {
-		t.Errorf("старый env не сохранён: %v %q", err, b)
+		t.Errorf("the old env was not saved: %v %q", err, b)
 	}
 	if b, err := w.fsys.ReadFile(ConfDir + "/shop.caddy.bak-" + pl.ID); err != nil || string(b) != old {
-		t.Errorf("старый файл сайта не сохранён: %v", err)
+		t.Errorf("the old site file was not saved: %v", err)
 	}
 	if ok, _ := exists(w.fsys, ConfDir+"/shop.caddy"); ok {
-		t.Error("старый файл сайта должен быть заменён: иначе два сайта на один адрес")
+		t.Error("the old site file must be replaced: otherwise two sites share one address")
 	}
 	if w.rolePw != "oldpassword" {
-		t.Error("пароль существующей роли изменён без rotate_password")
+		t.Error("the password of an existing role was changed without rotate_password")
 	}
 }
 
@@ -432,7 +432,7 @@ func TestAdoptPasswordUnknown(t *testing.T) {
 	// убираем шаг с известным паролем: роль есть, секрета нет
 	rep := w.apply(&plan.Plan{ID: pl.ID, Hash: pl.Hash, Project: pl.Project, Steps: stepsOnly(pl, "provision_postgres")}, false)
 	if rep.Failed == "" || !strings.Contains(rep.Steps[0].Error, "adopt_password_unknown") {
-		t.Fatalf("ожидалась adopt_password_unknown: %+v", rep.Steps)
+		t.Fatalf("adopt_password_unknown was expected: %+v", rep.Steps)
 	}
 }
 
@@ -463,7 +463,7 @@ func TestSecretBoundToName(t *testing.T) {
 	a.Params, b.Params = swapCipher(a.Params, b.Params)
 	rep := w.apply(&plan.Plan{ID: pl.ID, Hash: pl.Hash, Project: pl.Project, Steps: []plan.Step{*a, *b}}, false)
 	if rep.Failed == "" {
-		t.Fatal("шифртекст другого имени должен быть отвергнут")
+		t.Fatal("the ciphertext of another name must be rejected")
 	}
 }
 
@@ -473,10 +473,10 @@ func TestJournalFailureStopsBeforeWork(t *testing.T) {
 	e := w.env()
 	e.FS = failingAppend{w.fsys}
 	if _, err := Apply(context.Background(), e, pl, false); err == nil {
-		t.Fatal("без журнала применение не должно начинаться")
+		t.Fatal("without a journal applying must not start")
 	}
 	if len(w.cmds) != 0 {
-		t.Fatalf("команды выполнены без журнала: %v", w.cmds)
+		t.Fatalf("the commands ran without a journal: %v", w.cmds)
 	}
 }
 
@@ -509,10 +509,10 @@ func TestPodmanVersionPolicy(t *testing.T) {
 		rep := w.apply(&plan.Plan{ID: pl.ID, Hash: pl.Hash, Project: pl.Project, Steps: stepsOnly(pl, "verify_host")}, true)
 		s := rep.Steps[0]
 		if failed := s.State == StateWouldFail; failed != c.wantFail {
-			t.Errorf("podman %s: состояние %s (%s)", c.ver, s.State, s.Error)
+			t.Errorf("podman %s: state %s (%s)", c.ver, s.State, s.Error)
 		}
 		if warned := strings.Contains(s.Detail, "only tested on 5.x"); warned != c.wantWarned {
-			t.Errorf("podman %s: предупреждение=%v, detail %q", c.ver, warned, s.Detail)
+			t.Errorf("podman %s: warning=%v, detail %q", c.ver, warned, s.Detail)
 		}
 	}
 }

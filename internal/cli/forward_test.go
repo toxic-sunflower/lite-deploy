@@ -14,16 +14,16 @@ func TestPluginStdinIsForwardedNotArgs(t *testing.T) {
 	var body string
 	env.AgentCall = func(_ context.Context, _, _, _ string, b []byte) ([]byte, error) {
 		body = string(b)
-		return []byte(`{"ok":true,"api_version":"v1","command":"plugin.run","data":{"output":"готово"}}`), nil
+		return []byte(`{"ok":true,"api_version":"v1","command":"plugin.run","data":{"output":"done"}}`), nil
 	}
 	if c := run(t, env, "pg", "password", "shop", "--password-stdin", "--yes"); c != 0 {
 		t.Fatalf("%d %s", c, out.String())
 	}
 	if !strings.Contains(body, `"stdin":"S3cretS3cretS3cret\n"`) || strings.Contains(strings.SplitN(body, `"stdin"`, 2)[0], "S3cret") {
-		t.Fatalf("пароль должен идти в stdin, а не в аргументах: %s", body)
+		t.Fatalf("the password must go through stdin, not the arguments: %s", body)
 	}
-	if !strings.Contains(out.String(), "готово") {
-		t.Fatalf("вывод: %q", out.String())
+	if !strings.Contains(out.String(), "done") {
+		t.Fatalf("output: %q", out.String())
 	}
 }
 
@@ -54,7 +54,7 @@ func TestProjectCreateWithoutRootGoesThroughAgent(t *testing.T) {
 	paths = nil
 	out.Reset()
 	if c := run(t, env, "project", "create", projectFile, "--ciphertext", "api_key="+ct, "--json"); c != 4 || len(paths) != 1 {
-		t.Fatalf("без --yes: %d %v", c, paths)
+		t.Fatalf("without --yes: %d %v", c, paths)
 	}
 }
 
@@ -65,13 +65,13 @@ func TestVerifyWithoutRootUsesAgentResults(t *testing.T) {
 		if method != "GET" || path != "/v1/verify" {
 			t.Fatalf("%s %s", method, path)
 		}
-		return []byte(`{"ok":false,"api_version":"v1","command":"verify","data":{"findings":[{"plugin":"security","check":"fail2ban","level":"ok","message":"защищает"},{"plugin":"pg","check":"x","level":"fail","message":"плохо","fix":"sudo lite pg install"}],"ok":1,"warnings":0,"failures":1},"error":{"code":"verify_failed","message":"проверка нашла ошибок: 1"}}`), nil
+		return []byte(`{"ok":false,"api_version":"v1","command":"verify","data":{"findings":[{"plugin":"security","check":"fail2ban","level":"ok","message":"protects"},{"plugin":"pg","check":"x","level":"fail","message":"bad","fix":"sudo lite pg install"}],"ok":1,"warnings":0,"failures":1},"error":{"code":"verify_failed","message":"the check found errors: 1"}}`), nil
 	}
 	if c := run(t, env, "verify"); c != 8 {
-		t.Fatalf("код %d", c)
+		t.Fatalf("code %d", c)
 	}
-	if !strings.Contains(out.String(), "security/fail2ban: защищает") || !strings.Contains(out.String(), "fix: sudo lite pg install") {
-		t.Fatalf("вывод: %s", out.String())
+	if !strings.Contains(out.String(), "security/fail2ban: protects") || !strings.Contains(out.String(), "fix: sudo lite pg install") {
+		t.Fatalf("output: %s", out.String())
 	}
 }
 
@@ -79,11 +79,11 @@ func TestVerifyWithoutRootFallsBackWhenAgentIsMissing(t *testing.T) {
 	env, out, _ := testEnv(t)
 	env.IsRoot = func() bool { return false }
 	env.AgentCall = func(context.Context, string, string, string, []byte) ([]byte, error) {
-		return nil, errors.New("нет агента")
+		return nil, errors.New("no agent")
 	}
 	run(t, env, "verify")
 	if !strings.Contains(out.String(), "Total:") {
-		t.Fatalf("проверка на месте должна выполниться: %s", out.String())
+		t.Fatalf("the check must run on the spot: %s", out.String())
 	}
 }
 
@@ -104,7 +104,7 @@ func TestDeployByAdminGoesThroughAgentButProjectUserRunsLocally(t *testing.T) {
 	env.CurrentUser = func() string { return "shop" }
 	run(t, env, "deploy", "shop", strings.Repeat("a", 40), "--json")
 	if path != "" {
-		t.Fatalf("пользователь проекта не должен ходить к агенту: %s", path)
+		t.Fatalf("a project user must not go to the agent: %s", path)
 	}
 }
 
@@ -114,13 +114,13 @@ func TestHelpWorksForEveryoneIncludingRoot(t *testing.T) {
 		env.IsRoot = func() bool { return true }
 		env.LoginUID = func() (int, bool) { return 0, true } // вход под root: остальные команды запрещены
 		if c := run(t, env, args...); c != 0 || !strings.Contains(out.String(), "Usage: lite") {
-			t.Errorf("%v: код %d, вывод %q", args, c, out.String())
+			t.Errorf("%v: code %d, output %q", args, c, out.String())
 		}
 	}
 	env, out, _ := testEnv(t)
 	env.IsRoot = func() bool { return true }
 	env.LoginUID = func() (int, bool) { return 0, true }
 	if c := run(t, env, "verify"); c != 4 || !strings.Contains(out.String()+"", "") {
-		t.Errorf("остальные команды под root по-прежнему запрещены: %d", c)
+		t.Errorf("other commands are still forbidden for root: %d", c)
 	}
 }

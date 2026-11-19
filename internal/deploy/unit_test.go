@@ -32,7 +32,7 @@ func TestDeployUnitFetchesReleaseIntoIdleSlot(t *testing.T) {
 		t.Fatal(e)
 	}
 	if r.Slot != "blue" || !r.Switched {
-		t.Fatalf("итог: %+v", r)
+		t.Fatalf("result: %+v", r)
 	}
 	all := strings.Join(calls, "\n")
 	for _, want := range []string{
@@ -41,14 +41,14 @@ func TestDeployUnitFetchesReleaseIntoIdleSlot(t *testing.T) {
 		"tar -xzf", "mv /home/shop/.local/share/lite-deploy/app/api/blue.new /home/shop/.local/share/lite-deploy/app/api/blue",
 	} {
 		if !strings.Contains(all, want) {
-			t.Errorf("нет вызова с %q:\n%s", want, all)
+			t.Errorf("no call with %q:\n%s", want, all)
 		}
 	}
 	if strings.Contains(all, "podman pull") {
-		t.Error("для unit образ не скачивается")
+		t.Error("for unit the image is not downloaded")
 	}
 	if !strings.Contains(string(s.fs.Files["/home/shop/.local/share/lite-deploy/app/api/blue.new/.release"]), sha1) {
-		t.Error("метка .release не записана")
+		t.Error("the .release mark was not written")
 	}
 }
 
@@ -65,17 +65,17 @@ func TestDeployUnitRejectsBadSignature(t *testing.T) {
 	m := open(t, env)
 	_, e := m.Deploy(context.Background(), sha1)
 	if e == nil || e.Code != CodeFailed || !strings.Contains(e.Message, "the archive signature is not confirmed") {
-		t.Fatalf("ошибка: %+v", e)
+		t.Fatalf("error: %+v", e)
 	}
 	all := strings.Join(calls, "\n")
 	if strings.Contains(all, "tar -xzf") || strings.Contains(all, "systemctl --user restart") {
-		t.Fatalf("после неверной подписи архив не распаковывается и не запускается:\n%s", all)
+		t.Fatalf("after a wrong signature the archive is neither unpacked nor started:\n%s", all)
 	}
 	if !strings.Contains(all, "minisign -Vm") || !strings.Contains(all, ".minisig") {
-		t.Fatalf("подпись не проверялась:\n%s", all)
+		t.Fatalf("the signature was not checked:\n%s", all)
 	}
 	if m.Active() != "none" {
-		t.Fatal("трафик не должен переключаться")
+		t.Fatal("traffic must not switch")
 	}
 }
 
@@ -86,9 +86,9 @@ func TestDeployUnitDownloadFailureKeepsTraffic(t *testing.T) {
 	m := open(t, env)
 	_, e := m.Deploy(context.Background(), sha1)
 	if e == nil || e.Code != CodeFailed || !strings.Contains(e.Message, "downloading the release") {
-		t.Fatalf("ошибка: %+v", e)
+		t.Fatalf("error: %+v", e)
 	}
 	if m.Active() != "none" || strings.Contains(s.upstream(), "reverse_proxy") {
-		t.Fatal("трафик не должен переключаться")
+		t.Fatal("traffic must not switch")
 	}
 }

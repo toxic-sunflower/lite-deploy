@@ -16,13 +16,15 @@ import (
 )
 
 // Служебные команды: их запускают install.sh и systemd, вручную они не нужны.
-const agentUsage = "usage: lite-deploy agent install (internal, called by install.sh) | agent serve (started by systemd)"
+const agentUsage = "usage: lite-deploy agent install | agent uninstall (internal, called by liteup) | agent serve (started by systemd)"
 
 func cmdAgent(args []string, env Env) result {
 	if len(args) == 0 {
 		return fail("agent", CodeUsage, agentUsage)
 	}
 	switch args[0] {
+	case "uninstall":
+		return agentUninstall(args[1:], env)
 	case "install":
 		return agentInstall(args[1:], env)
 	case "serve":
@@ -38,7 +40,7 @@ func agentInstall(args []string, env Env) result {
 		return fail("agent.install", CodeUsage, agentUsage)
 	}
 	if !env.root() {
-		return fail("agent.install", "permission_denied", "installing the agent requires root; it is part of the server install: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh")
+		return fail("agent.install", "permission_denied", "installing the agent requires root; it is part of the server install: curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh")
 	}
 	bin, _ := os.Executable()
 	group, err := agent.Install(context.Background(), env.Runner, env.FS, bin)
@@ -47,6 +49,21 @@ func agentInstall(args []string, env Env) result {
 	}
 	return result{command: "agent.install", data: map[string]any{"group": group, "socket": agent.APISocket},
 		text: fmt.Sprintf("Agent installed and running (socket %s). System administrators (group %s) can manage it.\n", agent.APISocket, group)}
+}
+
+func agentUninstall(args []string, env Env) result {
+	fs := flag.NewFlagSet("agent uninstall", flag.ContinueOnError)
+	pos, err := parseArgs(fs, args)
+	if err != nil || len(pos) != 0 {
+		return fail("agent.uninstall", CodeUsage, agentUsage)
+	}
+	if !env.root() {
+		return fail("agent.uninstall", "permission_denied", "uninstalling the agent requires root; use: sudo liteup uninstall")
+	}
+	if err := agent.Uninstall(context.Background(), env.Runner, env.FS); err != nil {
+		return fail("agent.uninstall", CodeIO, err.Error())
+	}
+	return result{command: "agent.uninstall", text: "Agent removed. Project data, secrets and backups were not touched.\n"}
 }
 
 func agentServe(args []string, env Env) result {
@@ -127,7 +144,7 @@ func cmdCall(args []string, env Env) result {
 	out, err := agent.Call(context.Background(), sock, pos[0], pos[1], body)
 	if err != nil {
 		return result{command: "call", err: &ErrorBody{Code: "precondition_failed", Message: err.Error(),
-			Hint: "the agent is installed with the server: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh; the user must be a system administrator (sudo or wheel)"}}
+			Hint: "the agent is installed by liteup: curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh; the user must be a system administrator (sudo or wheel)"}}
 	}
 	out = bytes.TrimSpace(out)
 	if len(out) == 0 || out[0] != '{' {

@@ -20,7 +20,7 @@ func TestRealSockets(t *testing.T) {
 
 	execLn, err := host.ListenUnix(execSock)
 	if err != nil {
-		t.Skip("unix-сокеты недоступны:", err)
+		t.Skip("unix sockets are unavailable:", err)
 	}
 	defer func() { _ = execLn.Close() }()
 	var ran []string
@@ -61,10 +61,10 @@ func TestRealSockets(t *testing.T) {
 		t.Fatalf("%v %s", err, out)
 	}
 	if len(ran) != 1 || ran[0] != "deploy shop "+sha+" --json" {
-		t.Fatalf("исполнитель получил %v", ran)
+		t.Fatalf("the executor received %v", ran)
 	}
 	if !strings.Contains(audit.String(), `"user":"me"`) || !strings.Contains(audit.String(), `"uid":`) {
-		t.Fatalf("журнал: %s", audit.String())
+		t.Fatalf("journal: %s", audit.String())
 	}
 
 	// чужой uid: тот же сокет, но Allowed не пускает
@@ -77,7 +77,7 @@ func TestRealSockets(t *testing.T) {
 	<-done
 
 	if _, err := Call(context.Background(), filepath.Join(dir, "none.sock"), "GET", "/v1/status", nil); err == nil {
-		t.Fatal("без агента должна быть ошибка")
+		t.Fatal("without the agent there must be an error")
 	}
 }
 
@@ -105,6 +105,6 @@ func TestPeerUIDMatchesProcess(t *testing.T) {
 	}
 	defer func() { _ = c.Close() }()
 	if uid := <-got; uid != os.Getuid() {
-		t.Fatalf("SO_PEERCRED: %d, ожидалось %d", uid, os.Getuid())
+		t.Fatalf("SO_PEERCRED: %d, expected %d", uid, os.Getuid())
 	}
 }

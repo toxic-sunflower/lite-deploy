@@ -48,11 +48,11 @@ func TestCheck(t *testing.T) {
 		"/ints|maxItems", "/ints/0|minimum", "/ints/1|maximum", "/map|maxProperties", "/map/x|pattern",
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("нет %s в %s", want, got)
+			t.Errorf("no %s in %s", want, got)
 		}
 	}
 	if is := Check(sample{}); !strings.Contains(paths(is), "/name|required") || !strings.Contains(paths(is), "/list|minItems") {
-		t.Errorf("пустое значение: %s", paths(is))
+		t.Errorf("an empty value: %s", paths(is))
 	}
 }
 
@@ -72,7 +72,7 @@ func TestReflect(t *testing.T) {
 	}
 	props := m["properties"].(map[string]any)
 	if _, has := props["Skip"]; has || props["-"] != nil {
-		t.Error("поле с json:\"-\" не должно попасть в схему")
+		t.Error("a field with json:\"-\" must not get into the schema")
 	}
 	req := m["required"].([]any)
 	if len(req) != 2 { // name и list

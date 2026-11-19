@@ -89,7 +89,7 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 		msg = "the command returned no answer"
 	}
 	b, _ := json.Marshal(map[string]any{"ok": false, "api_version": "v1", "command": "ui",
-		"error": map[string]string{"code": "internal", "message": msg, "hint": "the agent must be running on the server: it is installed with the server (install.sh), and the user must be a system administrator (sudo or wheel)"}})
+		"error": map[string]string{"code": "internal", "message": msg, "hint": "the agent must be running on the server: it is installed by liteup (curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh), and the user must be a system administrator (sudo or wheel)"}})
 	return b
 }
 

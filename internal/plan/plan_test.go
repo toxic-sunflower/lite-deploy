@@ -80,18 +80,18 @@ func TestBuildExampleStepOrder(t *testing.T) {
 		"install_deploy_key", "record_project",
 	}
 	if got := actionsOf(pl); strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("порядок шагов:\n got %v\nwant %v", got, want)
+		t.Fatalf("step order:\n got %v\nwant %v", got, want)
 	}
 	for i, s := range pl.Steps {
 		if s.ID != "s"+two(i+1) {
-			t.Errorf("id шага %d = %s", i, s.ID)
+			t.Errorf("step %d id = %s", i, s.ID)
 		}
 		if s.Class != "normal" || s.Summary == "" {
-			t.Errorf("шаг %s: класс %q, описание %q", s.ID, s.Class, s.Summary)
+			t.Errorf("step %s: class %q, description %q", s.ID, s.Class, s.Summary)
 		}
 	}
 	if pl.Steps[2].ID != "s03" || !strings.Contains(string(pl.Steps[2].Params), "_db_password") {
-		t.Errorf("s03 должен задавать _db_password: %s", pl.Steps[2].Params)
+		t.Errorf("s03 must set _db_password: %s", pl.Steps[2].Params)
 	}
 }
 
@@ -111,10 +111,10 @@ func TestBuildPlanIsVerifiable(t *testing.T) {
 		t.Fatalf("Verify: %v %v", verr, verr.Issues)
 	}
 	if got.Hash != pl.Hash {
-		t.Error("хэш изменился")
+		t.Error("the hash changed")
 	}
 	if pl.ExpiresAt != "2026-11-04T12:00:00Z" || pl.CreatedAt != "2026-11-03T12:00:00Z" {
-		t.Errorf("сроки: %s %s", pl.CreatedAt, pl.ExpiresAt)
+		t.Errorf("terms: %s %s", pl.CreatedAt, pl.ExpiresAt)
 	}
 }
 
@@ -122,7 +122,7 @@ func TestBuildIsDeterministic(t *testing.T) {
 	a := build(t, example(t), baseState())
 	b := build(t, example(t), baseState())
 	if a.Hash != b.Hash {
-		t.Fatal("одинаковый вход даёт разные хэши")
+		t.Fatal("the same input gives different hashes")
 	}
 }
 
@@ -134,17 +134,17 @@ func TestPlanContainsNoSecretValues(t *testing.T) {
 	raw, _ := json.Marshal(pl)
 	for _, bad := range []string{"PLAINTEXT", "password=", "Password="} {
 		if bytes.Contains(raw, []byte(bad)) {
-			t.Errorf("в плане найдено %q", bad)
+			t.Errorf("found %q in the plan", bad)
 		}
 	}
 	// ссылки secret:// в плане не остаются: только имена
 	if bytes.Contains(raw, []byte("secret://")) {
-		t.Error("в плане осталась ссылка secret://")
+		t.Error("a secret:// reference is left in the plan")
 	}
 	// строка подключения не вычисляется при построении
 	for _, s := range pl.Steps {
 		if s.Action == "write_service_env" && strings.Contains(string(s.Params), "postgresql://") {
-			t.Error("строка подключения в плане")
+			t.Error("a connection string in the plan")
 		}
 	}
 }
@@ -153,7 +153,7 @@ func TestBuildPortsAndRecord(t *testing.T) {
 	pl := build(t, example(t), baseState())
 	last := pl.Steps[len(pl.Steps)-1]
 	if last.Action != "record_project" {
-		t.Fatal("последний шаг должен быть record_project")
+		t.Fatal("the last step must be record_project")
 	}
 	v, issues := actions.Decode(last.Action, last.Params)
 	if len(issues) > 0 {
@@ -161,7 +161,7 @@ func TestBuildPortsAndRecord(t *testing.T) {
 	}
 	rp := v.(*actions.RecordProject)
 	if rp.Ports.Services["api"][0] != 18081 || rp.Ports.Services["admin"][1] != 18092 || rp.Ports.Sites["main"] != 18080 || rp.Ports.Sites["admin"] != 18090 {
-		t.Errorf("порты: %+v", rp.Ports)
+		t.Errorf("ports: %+v", rp.Ports)
 	}
 	if !strings.HasPrefix(rp.ProjectHash, "sha256:") {
 		t.Error("project_hash")
@@ -188,7 +188,7 @@ func TestAutoPortsAvoidOtherProjects(t *testing.T) {
 	want := []int{18003, 18004, 18005}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("порты %v, ожидали %v", got, want)
+			t.Fatalf("ports %v, expected %v", got, want)
 		}
 	}
 }
@@ -198,7 +198,7 @@ func TestExplicitPortTakenByOtherProject(t *testing.T) {
 	st.Projects = map[string]ProjectState{"other": {Ports: actions.Ports{Sites: map[string]int{"x": 18080}}}}
 	_, err := Build(example(t), st)
 	if err == nil || err.Code != CodePrecondition || !strings.Contains(err.Message, "18080") {
-		t.Fatalf("ожидали precondition_failed про 18080: %v", err)
+		t.Fatalf("expected precondition_failed about 18080: %v", err)
 	}
 }
 
@@ -215,7 +215,7 @@ func TestPortsExhausted(t *testing.T) {
 	st.PortRange = [2]int{18000, 18004} // нужно 6 портов, есть 5
 	_, err := Build(p, st)
 	if err == nil || err.Code != CodePrecondition || !strings.Contains(err.Message, "no free ports") {
-		t.Fatalf("ожидали нехватку портов: %v", err)
+		t.Fatalf("expected a shortage of ports: %v", err)
 	}
 	st.PortRange = [2]int{18000, 18005}
 	build(t, p, st)
@@ -227,10 +227,10 @@ func TestSecretMissing(t *testing.T) {
 	delete(st.Ciphertexts, "ghcr_read_token")
 	_, err := Build(example(t), st)
 	if err == nil || err.Code != CodeSecretMissing {
-		t.Fatalf("ожидали secret_missing: %v", err)
+		t.Fatalf("expected secret_missing: %v", err)
 	}
 	if !strings.Contains(err.Message, "admin_password") || !strings.Contains(err.Message, "ghcr_read_token") {
-		t.Errorf("в сообщении нужны имена: %s", err.Message)
+		t.Errorf("the message needs names: %s", err.Message)
 	}
 }
 
@@ -241,7 +241,7 @@ func TestExistingSecretIsNotResent(t *testing.T) {
 	pl := build(t, example(t), st)
 	for _, s := range pl.Steps {
 		if s.Action == "set_secret" && strings.Contains(string(s.Params), "admin_password") {
-			t.Error("секрет уже на сервере, set_secret не нужен")
+			t.Error("the secret is already on the server, set_secret is not needed")
 		}
 	}
 }
@@ -250,7 +250,7 @@ func TestUnusedCiphertextRejected(t *testing.T) {
 	st := baseState()
 	st.Ciphertexts["stray"] = ct("x")["x"]
 	if _, err := Build(example(t), st); err == nil || err.Code != CodeUnusedSecret {
-		t.Fatalf("ожидали unused_secret: %v", err)
+		t.Fatalf("expected unused_secret: %v", err)
 	}
 }
 
@@ -258,7 +258,7 @@ func TestDBPasswordOnlyInAdopt(t *testing.T) {
 	p := example(t)
 	p.Adopt = false
 	if _, err := Build(p, baseState()); err == nil || err.Code != CodeInvalidProject {
-		t.Fatalf("_db_password без adopt должен отклоняться: %v", err)
+		t.Fatalf("_db_password without adopt must be rejected: %v", err)
 	}
 }
 
@@ -267,13 +267,13 @@ func TestAdoptPasswordUnknown(t *testing.T) {
 	delete(st.Ciphertexts, "_db_password")
 	st.ExistingUsers = map[string]bool{"shop": true}
 	if _, err := Build(example(t), st); err == nil || err.Code != CodeAdoptPassword {
-		t.Fatalf("ожидали adopt_password_unknown: %v", err)
+		t.Fatalf("expected adopt_password_unknown: %v", err)
 	}
 	st.RotatePassword = true
 	pl := build(t, example(t), st)
 	for _, s := range pl.Steps {
 		if s.Action == "provision_postgres" && !strings.Contains(string(s.Params), `"rotate_password":true`) {
-			t.Error("rotate_password должен попасть в шаг")
+			t.Error("rotate_password must reach the step")
 		}
 	}
 }
@@ -285,7 +285,7 @@ func TestUnmanagedExistingUser(t *testing.T) {
 	delete(st.Ciphertexts, "_db_password")
 	st.ExistingUsers = map[string]bool{"shop": true}
 	if _, err := Build(p, st); err == nil || err.Code != CodeUnmanaged {
-		t.Fatalf("ожидали project_exists_unmanaged: %v", err)
+		t.Fatalf("expected project_exists_unmanaged: %v", err)
 	}
 	p.Adopt = true
 	st.Ciphertexts["_db_password"] = ct("x")["x"]
@@ -306,7 +306,7 @@ func TestProbeExpectFollowsState(t *testing.T) {
 		}
 	}
 	if n != 2 {
-		t.Fatalf("probe_site шагов %d", n)
+		t.Fatalf("probe_site steps %d", n)
 	}
 }
 
@@ -315,7 +315,7 @@ func TestProjectQuota(t *testing.T) {
 	st.MaxProjects = 1
 	st.Projects = map[string]ProjectState{"other": {}}
 	if _, err := Build(example(t), st); err == nil || err.Code != CodeQuotaExceeded {
-		t.Fatalf("ожидали quota_exceeded: %v", err)
+		t.Fatalf("expected quota_exceeded: %v", err)
 	}
 }
 
@@ -324,7 +324,7 @@ func TestInvalidProjectRejected(t *testing.T) {
 	p.Name = "Bad Name"
 	_, err := Build(p, baseState())
 	if err == nil || err.Code != CodeInvalidProject || len(err.Issues) == 0 {
-		t.Fatalf("ожидали invalid_project: %v", err)
+		t.Fatalf("expected invalid_project: %v", err)
 	}
 }
 
@@ -341,7 +341,7 @@ func TestNoDatabaseNoProvision(t *testing.T) {
 	pl := build(t, p, st)
 	for _, a := range actionsOf(pl) {
 		if a == "provision_postgres" {
-			t.Fatal("без database нет provision_postgres")
+			t.Fatal("without database there is no provision_postgres")
 		}
 	}
 }
@@ -360,7 +360,7 @@ func TestInvalidCiphertextRejected(t *testing.T) {
 		st := baseState()
 		st.Ciphertexts["admin_password"] = bad
 		if _, err := Build(example(t), st); err == nil || err.Code != CodeInvalidSecret {
-			t.Errorf("%q: ожидали invalid_secret: %v", bad, err)
+			t.Errorf("%q: expected invalid_secret: %v", bad, err)
 		}
 	}
 }
@@ -383,16 +383,16 @@ func TestBuildUnitProject(t *testing.T) {
 	got := strings.Join(actionsOf(pl), ",")
 	for _, want := range []string{"install_unit", "write_release_auth"} {
 		if !strings.Contains(got, want) {
-			t.Errorf("нет шага %s: %s", want, got)
+			t.Errorf("no step %s: %s", want, got)
 		}
 	}
 	for _, bad := range []string{"install_quadlet", "registry_login", "provision_postgres"} {
 		if strings.Contains(got, bad) {
-			t.Errorf("лишний шаг %s: %s", bad, got)
+			t.Errorf("an extra step %s: %s", bad, got)
 		}
 	}
 	if !strings.Contains(string(pl.Steps[0].Params), `"no_podman":true`) {
-		t.Errorf("verify_host должен пропускать podman: %s", pl.Steps[0].Params)
+		t.Errorf("verify_host must skip podman: %s", pl.Steps[0].Params)
 	}
 }
 
@@ -403,13 +403,13 @@ func TestRemoteDatabasePlan(t *testing.T) {
 	st := baseState()
 	st.Ciphertexts = ct("ghcr_read_token", "auth_session_secret", "webhook_secret", "admin_username", "admin_password", "db_password")
 	if _, err := Build(p, st); err == nil || err.Code != CodePrecondition || !strings.Contains(err.Hint, "lite server add db1") {
-		t.Fatalf("без записи в реестре: %+v", err)
+		t.Fatalf("without a registry entry: %+v", err)
 	}
 	st.Servers = map[string]string{"db1": "10.0.0.2"}
 	pl := build(t, p, st)
 	got := strings.Join(actionsOf(pl), ",")
 	if strings.Contains(got, "provision_postgres") {
-		t.Errorf("удалённую базу не создаём: %s", got)
+		t.Errorf("a remote database is not created: %s", got)
 	}
 	found := false
 	for _, s := range pl.Steps {
@@ -417,11 +417,11 @@ func TestRemoteDatabasePlan(t *testing.T) {
 			found = true
 		}
 		if s.Action == "install_quadlet" && strings.Contains(string(s.Params), `"database_socket":true`) {
-			t.Error("сокет PostgreSQL не нужен для удалённой базы")
+			t.Error("the PostgreSQL socket is not needed for a remote database")
 		}
 	}
 	if !found {
-		t.Error("в env нет адреса и секрета удалённой базы")
+		t.Error("the env has no address and secret of the remote database")
 	}
 }
 
@@ -435,9 +435,9 @@ func TestInterruptedCreateCanBeRetried(t *testing.T) {
 		t.Fatal(err)
 	}
 	if st.ExistingUsers["demo"] {
-		t.Error("пользователь с каталогом lite-deploy от прерванного create не должен считаться чужим")
+		t.Error("a user with a lite-deploy directory from an interrupted create must not be treated as foreign")
 	}
 	if !st.ExistingUsers["other"] {
-		t.Error("чужой пользователь без нашего каталога остаётся чужим")
+		t.Error("a foreign user without our directory stays foreign")
 	}
 }

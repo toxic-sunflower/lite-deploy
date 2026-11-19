@@ -31,13 +31,13 @@ func TestBackblazeSetupWritesPrivateConfig(t *testing.T) {
 	}
 	mem := env.FS.(*host.MemFS)
 	if mem.Perms[Backblaze.conf()] != 0o600 || !strings.Contains(string(mem.Files[Backblaze.conf()]), "account = 0012345678abcdef") {
-		t.Fatalf("конфигурация: %v %s", mem.Perms[Backblaze.conf()], mem.Files[Backblaze.conf()])
+		t.Fatalf("configuration: %v %s", mem.Perms[Backblaze.conf()], mem.Files[Backblaze.conf()])
 	}
 	if strings.Contains(strings.Join(calls, "\n"), "K001") {
-		t.Fatal("ключ попал в аргументы команды")
+		t.Fatal("the key ended up in the command arguments")
 	}
 	if !strings.Contains(strings.Join(calls, "\n"), "lsf --max-depth 1 b2:my-backups/lite/prod") {
-		t.Fatalf("доступ к бакету не проверен: %v", calls)
+		t.Fatalf("access to the bucket was not checked: %v", calls)
 	}
 }
 
@@ -53,7 +53,7 @@ func TestBackblazeSetupRejectsBadInput(t *testing.T) {
 	} {
 		var calls []string
 		if _, err := Backblaze.Run(context.Background(), b2Env(c.stdin, &calls, 0), "setup", c.args); err == nil {
-			t.Errorf("%q %v должен отказать", c.stdin, c.args)
+			t.Errorf("%q %v must be rejected", c.stdin, c.args)
 		}
 	}
 }
@@ -67,13 +67,13 @@ func TestBackblazeUploadUsesCopyAndRecordsTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(strings.Join(calls, "\n"), "copy "+backupRoot+" b2:my-backups/lite") {
-		t.Fatalf("вызовы: %v", calls)
+		t.Fatalf("calls: %v", calls)
 	}
 	if strings.Contains(strings.Join(calls, "\n"), "sync") {
-		t.Fatal("sync может стереть копии в бакете")
+		t.Fatal("sync could erase the backups in the bucket")
 	}
 	if _, ok := Backblaze.lastTime(tools{context.Background(), env}); !ok {
-		t.Fatal("время отправки не записано")
+		t.Fatal("the upload time was not recorded")
 	}
 }
 
@@ -83,10 +83,10 @@ func TestBackblazeUploadFailureDoesNotRecordTime(t *testing.T) {
 	mem := env.FS.(*host.MemFS)
 	mem.Files[Backblaze.settings()] = []byte(`{"path":"my-backups"}`)
 	if _, err := Backblaze.Run(context.Background(), env, "upload", nil); err == nil {
-		t.Fatal("ожидалась ошибка")
+		t.Fatal("an error was expected")
 	}
 	if _, ok := Backblaze.lastTime(tools{context.Background(), env}); ok {
-		t.Fatal("неудачная отправка не должна обновлять время")
+		t.Fatal("a failed upload must not update the time")
 	}
 }
 
@@ -124,7 +124,7 @@ func TestS3SetupWritesEndpointAndKeys(t *testing.T) {
 	}
 	for _, bad := range [][]string{{"http://s3.example.com", "my-backups"}, {"https://s3.example.com"}, {"https://x.example.com;rm", "my-backups"}} {
 		if _, err := S3.Run(context.Background(), b2Env("AKIAEXAMPLE12345\nsecretsecretsecretsecret1234\n", &calls, 0), "setup", bad); err == nil {
-			t.Errorf("%v должен быть отклонён", bad)
+			t.Errorf("%v must be rejected", bad)
 		}
 	}
 }
@@ -145,11 +145,11 @@ func TestSFTPRequiresHostKeyAndWritesPrivateFiles(t *testing.T) {
 	}
 	for _, in := range []string{key + "\n", key + "\n---\n", "no key\n---\nhost ssh-ed25519 AAAA\n"} {
 		if _, err := SFTP.Run(context.Background(), b2Env(in, &calls, 0), "setup", []string{"backup.example.com", "lite", "backups"}); err == nil {
-			t.Errorf("stdin %.20q должен быть отклонён (нет ключа хоста или ключа)", in)
+			t.Errorf("stdin %.20q must be rejected (no host key or no key)", in)
 		}
 	}
 	if _, err := SFTP.Run(context.Background(), b2Env(key+"\n---\nh ssh-ed25519 AAAA\n", &calls, 0), "setup", []string{"h", "lite", "../x"}); err == nil {
-		t.Error("путь с .. должен быть отклонён")
+		t.Error("a path with .. must be rejected")
 	}
 }
 
@@ -178,6 +178,6 @@ func TestBackupRunUploadsToEveryConfiguredStore(t *testing.T) {
 	}
 	all := strings.Join(remotes, "\n")
 	if !strings.Contains(all, "b2:b1") || !strings.Contains(all, "sftp:/srv/b") || strings.Contains(all, "s3:") {
-		t.Fatalf("отправка только в настроенные места:\n%s", all)
+		t.Fatalf("upload only to the configured places:\n%s", all)
 	}
 }

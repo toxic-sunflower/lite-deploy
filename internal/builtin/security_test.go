@@ -83,7 +83,7 @@ func (s *server) run(c host.Cmd) (host.Result, error) {
 		return host.Result{ExitCode: 1}, nil
 	case "sshd":
 		if c.Args[0] == "-t" && s.sshdTfail {
-			return host.Result{ExitCode: 255, Stderr: []byte("плохая настройка")}, nil
+			return host.Result{ExitCode: 255, Stderr: []byte("a bad setting")}, nil
 		}
 		if c.Args[0] == "-T" {
 			return host.Result{Stdout: []byte(s.sshdT())}, nil
@@ -155,26 +155,26 @@ func TestEnableFull(t *testing.T) {
 	body, _ := s.fs.ReadFile(SSHSecurity)
 	for _, want := range []string{"PermitRootLogin prohibit-password", "PasswordAuthentication no", "KbdInteractiveAuthentication no", "MaxAuthTries 4"} {
 		if !strings.Contains(string(body), want) {
-			t.Errorf("в файле sshd нет %q:\n%s", want, body)
+			t.Errorf("the sshd file has no %q:\n%s", want, body)
 		}
 	}
 	if j, _ := s.fs.ReadFile(jailFile); !strings.Contains(string(j), "[sshd]") || !strings.Contains(string(j), "port = 22") {
 		t.Errorf("jail: %s", j)
 	}
 	if _, err := s.fs.ReadFile(aptAutoFile); err != nil {
-		t.Error("нет файла автообновлений")
+		t.Error("no automatic updates file")
 	}
 	if _, err := s.fs.ReadFile(sysctlFile); err != nil {
-		t.Error("нет файла sysctl")
+		t.Error("no sysctl file")
 	}
 	// порядок: SSH в самом конце, после остальных защит (чтобы сбой раньше не запер сервер)
 	if s.did("systemctl restart fail2ban") >= s.did("sysctl -e") || s.did("sysctl -e") >= s.did("sshd -t") || s.did("sshd -t") >= s.did("systemctl reload ssh") {
-		t.Errorf("порядок шагов:\n%s", strings.Join(s.calls, "\n"))
+		t.Errorf("step order:\n%s", strings.Join(s.calls, "\n"))
 	}
 	// всё применено: проверки зелёные
 	for _, f := range (Security{}).Check(context.Background(), s.env("anna", "shop")) {
 		if f.Level == plugin.LevelFail || (f.Level == plugin.LevelWarn && f.Check != "ssh-allow" && f.Check != "admins" && f.Check != "pending-updates") {
-			t.Errorf("после enable: %+v", f)
+			t.Errorf("after enable: %+v", f)
 		}
 	}
 }
@@ -183,32 +183,32 @@ func TestSSHGuards(t *testing.T) {
 	s := newServer()
 	delete(s.fs.Files, "/home/anna/.ssh/authorized_keys")
 	if _, err := runSec(s, "anna", "ssh"); code(err) != "precondition_failed" {
-		t.Fatalf("без ключей у администраторов: %v", err)
+		t.Fatalf("administrators without keys: %v", err)
 	}
 	if _, err := s.fs.ReadFile(SSHSecurity); err == nil {
-		t.Fatal("файл не должен появляться")
+		t.Fatal("the file must not appear")
 	}
 	s = newServer() // у bob нет ключа, вызывает bob
 	if _, err := runSec(s, "bob", "ssh"); code(err) != "precondition_failed" || !strings.Contains(err.Error(), "bob") {
-		t.Fatalf("у вызывающего нет ключа: %v", err)
+		t.Fatalf("the caller has no key: %v", err)
 	}
 	if s.did("sshd") >= 0 {
-		t.Fatal("до проверки sshd дело не должно доходить")
+		t.Fatal("it must not get as far as the sshd check")
 	}
 }
 
 func TestSSHRollbacks(t *testing.T) {
 	s := newServer()
-	s.fs.Files[SSHSecurity] = []byte("# прежний\nPermitRootLogin no\n")
+	s.fs.Files[SSHSecurity] = []byte("# previous\nPermitRootLogin no\n")
 	s.sshdTfail = true
 	if _, err := runSec(s, "anna", "ssh"); code(err) != "step_failed" {
 		t.Fatalf("%v", err)
 	}
-	if b, _ := s.fs.ReadFile(SSHSecurity); string(b) != "# прежний\nPermitRootLogin no\n" {
-		t.Fatalf("прежний файл должен вернуться: %q", b)
+	if b, _ := s.fs.ReadFile(SSHSecurity); string(b) != "# previous\nPermitRootLogin no\n" {
+		t.Fatalf("the previous file must come back: %q", b)
 	}
 	if s.did("systemctl reload") >= 0 {
-		t.Fatal("sshd не должен перечитываться")
+		t.Fatal("sshd must not be reloaded")
 	}
 	s = newServer()
 	s.override = true // cloud-init или другой файл побеждает
@@ -216,12 +216,12 @@ func TestSSHRollbacks(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	if _, err := s.fs.ReadFile(SSHSecurity); err == nil {
-		t.Fatal("нового файла быть не должно")
+		t.Fatal("there must be no new file")
 	}
 	s = newServer()
 	s.fs.Files["/etc/ssh/sshd_config"] = []byte("Port 22\n")
 	if _, err := runSec(s, "anna", "ssh"); code(err) != "precondition_failed" {
-		t.Fatalf("нет Include: %v", err)
+		t.Fatalf("no Include: %v", err)
 	}
 }
 
@@ -249,13 +249,13 @@ func TestNoRootAndAllowUsers(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	if _, err := runSec(s, "anna", "allow-users", "ghost"); code(err) != "usage" {
-		t.Fatalf("несуществующий пользователь: %v", err)
+		t.Fatalf("a nonexistent user: %v", err)
 	}
 	if _, err := runSec(s, "anna", "allow-users", "any"); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := s.fs.ReadFile(SSHSecurity); strings.Contains(string(b), "AllowUsers") {
-		t.Fatalf("ограничение должно сняться: %s", b)
+		t.Fatalf("the restriction must be removed: %s", b)
 	}
 }
 
@@ -269,26 +269,26 @@ func TestVerifyFindsProblems(t *testing.T) {
 	for check, level := range map[string]string{"ssh-root": plugin.LevelFail, "ssh-password": plugin.LevelFail, "fail2ban": plugin.LevelFail, "auto-updates": plugin.LevelWarn,
 		"pending-updates": plugin.LevelWarn, "sysctl": plugin.LevelWarn, "ports": plugin.LevelFail, "ssh-allow": plugin.LevelWarn} {
 		if got[check].Level != level {
-			t.Errorf("%s: %+v, ожидался уровень %s", check, got[check], level)
+			t.Errorf("%s: %+v, expected level %s", check, got[check], level)
 		}
 	}
 	if !strings.Contains(got["ports"].Message, "5432/tcp") || strings.Contains(got["ports"].Message, "6379") || strings.Contains(got["ports"].Message, "68") {
-		t.Errorf("порты: %s", got["ports"].Message)
+		t.Errorf("ports: %s", got["ports"].Message)
 	}
 	if !strings.Contains(got["pending-updates"].Message, "1") {
-		t.Errorf("обновления: %s", got["pending-updates"].Message)
+		t.Errorf("updates: %s", got["pending-updates"].Message)
 	}
 	// файервол включён и порт 5432 в нём открыт: предупреждение; не открыт: порядок
 	s.ufw = "Status: active\n\nTo                         Action      From\n--                         ------      ----\n22/tcp                     ALLOW       Anywhere\n5432/tcp                   ALLOW       Anywhere\n"
 	for _, f := range (Security{}).Check(context.Background(), s.env("anna")) {
 		if f.Check == "ports" && f.Level != plugin.LevelWarn {
-			t.Errorf("порт открыт в файерволе: %+v", f)
+			t.Errorf("the port is open in the firewall: %+v", f)
 		}
 	}
 	s.ufw = "Status: active\n\nTo                         Action      From\n--                         ------      ----\n22/tcp                     ALLOW       Anywhere\n"
 	for _, f := range (Security{}).Check(context.Background(), s.env("anna")) {
 		if f.Check == "ports" && f.Level != plugin.LevelOK {
-			t.Errorf("порт закрыт файерволом: %+v", f)
+			t.Errorf("the port is closed by the firewall: %+v", f)
 		}
 	}
 }
@@ -325,7 +325,7 @@ func TestLoginsBannedUnban(t *testing.T) {
 	}
 	for _, bad := range []string{"1.2.3.4; id", "-a", "host"} {
 		if _, err := (Security{}).Run(context.Background(), env, "unban", []string{bad}); code(err) != "usage" {
-			t.Errorf("%q должен отклоняться", bad)
+			t.Errorf("%q must be rejected", bad)
 		}
 	}
 	if len(r.Calls) == 0 || r.Calls[len(r.Calls)-1].Args[2] != "unbanip" {

@@ -31,7 +31,7 @@ func TestParseGateRejected(t *testing.T) {
 	}
 	for _, in := range notAllowed {
 		if _, err := ParseGate(in); err == nil || err.Code != CodeNotAllowed {
-			t.Errorf("%q: ожидали command_not_allowed, получили %v", in, err)
+			t.Errorf("%q: expected command_not_allowed, got %v", in, err)
 		}
 	}
 	badSHA := []string{
@@ -42,7 +42,7 @@ func TestParseGateRejected(t *testing.T) {
 	}
 	for _, in := range badSHA {
 		if _, err := ParseGate(in); err == nil || err.Code != CodeInvalidSHA {
-			t.Errorf("%q: ожидали invalid_sha, получили %v", in, err)
+			t.Errorf("%q: expected invalid_sha, got %v", in, err)
 		}
 	}
 }

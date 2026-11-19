@@ -38,7 +38,7 @@ func run(t *testing.T, env Env, args ...string) int { t.Helper(); return RunEnv(
 func decode(t *testing.T, out *bytes.Buffer) Envelope {
 	t.Helper()
 	if strings.Count(out.String(), "\n") != 1 {
-		t.Fatalf("ответ --json должен быть одной строкой: %q", out.String())
+		t.Fatalf("the --json answer must be a single line: %q", out.String())
 	}
 	dec := json.NewDecoder(bytes.NewReader(out.Bytes()))
 	dec.DisallowUnknownFields()
@@ -47,7 +47,7 @@ func decode(t *testing.T, out *bytes.Buffer) Envelope {
 		t.Fatal(err)
 	}
 	if is := schema.Check(&e); len(is) > 0 {
-		t.Fatalf("конверт не прошёл проверку: %v", is)
+		t.Fatalf("the envelope failed validation: %v", is)
 	}
 	return e
 }
@@ -91,9 +91,9 @@ func TestValidateOK(t *testing.T) {
 
 func TestValidateBad(t *testing.T) {
 	cases := map[string]string{
-		"поле не проходит": `{"schema":"lite-deploy/project/v1","name":"Bad","services":{"a":{"image":"x/y","container_port":1}},"sites":[{"name":"m","host":"a.example.com","service":"a"}]}`,
-		"неизвестное поле": `{"evil":true}`,
-		"не JSON":          `name: x`,
+		"the field does not pass": `{"schema":"lite-deploy/project/v1","name":"Bad","services":{"a":{"image":"x/y","container_port":1}},"sites":[{"name":"m","host":"a.example.com","service":"a"}]}`,
+		"unknown field":           `{"evil":true}`,
+		"not JSON":                `name: x`,
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -124,7 +124,7 @@ func TestPlanThenApplyDryRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	if bytes.Contains(raw, []byte("secret://")) {
-		t.Error("в плане остались ссылки secret://")
+		t.Error("secret:// references are left in the plan")
 	}
 
 	env, out, _ = testEnv(t)
@@ -139,19 +139,19 @@ func TestPlanThenApplyDryRun(t *testing.T) {
 	// на «сервере» нет ни podman, ни caddy: dry-run сообщает would_fail и не меняет систему
 	first := data["steps"].([]any)[0].(map[string]any)
 	if first["state"] != "would_fail" || len(e.Warnings) == 0 || e.Warnings[0].Code != "would_fail" {
-		t.Fatalf("verify_host должен дать would_fail: %v %v", first, e.Warnings)
+		t.Fatalf("verify_host must give would_fail: %v %v", first, e.Warnings)
 	}
 
 	// без --yes и без терминала применение не начинается
 	env, out, _ = testEnv(t)
 	if c := run(t, env, "apply", planFile, "--json"); c != 4 || decode(t, out).Error.Code != "confirmation_required" {
-		t.Fatalf("apply без --yes: %d %s", c, out.String())
+		t.Fatalf("apply without --yes: %d %s", c, out.String())
 	}
 	// не root
 	env, out, _ = testEnv(t)
 	env.IsRoot = func() bool { return false }
 	if c := run(t, env, "apply", planFile, "--dry-run", "--json"); c != 4 || decode(t, out).Error.Code != "permission_denied" {
-		t.Fatalf("не root: %d %s", c, out.String())
+		t.Fatalf("not root: %d %s", c, out.String())
 	}
 	// первая же ошибка шага: step_failed, остальные пропущены
 	env, out, _ = testEnv(t)
@@ -165,14 +165,14 @@ func TestPlanThenApplyDryRun(t *testing.T) {
 	env, out, _ = testEnv(t)
 	env.FS.(*host.MemFS).Files["/etc/machine-id"] = []byte("other-machine")
 	if c := run(t, env, "apply", planFile, "--dry-run", "--json"); c != 6 || decode(t, out).Error.Code != "plan_wrong_server" {
-		t.Fatalf("другой сервер: %d %s", c, out.String())
+		t.Fatalf("another server: %d %s", c, out.String())
 	}
 
 	// просроченный план
 	env, out, _ = testEnv(t)
 	env.Now = func() time.Time { return now.Add(48 * time.Hour) }
 	if c := run(t, env, "apply", planFile, "--dry-run", "--json"); c != 6 || decode(t, out).Error.Code != "plan_expired" {
-		t.Fatalf("просрочен: %d %s", c, out.String())
+		t.Fatalf("expired: %d %s", c, out.String())
 	}
 
 	// испорченный план
@@ -181,28 +181,28 @@ func TestPlanThenApplyDryRun(t *testing.T) {
 	_ = os.WriteFile(bad, []byte(tampered), 0o600)
 	env, out, _ = testEnv(t)
 	if c := run(t, env, "apply", bad, "--dry-run", "--json"); c != 6 || decode(t, out).Error.Code != "plan_hash_mismatch" {
-		t.Fatalf("испорчен: %d %s", c, out.String())
+		t.Fatalf("corrupt: %d %s", c, out.String())
 	}
 }
 
 func TestPlanErrors(t *testing.T) {
 	env, out, _ := testEnv(t)
 	if c := run(t, env, "project", "plan", projectFile, "--json"); c != 3 || decode(t, out).Error.Code != "secret_missing" {
-		t.Fatalf("без секретов: %d %s", c, out.String())
+		t.Fatalf("without secrets: %d %s", c, out.String())
 	}
 	env, out, _ = testEnv(t)
 	env.FS = host.NewMemFS() // нет machine-id
 	args := append([]string{"project", "plan", projectFile, "--json"}, ciphertextArgs(t)...)
 	if c := RunEnv(args, env); c != 3 || decode(t, out).Error.Code != "precondition_failed" {
-		t.Fatalf("без machine-id: %d %s", c, out.String())
+		t.Fatalf("without machine-id: %d %s", c, out.String())
 	}
 	env, out, _ = testEnv(t)
 	if c := run(t, env, "project", "plan", projectFile, "--ciphertext", "bad", "--json"); c != 2 || decode(t, out).Error.Code != "usage" {
-		t.Fatalf("неверный --ciphertext: %d %s", c, out.String())
+		t.Fatalf("invalid --ciphertext: %d %s", c, out.String())
 	}
 	env, out, _ = testEnv(t)
 	if c := run(t, env, "project", "plan", "/nonexistent.json", "--json"); c != 1 || decode(t, out).Error.Code != "io_error" {
-		t.Fatalf("нет файла: %d %s", c, out.String())
+		t.Fatalf("no file: %d %s", c, out.String())
 	}
 }
 
@@ -260,7 +260,7 @@ func TestUsageAndUnimplemented(t *testing.T) {
 		got := RunEnv(append(append([]string{}, c.args...), "--json"), env)
 		e := decode(t, out)
 		if got != c.code || e.Error == nil || e.Error.Code != c.err {
-			t.Errorf("%v: код %d, ответ %+v", c.args, got, e)
+			t.Errorf("%v: code %d, answer %+v", c.args, got, e)
 		}
 	}
 }
@@ -280,16 +280,16 @@ func TestExitCodeTable(t *testing.T) {
 	for code, names := range want {
 		for _, n := range names {
 			if got := ExitCode(n); got != code {
-				t.Errorf("%s: код выхода %d, ожидали %d", n, got, code)
+				t.Errorf("%s: exit code %d, expected %d", n, got, code)
 			}
 		}
 	}
-	if ExitCode("совсем неизвестный") != 1 {
-		t.Error("неизвестный код ошибки это 1")
+	if ExitCode("completely unknown") != 1 {
+		t.Error("an unknown error code is 1")
 	}
 	for _, c := range ErrorCodes() {
 		if ExitCode(c) == 0 {
-			t.Errorf("%s: 0 зарезервирован для успеха", c)
+			t.Errorf("%s: 0 is reserved for success", c)
 		}
 	}
 }
@@ -309,7 +309,7 @@ func TestEnvelopeDoesNotLeakCiphertextToStdoutInTextMode(t *testing.T) {
 		t.Fatal(c)
 	}
 	if strings.Contains(out.String(), "AGE ENCRYPTED") {
-		t.Error("читаемый вывод плана не должен печатать шифртексты")
+		t.Error("the readable plan output must not print ciphertexts")
 	}
 }
 
@@ -319,7 +319,7 @@ func TestConfigAffectsPlan(t *testing.T) {
 	env.FS.(*host.MemFS).Files["/var/lib/lite-deploy/state/projects/other.json"] = []byte(`{}`)
 	args := append([]string{"project", "plan", projectFile, "--json"}, ciphertextArgs(t)...)
 	if c := RunEnv(args, env); c != 6 || decode(t, out).Error.Code != "quota_exceeded" {
-		t.Fatalf("лимит проектов из config.json: %d %s", c, out.String())
+		t.Fatalf("project limit from config.json: %d %s", c, out.String())
 	}
 }
 
@@ -348,7 +348,7 @@ func TestGate(t *testing.T) {
 		return ""
 	}
 	if c := run(t, env, "gate", "--project", "shop", "--json"); c != 2 {
-		t.Fatalf("код %d", c)
+		t.Fatalf("code %d", c)
 	}
 	if e := decode(t, out); e.Error == nil || e.Error.Code != "command_not_allowed" {
 		t.Fatalf("%+v", e)
@@ -358,7 +358,7 @@ func TestGate(t *testing.T) {
 	env, out, _ = testEnv(t)
 	env.Getenv = func(string) string { return "status --json" }
 	if c := run(t, env, "gate", "--project", "shop"); c != 7 {
-		t.Fatalf("код %d", c)
+		t.Fatalf("code %d", c)
 	}
 	if e := decode(t, out); e.Error == nil || e.Error.Code != "project_not_found" {
 		t.Fatalf("%+v", e)

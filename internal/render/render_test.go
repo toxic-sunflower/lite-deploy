@@ -11,7 +11,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/actions"
 )
 
-var update = flag.Bool("update", false, "перезаписать golden-файлы")
+var update = flag.Bool("update", false, "overwrite the golden files")
 
 const golden = "../../testdata/shop/golden/"
 const legacy = "../../testdata/shop/legacy/"
@@ -27,10 +27,10 @@ func checkGolden(t *testing.T, name, got string) {
 	}
 	want, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("%v (запустите go test ./internal/render -update)", err)
+		t.Fatalf("%v (run go test ./internal/render -update)", err)
 	}
 	if string(want) != got {
-		t.Errorf("%s отличается от golden:\n--- got ---\n%s\n--- want ---\n%s", name, got, want)
+		t.Errorf("%s differs from the golden file:\n--- got ---\n%s\n--- want ---\n%s", name, got, want)
 	}
 }
 
@@ -116,7 +116,7 @@ func TestQuadletMatchesLegacy(t *testing.T) {
 				l = "PodmanArgs=--memory=" + m
 			}
 			if !contains(gen, l) {
-				t.Errorf("%s: строки %q нет в сгенерированном юните", c.file, l)
+				t.Errorf("%s: the line %q is not in the generated unit", c.file, l)
 			}
 		}
 	}
@@ -148,7 +148,7 @@ func TestCaddyMatchesLegacy(t *testing.T) {
 				l = "handle @route1 {"
 			}
 			if !contains(gen, l) {
-				t.Errorf("%s: строки %q нет в сгенерированном файле", c.file, l)
+				t.Errorf("%s: the line %q is not in the generated file", c.file, l)
 			}
 		}
 	}
@@ -158,7 +158,7 @@ func TestQuadletWithoutDatabaseHasNoSocket(t *testing.T) {
 	a := apiQuadlet("blue", 18081)
 	a.DatabaseSocket = false
 	if strings.Contains(Quadlet(a), "postgresql") {
-		t.Error("без database_socket том не нужен")
+		t.Error("without database_socket the volume is not needed")
 	}
 }
 
@@ -166,12 +166,12 @@ func TestQuadletHardening(t *testing.T) {
 	got := Quadlet(apiQuadlet("blue", 18081))
 	for _, must := range []string{"ReadOnly=true", "NoNewPrivileges=true", "DropCapability=ALL", "Tmpfs=/tmp", "PublishPort=127.0.0.1:18081:8080"} {
 		if !strings.Contains(got, must) {
-			t.Errorf("нет %s", must)
+			t.Errorf("no %s", must)
 		}
 	}
 	for _, bad := range []string{"Privileged", "User=root", "Network=host", "AddCapability", "PublishPort=0.0.0.0"} {
 		if strings.Contains(got, bad) {
-			t.Errorf("не должно быть %s", bad)
+			t.Errorf("there must be no %s", bad)
 		}
 	}
 }
@@ -179,10 +179,10 @@ func TestQuadletHardening(t *testing.T) {
 func TestAuthorizedKey(t *testing.T) {
 	line := AuthorizedKey(actions.InstallDeployKey{Project: "p1", PublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDtqJ7zOtqQtYqOo0CpvDXNlMhV3HeJDpjrASKGLWdop my laptop"})
 	if !strings.HasPrefix(line, `command="/usr/local/bin/lite-deploy gate --project p1",restrict ssh-ed25519 `) || !strings.HasSuffix(line, " lite-deploy:p1\n") {
-		t.Errorf("строка: %q", line)
+		t.Errorf("line: %q", line)
 	}
 	if strings.Contains(line, "laptop") || strings.Count(line, "\n") != 1 {
-		t.Errorf("комментарий ключа должен быть заменён меткой: %q", line)
+		t.Errorf("the key comment must be replaced with a mark: %q", line)
 	}
 }
 
@@ -193,7 +193,7 @@ func TestEnvFile(t *testing.T) {
 	}
 	for _, v := range []string{"a\nb", "a\rb", "a\x00b"} {
 		if _, err := EnvFile([]EnvLine{{"A", v}}); err == nil {
-			t.Errorf("%q: ожидали отказ", v)
+			t.Errorf("%q: expected a refusal", v)
 		}
 	}
 }
@@ -211,6 +211,6 @@ func TestDatabaseURL(t *testing.T) {
 		}
 	}
 	if _, err := DatabaseURL("x", "r", "d", "pw"); err == nil {
-		t.Error("неизвестный формат")
+		t.Error("unknown format")
 	}
 }

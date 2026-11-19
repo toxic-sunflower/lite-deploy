@@ -1,6 +1,6 @@
 name: pages
 
-# Отдаёт site/install.sh по адресу https://lite-deploy.prozorov.me/install.sh
+# Serves site/liteup at https://lite-deploy.prozorov.me/liteup (and site/install.sh as a compatibility wrapper)
 on:
   push:
     branches: [main]
@@ -23,11 +23,11 @@ jobs:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
-      - name: Ключ в установщике совпадает с minisign.pub
+      - name: The key in liteup matches minisign.pub
         run: |
           key=$(sed -n '2p' minisign.pub)
-          grep -qF "MINISIGN_PUBKEY=\"$key\"" site/install.sh
-      - name: Сборка сайта из Markdown
+          grep -qF "MINISIGN_PUBKEY=\"$key\"" site/liteup
+      - name: Build the site from Markdown
         run: |
           python3 -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install -q markdown==3.7

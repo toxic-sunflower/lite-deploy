@@ -24,7 +24,7 @@ func TestFixCommandsAllowlist(t *testing.T) {
 		a, _ := fixCommands(evil)
 		for _, x := range a {
 			if strings.Contains(strings.Join(x, " "), "--force") || strings.Contains(strings.Join(x, " "), "rm") {
-				t.Errorf("%q: попало в автоисправление: %v", evil, a)
+				t.Errorf("%q: ended up in the automatic fixes: %v", evil, a)
 			}
 		}
 	}
@@ -60,11 +60,11 @@ func TestFixRequiresRootAndConfirmation(t *testing.T) {
 	}
 	run(t, env, "fix", "--json")
 	if e := decode(t, out); e.OK || e.Error.Code != "confirmation_required" || sent != "" {
-		t.Fatalf("без --yes и терминала: %+v %q", e, sent)
+		t.Fatalf("without --yes and a terminal: %+v %q", e, sent)
 	}
 	out.Reset()
 	if c := run(t, env, "fix", "--yes", "--json"); c != 0 || sent != "POST /v1/fix" {
-		t.Fatalf("с --yes команда уходит агенту: %d %q", c, sent)
+		t.Fatalf("with --yes the command goes to the agent: %d %q", c, sent)
 	}
 }
 

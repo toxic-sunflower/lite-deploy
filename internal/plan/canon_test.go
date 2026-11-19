@@ -24,7 +24,7 @@ func TestCanonical(t *testing.T) {
 func TestCanonicalRejects(t *testing.T) {
 	for _, in := range []string{`1.5`, `{"a":1e3}`, `{} {}`, `{`, ``} {
 		if _, err := Canonical([]byte(in)); err == nil {
-			t.Errorf("%q: ожидали ошибку", in)
+			t.Errorf("%q: expected an error", in)
 		}
 	}
 }
@@ -43,17 +43,17 @@ func TestHashChangesWithAnyEdit(t *testing.T) {
 	pl.Steps[3].Summary += "."
 	h, _ := pl.ComputeHash()
 	if h == base {
-		t.Fatal("хэш не изменился после правки описания шага")
+		t.Fatal("the hash did not change after a step description edit")
 	}
 	pl.Steps[3].Summary = pl.Steps[3].Summary[:len(pl.Steps[3].Summary)-1]
 	h, _ = pl.ComputeHash()
 	if h != base {
-		t.Fatal("хэш должен вернуться после отката правки")
+		t.Fatal("the hash must return after the edit is reverted")
 	}
 	pl.Hash = "sha256:00"
 	h, _ = pl.ComputeHash()
 	if h != base {
-		t.Fatal("поле hash не должно входить в хэш")
+		t.Fatal("the hash field must not be part of the hash")
 	}
 }
 
@@ -61,6 +61,6 @@ func TestHashStableUnderFieldReorder(t *testing.T) {
 	a, _ := Canonical([]byte(`{"x":1,"y":{"b":2,"a":1}}`))
 	b, _ := Canonical([]byte(`{"y":{"a":1,"b":2},"x":1}`))
 	if HashBytes(a) != HashBytes(b) {
-		t.Fatal("хэш зависит от порядка полей")
+		t.Fatal("the hash depends on the field order")
 	}
 }

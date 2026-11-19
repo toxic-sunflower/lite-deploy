@@ -11,11 +11,11 @@ import (
 
 const goodManifest = `{
   "name": "logs",
-  "description": "просмотр журналов",
+  "description": "log viewer",
   "requires": ["jq"],
   "commands": [
-    {"name": "tail", "help": "последние строки", "args": "СЛУЖБА", "exec": "bin/tail.sh"},
-    {"name": "clear", "help": "очистить", "exec": "bin/clear.sh", "confirm": true}
+    {"name": "tail", "help": "last lines", "args": "SERVICE", "exec": "bin/tail.sh"},
+    {"name": "clear", "help": "clear", "exec": "bin/clear.sh", "confirm": true}
   ],
   "checks": [{"name": "size", "exec": "bin/size.sh", "fix": "lite logs clear"}]
 }`
@@ -40,7 +40,7 @@ func TestLoadAndRun(t *testing.T) {
 		t.Fatalf("%v %v", p, ok)
 	}
 	env := Env{Runner: fr, FS: m, User: "anna"}
-	fr.Handler = func(c host.Cmd) (host.Result, error) { return host.Result{Stdout: []byte("строка 1")}, nil }
+	fr.Handler = func(c host.Cmd) (host.Result, error) { return host.Result{Stdout: []byte("line 1")}, nil }
 	// не хватает пакета jq
 	_, err := p.Run(context.Background(), env, "tail", []string{"caddy"})
 	var pe *Error
@@ -50,7 +50,7 @@ func TestLoadAndRun(t *testing.T) {
 	}
 	m.Files["/jq"] = []byte("x")
 	out, err := p.Run(context.Background(), env, "tail", []string{"caddy"})
-	if err != nil || out.Text != "строка 1\n" {
+	if err != nil || out.Text != "line 1\n" {
 		t.Fatalf("%+v %v", out, err)
 	}
 	c := fr.Calls[0]
@@ -61,7 +61,7 @@ func TestLoadAndRun(t *testing.T) {
 		t.Fatalf("%v", c.Env)
 	}
 	if _, err := p.Run(context.Background(), env, "nope", nil); err == nil {
-		t.Fatal("неизвестная команда")
+		t.Fatal("unknown command")
 	}
 }
 
@@ -84,13 +84,13 @@ func TestChecks(t *testing.T) {
 	p, _ := r.Get("logs")
 	env := Env{Runner: fr, FS: m}
 	fr.Handler = func(c host.Cmd) (host.Result, error) {
-		return host.Result{ExitCode: 1, Stdout: []byte("журналы 5 ГБ\nвторая строка")}, nil
+		return host.Result{ExitCode: 1, Stdout: []byte("logs 5 GB\nsecond line")}, nil
 	}
 	fs := p.Check(context.Background(), env)
 	if len(fs) != 2 || fs[0].Check != "requires" || fs[0].Level != LevelFail {
 		t.Fatalf("%+v", fs)
 	}
-	if fs[1].Level != LevelWarn || fs[1].Message != "журналы 5 ГБ" || fs[1].Fix != "lite logs clear" {
+	if fs[1].Level != LevelWarn || fs[1].Message != "logs 5 GB" || fs[1].Fix != "lite logs clear" {
 		t.Fatalf("%+v", fs[1])
 	}
 	m.Files["/jq"] = []byte("x")
@@ -98,28 +98,28 @@ func TestChecks(t *testing.T) {
 		fr.Handler = func(c host.Cmd) (host.Result, error) { return host.Result{ExitCode: code}, nil }
 		fs := p.Check(context.Background(), env)
 		if len(fs) != 1 || fs[0].Level != want {
-			t.Errorf("код %d: %+v", code, fs)
+			t.Errorf("code %d: %+v", code, fs)
 		}
 	}
 }
 
 func TestBadManifests(t *testing.T) {
 	bad := map[string]string{
-		"не JSON":            `{`,
-		"чужое поле":         `{"name":"logs","commands":[{"name":"a","exec":"a.sh"}],"extra":1}`,
-		"занятое имя":        `{"name":"deploy","commands":[{"name":"a","exec":"a.sh"}]}`,
-		"другое имя":         `{"name":"other","commands":[{"name":"a","exec":"a.sh"}]}`,
-		"путь наружу":        `{"name":"logs","commands":[{"name":"a","exec":"../a.sh"}]}`,
-		"абсолютный путь":    `{"name":"logs","commands":[{"name":"a","exec":"/bin/sh"}]}`,
-		"нет команд":         `{"name":"logs"}`,
-		"повтор команды":     `{"name":"logs","commands":[{"name":"a","exec":"a"},{"name":"a","exec":"b"}]}`,
-		"плохой пакет":       `{"name":"logs","requires":["a b"],"commands":[{"name":"a","exec":"a.sh"}]}`,
-		"плохое имя команды": `{"name":"logs","commands":[{"name":"A b","exec":"a.sh"}]}`,
+		"not JSON":                `{`,
+		"a foreign field":         `{"name":"logs","commands":[{"name":"a","exec":"a.sh"}],"extra":1}`,
+		"a taken name":            `{"name":"deploy","commands":[{"name":"a","exec":"a.sh"}]}`,
+		"another name":            `{"name":"other","commands":[{"name":"a","exec":"a.sh"}]}`,
+		"a path pointing outside": `{"name":"logs","commands":[{"name":"a","exec":"../a.sh"}]}`,
+		"absolute path":           `{"name":"logs","commands":[{"name":"a","exec":"/bin/sh"}]}`,
+		"no commands":             `{"name":"logs"}`,
+		"a repeated command":      `{"name":"logs","commands":[{"name":"a","exec":"a"},{"name":"a","exec":"b"}]}`,
+		"a bad package":           `{"name":"logs","requires":["a b"],"commands":[{"name":"a","exec":"a.sh"}]}`,
+		"a bad command name":      `{"name":"logs","commands":[{"name":"A b","exec":"a.sh"}]}`,
 	}
 	for name, mf := range bad {
 		_, r, errs, _ := setup(t, mf)
 		if len(errs) != 1 || len(r.List()) != 0 {
-			t.Errorf("%s: должен отклоняться, ошибки %v", name, errs)
+			t.Errorf("%s: must be rejected, errors %v", name, errs)
 		}
 	}
 }
@@ -134,7 +134,7 @@ func TestDirOwnershipAndBrokenPlugin(t *testing.T) {
 	r := NewRegistry()
 	errs := LoadDir(m, Dir, r, nil)
 	if len(errs) != 2 || len(r.List()) != 0 {
-		t.Fatalf("плагины с небезопасным каталогом не загружаются: %v", errs)
+		t.Fatalf("plugins with an unsafe directory are not loaded: %v", errs)
 	}
 }
 
@@ -144,9 +144,9 @@ func TestRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	if r.Add(&external{m: Manifest{Name: "ingress"}}) == nil || r.Add(&external{m: Manifest{Name: "exec"}}) == nil || r.Add(&external{m: Manifest{Name: "Bad"}}) == nil {
-		t.Fatal("повтор, занятое и неверное имя отклоняются")
+		t.Fatal("a repeated, taken and invalid name are rejected")
 	}
 	if ValidArgs([]string{"a\nb"}) || ValidArgs(make([]string, 17)) || !ValidArgs([]string{"ok", ""}) {
-		t.Fatal("проверка аргументов")
+		t.Fatal("argument validation")
 	}
 }

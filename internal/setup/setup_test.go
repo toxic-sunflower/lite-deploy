@@ -38,7 +38,7 @@ func (w *world) env(input string) Env {
 		line := c.Name + " " + strings.Join(c.Args, " ")
 		w.calls = append(w.calls, line)
 		if w.failOn != "" && strings.HasPrefix(line, w.failOn) {
-			return host.Result{ExitCode: 1, Stderr: []byte("сбой")}, nil
+			return host.Result{ExitCode: 1, Stderr: []byte("a failure")}, nil
 		}
 		switch {
 		case c.Name == "apt-get" && len(c.Args) > 0 && c.Args[0] == "install":
@@ -86,7 +86,7 @@ func (w *world) has(t *testing.T, want ...string) {
 	joined := strings.Join(w.calls, "\n")
 	for _, x := range want {
 		if !strings.Contains(joined, x) {
-			t.Errorf("нет вызова %q в\n%s", x, joined)
+			t.Errorf("no call %q in\n%s", x, joined)
 		}
 	}
 }
@@ -109,13 +109,13 @@ func TestNewUserFullFlow(t *testing.T) {
 	w.has(t, "useradd --create-home --shell /bin/bash serafim", "passwd serafim", "usermod -aG sudo serafim",
 		"ufw --force reset", "ufw limit 2222/tcp", "ufw --force enable", "sshd -t", "systemctl reload ssh")
 	if strings.Contains(strings.Join(w.calls, "\n"), "ufw allow 80/tcp") {
-		t.Error("в режиме max веб-порты не открываются")
+		t.Error("in mode max the web ports are not opened")
 	}
 	if got := string(w.fs.Files["/home/serafim/.ssh/authorized_keys"]); got != key+"\n" {
 		t.Fatalf("authorized_keys: %q", got)
 	}
 	if w.fs.Perms["/home/serafim/.ssh/authorized_keys"] != 0o600 || w.fs.Owners["/home/serafim/.ssh/authorized_keys"][0] != "serafim" {
-		t.Errorf("права ключа: %v %v", w.fs.Perms, w.fs.Owners)
+		t.Errorf("key permissions: %v %v", w.fs.Perms, w.fs.Owners)
 	}
 	drop := string(w.fs.Files[SSHDropIn])
 	if !strings.Contains(drop, "Match User serafim\n") || !strings.Contains(drop, "PasswordAuthentication no") {
@@ -123,7 +123,7 @@ func TestNewUserFullFlow(t *testing.T) {
 	}
 	// порядок: правило SSH до включения файервола; запрет пароля после ключа и файервола
 	if w.index("ufw limit") >= w.index("ufw --force enable") || w.index("ufw --force enable") >= w.index("sshd -t") {
-		t.Fatalf("порядок: %v", w.calls)
+		t.Fatalf("order: %v", w.calls)
 	}
 }
 
@@ -135,26 +135,26 @@ func TestExistingUserKeepsKeysAndPassword(t *testing.T) {
 	}
 	joined := strings.Join(w.calls, "\n")
 	if strings.Contains(joined, "useradd") || strings.Contains(joined, "passwd anna\n") {
-		t.Fatalf("существующего пользователя с паролем не трогаем: %s", joined)
+		t.Fatalf("an existing user with a password is not touched: %s", joined)
 	}
 	w.has(t, "usermod -aG sudo anna", "ufw allow 80/tcp", "ufw allow 443/tcp", "ufw allow 443/udp")
 	if string(w.fs.Files["/home/anna/.ssh/authorized_keys"]) != key+"\n" {
-		t.Fatal("ключи изменились")
+		t.Fatal("the keys changed")
 	}
 }
 
 func TestKeyIsMandatory(t *testing.T) {
 	w := newWorld()
-	err := w.env("y\nне ключ\nтоже нет\nssh-rsa коротко\n").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "max"})
+	err := w.env("y\nnot a key\nneither is this\nssh-rsa short\n").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "max"})
 	if err == nil {
-		t.Fatal("без ключа init должен остановиться")
+		t.Fatal("without a key init must stop")
 	}
 	if _, ok := w.fs.Files[SSHDropIn]; ok || w.index("ufw --force") >= 0 {
-		t.Fatalf("без ключа ни файервол, ни sshd не меняются: %v", w.calls)
+		t.Fatalf("without a key neither the firewall nor sshd is changed: %v", w.calls)
 	}
 	w = newWorld()
 	if err := w.env("y\n").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "max"}); err == nil {
-		t.Fatal("нет ввода и нет ключей: отказ")
+		t.Fatal("no input and no keys: a refusal")
 	}
 }
 
@@ -165,7 +165,7 @@ func TestRootNeedsUser(t *testing.T) {
 			t.Fatalf("%q: %v", cur, err)
 		}
 		if len(w.calls) != 0 {
-			t.Fatalf("ничего не должно выполняться: %v", w.calls)
+			t.Fatalf("nothing may run: %v", w.calls)
 		}
 	}
 }
@@ -174,7 +174,7 @@ func TestAllUsers(t *testing.T) {
 	w := newWorld()
 	got, err := w.env("").ResolveUsers(Options{AllUsers: true})
 	if err != nil || strings.Join(got, ",") != "anna" {
-		t.Fatalf("только люди с оболочкой, без проектов и служебных: %v %v", got, err)
+		t.Fatalf("only people with a shell, no projects and no system users: %v %v", got, err)
 	}
 }
 
@@ -183,30 +183,30 @@ func TestRejections(t *testing.T) {
 	e := w.env("")
 	for _, o := range []Options{{Users: []string{"shop"}}, {Users: []string{"root"}}, {Users: []string{"Bad Name"}}, {Users: []string{"a;b"}}} {
 		if _, err := e.ResolveUsers(o); err == nil {
-			t.Errorf("%v должен отклоняться", o.Users)
+			t.Errorf("%v must be rejected", o.Users)
 		}
 	}
 	if err := w.env("y\n").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "wide"}); err == nil {
-		t.Error("неизвестный режим файервола")
+		t.Error("unknown firewall mode")
 	}
 	if err := w.env("y\n").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "max", Plugins: []string{"mysql"}}); err == nil {
-		t.Error("неизвестный плагин")
+		t.Error("unknown plugin")
 	}
 	if len(w.calls) != 0 {
-		t.Fatalf("при неверных параметрах ничего не выполняется: %v", w.calls)
+		t.Fatalf("on wrong parameters nothing is executed: %v", w.calls)
 	}
 }
 
 func TestDeclinedPlanChangesNothing(t *testing.T) {
 	w := newWorld()
 	if err := w.env("n\n").Apply(context.Background(), Options{Users: []string{"serafim"}, Firewall: "max"}); err == nil {
-		t.Fatal("отказ должен останавливать")
+		t.Fatal("a refusal must stop")
 	}
 	if len(w.calls) != 0 || len(w.created) != 0 {
-		t.Fatalf("после отказа ничего не меняется: %v", w.calls)
+		t.Fatalf("after a refusal nothing changes: %v", w.calls)
 	}
 	if !strings.Contains(w.out.String(), "will be created") {
-		t.Fatalf("план должен быть показан: %s", w.out.String())
+		t.Fatalf("the plan must be shown: %s", w.out.String())
 	}
 }
 
@@ -215,13 +215,13 @@ func TestSSHDFailureRestores(t *testing.T) {
 	w.fs.Files["/home/anna/.ssh/authorized_keys"] = []byte(key + "\n")
 	w.failOn = "sshd -t"
 	if err := w.env("").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Yes: true}); err == nil {
-		t.Fatal("ошибка проверки sshd должна останавливать")
+		t.Fatal("an sshd validation error must stop")
 	}
 	if _, ok := w.fs.Files[SSHDropIn]; ok {
-		t.Fatal("непроверенный файл sshd должен быть убран")
+		t.Fatal("an unchecked sshd file must be removed")
 	}
 	if w.index("systemctl reload") >= 0 {
-		t.Fatal("sshd не перечитывается при ошибке проверки")
+		t.Fatal("sshd is not reloaded when the check fails")
 	}
 }
 
@@ -245,7 +245,7 @@ func TestFirewallOffAndInstall(t *testing.T) {
 		t.Fatal(err)
 	}
 	if w.index("apt-get install") >= 0 || w.index("ufw disable") >= 0 {
-		t.Fatalf("ufw нет и режим off: ставить и трогать нечего: %v", w.calls)
+		t.Fatalf("there is no ufw and the mode is off: nothing to install or touch: %v", w.calls)
 	}
 	w = newWorld()
 	w.fs.Files["/home/anna/.ssh/authorized_keys"] = []byte(key + "\n")
@@ -261,14 +261,14 @@ func TestNoIncludeInSSHDConfig(t *testing.T) {
 	w.fs.Files["/etc/ssh/sshd_config"] = []byte("Port 22\n")
 	w.fs.Files["/home/anna/.ssh/authorized_keys"] = []byte(key + "\n")
 	if err := w.env("").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Yes: true}); err == nil {
-		t.Fatal("без Include настройка не подействует: нужно сказать об этом")
+		t.Fatal("without Include the setting would not take effect: this must be reported")
 	}
 }
 
 func TestCaddyPluginInstallsAndConfigures(t *testing.T) {
 	w := newWorld()
 	w.fs.Files["/home/anna/.ssh/authorized_keys"] = []byte(key + "\n")
-	w.fs.Files["/etc/caddy/Caddyfile"] = []byte(":80 { respond \"старое\" }\n")
+	w.fs.Files["/etc/caddy/Caddyfile"] = []byte(":80 { respond \"old\" }\n")
 	w.failOn = "caddy version"
 	if err := w.env("").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Plugins: []string{"caddy"}, Yes: true}); err != nil {
 		t.Fatal(err, w.out.String())
@@ -281,18 +281,18 @@ func TestCaddyPluginInstallsAndConfigures(t *testing.T) {
 	}
 	backup := false
 	for name, body := range w.fs.Files {
-		if strings.HasPrefix(name, "/etc/caddy/Caddyfile.bak.") && strings.Contains(string(body), "старое") {
+		if strings.HasPrefix(name, "/etc/caddy/Caddyfile.bak.") && strings.Contains(string(body), "old") {
 			backup = true
 		}
 	}
 	if !backup {
-		t.Fatal("прежний Caddyfile должен быть сохранён")
+		t.Fatal("the previous Caddyfile must be kept")
 	}
 	if _, ok := w.fs.Files["/etc/caddy/conf.d/00-placeholder.caddy"]; !ok {
-		t.Fatal("нет заглушки conf.d")
+		t.Fatal("no conf.d placeholder")
 	}
 	if w.index("systemctl enable --now caddy") < w.index("caddy validate") {
-		t.Fatal("службу нельзя запускать до проверки Caddyfile")
+		t.Fatal("the service must not be started before the Caddyfile is checked")
 	}
 }
 
@@ -305,14 +305,14 @@ func TestCaddyAlreadyInstalledKeepsOurCaddyfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if w.index("curl") >= 0 || w.index("apt-get install") >= 0 {
-		t.Fatalf("Caddy уже есть: ставить нечего: %v", w.calls)
+		t.Fatalf("Caddy is already there: nothing to install: %v", w.calls)
 	}
 	if string(w.fs.Files["/etc/caddy/Caddyfile"]) != own {
-		t.Fatal("свой Caddyfile не переписывается")
+		t.Fatal("a custom Caddyfile is not rewritten")
 	}
 	for name := range w.fs.Files {
 		if strings.Contains(name, "Caddyfile.bak") {
-			t.Fatal("копию делать не нужно")
+			t.Fatal("no backup is needed")
 		}
 	}
 }
@@ -322,18 +322,18 @@ func TestCaddyValidateFailureStopsBeforeStart(t *testing.T) {
 	w.fs.Files["/home/anna/.ssh/authorized_keys"] = []byte(key + "\n")
 	w.failOn = "caddy validate"
 	if err := w.env("").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Plugins: []string{"caddy"}, Yes: true}); err == nil {
-		t.Fatal("ошибка проверки Caddyfile должна останавливать")
+		t.Fatal("a Caddyfile validation error must stop")
 	}
 	if w.index("systemctl enable --now caddy") >= 0 {
-		t.Fatal("со сломанным Caddyfile службу не запускаем")
+		t.Fatal("with a broken Caddyfile the service is not started")
 	}
 }
 
 func TestEveryInstallablePluginIsAcceptedByPlan(t *testing.T) {
 	e := Env{FS: host.NewMemFS(), Runner: &host.FakeRunner{Handler: func(host.Cmd) (host.Result, error) { return host.Result{}, nil }}}
 	for _, n := range append(builtin.PluginNames(), "postgres") {
-		if _, err := e.Plan(Options{Firewall: "off", Plugins: []string{n}}, nil); err != nil && strings.Contains(err.Error(), "неизвестный плагин") {
-			t.Errorf("плагин %s из PluginNames отклонён планом: %v", n, err)
+		if _, err := e.Plan(Options{Firewall: "off", Plugins: []string{n}}, nil); err != nil && strings.Contains(err.Error(), "unknown plugin") {
+			t.Errorf("the plugin %s from PluginNames was rejected by the plan: %v", n, err)
 		}
 	}
 }
@@ -351,6 +351,6 @@ func TestFirewallKeepDoesNotTouchUfw(t *testing.T) {
 		t.Fatalf("%v %v", p, err)
 	}
 	if _, err := e.Plan(Options{Firewall: "bogus"}, nil); err == nil {
-		t.Fatal("неизвестный режим должен отклоняться")
+		t.Fatal("an unknown mode must be rejected")
 	}
 }

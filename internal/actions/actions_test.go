@@ -34,7 +34,7 @@ func TestEveryActionHasGoodExample(t *testing.T) {
 	for _, n := range Names() {
 		raw, ok := goodParams[n]
 		if !ok {
-			t.Errorf("нет примера для действия %s", n)
+			t.Errorf("no example for the action %s", n)
 			continue
 		}
 		if _, issues := Decode(n, json.RawMessage(raw)); len(issues) > 0 {
@@ -42,14 +42,14 @@ func TestEveryActionHasGoodExample(t *testing.T) {
 		}
 	}
 	if len(Names()) != 16 {
-		t.Errorf("в списке ровно 16 действий, получили %d: %v", len(Names()), Names())
+		t.Errorf("the list has exactly 16 actions, got %d: %v", len(Names()), Names())
 	}
 }
 
 func TestDangerousActionsAreUnknown(t *testing.T) {
 	for _, n := range []string{"delete_project", "delete_database", "delete_site", "rotate_deploy_key", "trust_key_add", "trust_key_remove", "install_plugin", "update_agent", "run", "exec", "shell"} {
 		if _, issues := Decode(n, json.RawMessage(`{}`)); len(issues) != 1 || issues[0].Code != "unknown_action" {
-			t.Errorf("%s: ожидали unknown_action, получили %v", n, issues)
+			t.Errorf("%s: expected unknown_action, got %v", n, issues)
 		}
 	}
 }
@@ -104,7 +104,7 @@ func TestParamsRejected(t *testing.T) {
 	}
 	for _, c := range bad {
 		if _, issues := Decode(c.action, json.RawMessage(c.raw)); len(issues) == 0 {
-			t.Errorf("%s %s: ожидали отказ", c.action, c.raw)
+			t.Errorf("%s %s: expected a refusal", c.action, c.raw)
 		}
 	}
 }
@@ -112,7 +112,7 @@ func TestParamsRejected(t *testing.T) {
 func TestCiphertextPatternMatchesSecretsPackage(t *testing.T) {
 	f, _ := reflect.TypeOf(SetSecret{}).FieldByName("Ciphertext")
 	if f.Tag.Get("pattern") != secrets.ArmorPattern {
-		t.Fatalf("шаблон в actions.SetSecret расходится с secrets.ArmorPattern:\n%s\n%s", f.Tag.Get("pattern"), secrets.ArmorPattern)
+		t.Fatalf("the pattern in actions.SetSecret differs from secrets.ArmorPattern:\n%s\n%s", f.Tag.Get("pattern"), secrets.ArmorPattern)
 	}
 }
 
@@ -127,7 +127,7 @@ func TestClassesAreNormalInV0(t *testing.T) {
 	for _, n := range Names() {
 		d, _ := Lookup(n)
 		if d.Class != ClassNormal {
-			t.Errorf("%s: класс %s", n, d.Class)
+			t.Errorf("%s: class %s", n, d.Class)
 		}
 	}
 }
@@ -140,7 +140,7 @@ func TestInstallUnitRejectsBadExec(t *testing.T) {
 		`{"project":"shop","service":"api","slot":"blue","host_port":18001,"exec":[""],"memory":"512m","pids":256}`,
 	} {
 		if _, issues := Decode("install_unit", json.RawMessage(raw)); len(issues) == 0 {
-			t.Errorf("должно быть отклонено: %s", raw)
+			t.Errorf("must be rejected: %s", raw)
 		}
 	}
 }

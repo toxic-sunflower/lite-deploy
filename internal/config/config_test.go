@@ -31,7 +31,7 @@ func TestRejected(t *testing.T) {
 		m := host.NewMemFS()
 		m.Files[DefaultPath] = []byte(in)
 		if _, issues, err := Load(m, DefaultPath); err != nil || len(issues) == 0 {
-			t.Errorf("%s: ожидали ошибку, получили %v %v", in, issues, err)
+			t.Errorf("%s: expected an error, got %v %v", in, issues, err)
 		}
 	}
 }

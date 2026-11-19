@@ -42,12 +42,12 @@ func TestPGCreateDB(t *testing.T) {
 	}
 	pass, err := mem.ReadFile(pgSecretDir + "/pg-shopapp")
 	if err != nil || len(strings.TrimSpace(string(pass))) != 48 {
-		t.Fatalf("пароль не записан: %q %v", pass, err)
+		t.Fatalf("the password was not written: %q %v", pass, err)
 	}
 	all := strings.Join(sql, "\n")
 	if !strings.Contains(all, "create role shopapp login password '"+strings.TrimSpace(string(pass))+"'") ||
 		!strings.Contains(all, "create database shop owner shopapp") {
-		t.Fatalf("неожиданный SQL:\n%s", all)
+		t.Fatalf("unexpected SQL:\n%s", all)
 	}
 	// второй вызов использует тот же пароль
 	if _, err := (PG{}).Run(context.Background(), env, "create-db", []string{"shop2", "shopapp"}); err != nil {
@@ -55,29 +55,29 @@ func TestPGCreateDB(t *testing.T) {
 	}
 	again, _ := mem.ReadFile(pgSecretDir + "/pg-shopapp")
 	if string(again) != string(pass) {
-		t.Fatal("пароль роли изменился при повторном вызове")
+		t.Fatal("the role password changed on a repeated call")
 	}
 }
 
 func TestPGCreateDBRejectsBadNames(t *testing.T) {
 	env := plugin.Env{Runner: fn(func(host.Cmd) (host.Result, error) {
-		t.Fatal("команда не должна выполняться")
+		t.Fatal("the command must not run")
 		return host.Result{}, nil
 	}), FS: host.NewMemFS()}
 	for _, bad := range []string{"Shop", "a;drop", "1x", "a-b", ""} {
 		if _, err := (PG{}).Run(context.Background(), env, "create-db", []string{bad}); err == nil {
-			t.Errorf("имя %q должно быть отклонено", bad)
+			t.Errorf("the name %q must be rejected", bad)
 		}
 	}
 	if _, err := (PG{}).Run(context.Background(), env, "drop-db", []string{"a;b"}); err == nil {
-		t.Error("drop-db с плохим именем должен отказать")
+		t.Error("drop-db with a bad name must refuse")
 	}
 }
 
 func TestPodmanPSUnknownProject(t *testing.T) {
 	env := plugin.Env{Runner: fn(func(host.Cmd) (host.Result, error) { return host.Result{}, nil }), FS: host.NewMemFS(), Projects: []string{"shop"}}
 	if _, err := (Podman{}).Run(context.Background(), env, "ps", []string{"nope"}); err == nil {
-		t.Fatal("неизвестный проект должен отклоняться")
+		t.Fatal("an unknown project must be rejected")
 	}
 }
 
@@ -99,7 +99,7 @@ func TestRedisCheckPublicBindFails(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("ожидалась ошибка bind: %+v", fs)
+		t.Fatalf("a bind error was expected: %+v", fs)
 	}
 }
 
@@ -112,7 +112,7 @@ func TestNormalizeFrom(t *testing.T) {
 	}
 	for _, bad := range []string{"0.0.0.0", "0.0.0.0/0", "::/0", "any", "", "10.0.0.5; drop", "::"} {
 		if _, err := normalizeFrom(bad); err == nil {
-			t.Errorf("%q должен быть отклонён", bad)
+			t.Errorf("%q must be rejected", bad)
 		}
 	}
 }
@@ -123,10 +123,10 @@ func TestHBARoundTrip(t *testing.T) {
 	text := hbaJoin(strings.TrimRight(base, "\n"), rules)
 	out, got := hbaSplit(text)
 	if out != strings.TrimRight(base, "\n") || len(got) != 2 || got[0] != rules[0] || got[1] != rules[1] {
-		t.Fatalf("круг не сошёлся:\n%s\n%v", text, got)
+		t.Fatalf("the round trip did not match:\n%s\n%v", text, got)
 	}
 	if hbaJoin(out, nil) != base || strings.Contains(hbaJoin(out, nil), "lite-deploy") {
-		t.Fatal("пустой набор правил должен убирать блок целиком")
+		t.Fatal("an empty set of rules must remove the whole block")
 	}
 }
 
@@ -160,20 +160,20 @@ func TestPGAllowWritesRuleAndOpensFirewall(t *testing.T) {
 		t.Fatalf("pg_hba.conf:\n%s", got)
 	}
 	if !strings.Contains(strings.Join(calls, "\n"), "ufw allow proto tcp from 10.0.0.5/32 to any port 5432") {
-		t.Fatalf("порт не открыт:\n%s", strings.Join(calls, "\n"))
+		t.Fatalf("the port is not open:\n%s", strings.Join(calls, "\n"))
 	}
 }
 
 func TestPGAllowRejectsOpenWorld(t *testing.T) {
 	env := plugin.Env{Runner: fn(func(host.Cmd) (host.Result, error) {
-		t.Fatal("ничего не должно выполняться")
+		t.Fatal("nothing may run")
 		return host.Result{}, nil
 	}), FS: host.NewMemFS()}
 	if _, err := (PG{}).Run(context.Background(), env, "allow", []string{"shop", "shopapp", "0.0.0.0/0"}); err == nil {
-		t.Fatal("0.0.0.0/0 должен быть отклонён")
+		t.Fatal("0.0.0.0/0 must be rejected")
 	}
 	if _, err := (PG{}).Run(context.Background(), env, "listen", []string{"0.0.0.0"}); err == nil {
-		t.Fatal("listen 0.0.0.0 должен быть отклонён")
+		t.Fatal("listen 0.0.0.0 must be rejected")
 	}
 }
 
@@ -208,10 +208,10 @@ func TestPGBackupRotates(t *testing.T) {
 	}
 	// девять старых копий в mem, новая не создана фейком; после ротации остаётся 7
 	if left != 7 {
-		t.Fatalf("осталось %d копий, ждали 7: %v", left, names)
+		t.Fatalf("%d backups are left, expected 7: %v", left, names)
 	}
 	if !strings.Contains(strings.Join(calls, "\n"), "pg_dump -Fc -f "+PGBackupDir+"/shop-20261119T033000Z.dump shop") {
-		t.Fatalf("pg_dump не вызван:\n%v", calls)
+		t.Fatalf("pg_dump was not called:\n%v", calls)
 	}
 	_ = out
 }
@@ -224,12 +224,12 @@ func TestPGRestoreValidation(t *testing.T) {
 		{"shop", "../etc/passwd"}, {"shop", "crm-20261119T030000Z.dump"}, {"shop", "shop-20261119T030000Z.dump"}, {"shop"},
 	} {
 		if _, err := (PG{}).Run(context.Background(), env, "restore", args); err == nil {
-			t.Errorf("restore %v должен отказать", args)
+			t.Errorf("restore %v must refuse", args)
 		}
 	}
 	for _, c := range calls {
 		if strings.Contains(c, "pg_restore") {
-			t.Fatalf("pg_restore не должен вызываться: %s", c)
+			t.Fatalf("pg_restore must not be called: %s", c)
 		}
 	}
 }
@@ -248,11 +248,11 @@ func TestBackupFindings(t *testing.T) {
 	}
 	want := map[string]string{"backup-shop": plugin.LevelOK, "backup-crm": plugin.LevelFail, "backup-new": plugin.LevelWarn, "backup-others": plugin.LevelOK}
 	if _, noisy := got["backup-app_tpl_1"]; noisy {
-		t.Error("базы вне проектов не должны давать построчных замечаний")
+		t.Error("databases outside projects must not produce per-line findings")
 	}
 	for k, v := range want {
 		if got[k] != v {
-			t.Errorf("%s: %q, ждали %q", k, got[k], v)
+			t.Errorf("%s: %q, expected %q", k, got[k], v)
 		}
 	}
 }
@@ -263,11 +263,11 @@ func TestReadPassword(t *testing.T) {
 	}
 	for _, bad := range []string{"short", "has space in the password!!", "quote'quote'quote'quote", ""} {
 		if _, err := readPassword(strings.NewReader(bad)); err == nil {
-			t.Errorf("%q должен быть отклонён", bad)
+			t.Errorf("%q must be rejected", bad)
 		}
 	}
 	if _, err := readPassword(nil); err == nil {
-		t.Error("nil stdin должен давать ошибку")
+		t.Error("a nil stdin must give an error")
 	}
 }
 
@@ -279,9 +279,9 @@ func TestCreateDBWithGivenPassword(t *testing.T) {
 		t.Fatal(err)
 	}
 	if b, _ := mem.ReadFile(pgSecretDir + "/pg-shopapp"); strings.TrimSpace(string(b)) != "S3cretS3cretS3cret" {
-		t.Fatalf("секрет: %q", b)
+		t.Fatalf("secret: %q", b)
 	}
 	if !strings.Contains(strings.Join(calls, "\n"), "password 'S3cretS3cretS3cret'") {
-		t.Fatal("пароль не передан в SQL")
+		t.Fatal("the password was not passed into the SQL")
 	}
 }

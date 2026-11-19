@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-var update = flag.Bool("update", false, "перезаписать schemas/*.json и golden-файлы")
+var update = flag.Bool("update", false, "overwrite schemas/*.json and the golden files")
 
 // Закоммиченные схемы обязаны совпадать с генерируемыми из Go-типов (SPEC-v0.md, раздел 0).
 func TestCommittedSchemasMatch(t *testing.T) {
@@ -22,10 +22,10 @@ func TestCommittedSchemasMatch(t *testing.T) {
 		}
 		got, err := os.ReadFile(path)
 		if err != nil {
-			t.Fatalf("%s: %v (запустите go test ./internal/cli -update)", path, err)
+			t.Fatalf("%s: %v (run go test ./internal/cli -update)", path, err)
 		}
 		if string(got) != string(want) {
-			t.Errorf("%s устарел: запустите go test ./internal/cli -update", path)
+			t.Errorf("%s is outdated: run go test ./internal/cli -update", path)
 		}
 	}
 }

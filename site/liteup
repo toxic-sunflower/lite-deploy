@@ -1,0 +1,293 @@
+#!/bin/sh
+# liteup: installs and manages lite-deploy (the way rustup does for Rust).
+#
+#   curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh                    install the latest version
+#   curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh -s -- install --version v0.6.1
+#
+# After the first run `liteup` itself is installed next to lite-deploy:
+#
+#   sudo liteup install [--version vX.Y.Z]   install lite, the agent and liteup itself
+#   sudo liteup update                       move to the latest release (restarts the agent)
+#   sudo liteup reinstall                    uninstall and install the same version again
+#   sudo liteup uninstall [--purge] [--yes]  remove lite and the agent; --purge also deletes settings, secrets and backups
+#   liteup status                            installed and latest versions
+#
+# Options (or environment variables):
+#   --version <tag>       LITE_DEPLOY_VERSION     version (the latest by default)
+#   --prefix <dir>        LITE_DEPLOY_PREFIX      where to install (/usr/local/bin by default)
+#   --skip-sig            LITE_DEPLOY_SKIP_SIG=1  do not verify the signature (SHA256 only; unsafe)
+#   --yes                                         do not ask for confirmation (uninstall)
+#   LITE_DEPLOY_BASE_URL  where to download from (for testing; GitHub Releases by default)
+#   LITE_DEPLOY_BINARY_ONLY=1                     install the binary only (for testing without root)
+#
+# The minisign public key the releases are signed with. Matches minisign.pub in the repository.
+MINISIGN_PUBKEY="RWQXkl8IozvEWfo230NRtIvfuO4KI+SiT2s0p+Qynna/9WSATC/JDcyJ"
+REPO="toxic-sunflower/lite-deploy"
+
+set -eu
+
+say() { printf '%s\n' "$*"; }
+die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  cat <<'USAGE'
+liteup: installs and manages lite-deploy.
+
+  curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh                 install the latest version
+  curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh -s -- install --version v0.6.1
+
+  sudo liteup install [--version vX.Y.Z]   install lite, the agent and liteup itself
+  sudo liteup update                       move to the latest release (restarts the agent)
+  sudo liteup reinstall                    uninstall and install the same version again
+  sudo liteup uninstall [--purge] [--yes]  remove lite and the agent; --purge also deletes settings, secrets and backups
+  liteup status                            installed and latest versions
+
+Options: --version TAG, --prefix DIR (default /usr/local/bin), --skip-sig (unsafe), --yes, --purge, --force
+USAGE
+}
+
+version=${LITE_DEPLOY_VERSION:-latest}
+prefix=${LITE_DEPLOY_PREFIX:-/usr/local/bin}
+skip_sig=${LITE_DEPLOY_SKIP_SIG:-0}
+binary_only=${LITE_DEPLOY_BINARY_ONLY:-0}
+assume_yes=0
+purge=0
+force=0
+
+# ---- arguments: liteup [command] [options] ----
+cmd=install
+if [ $# -gt 0 ]; then
+  case $1 in
+    install|update|uninstall|reinstall|status|version|help) cmd=$1; shift ;;
+    -h|--help) cmd=help; shift ;;
+  esac
+fi
+while [ $# -gt 0 ]; do
+  case $1 in
+    --version) [ $# -ge 2 ] || die "--version needs a value"; version=$2; shift ;;
+    --prefix)  [ $# -ge 2 ] || die "--prefix needs a value"; prefix=$2; shift ;;
+    --skip-sig) skip_sig=1 ;;
+    --yes|-y) assume_yes=1 ;;
+    --purge) purge=1 ;;
+    --force) force=1 ;;
+    -h|--help) cmd=help ;;
+    *) die "unknown option: $1 (see: liteup help)" ;;
+  esac
+  shift
+done
+
+if [ "$cmd" = help ]; then usage; exit 0; fi
+
+[ "$(uname -s)" = Linux ] || die "only Linux is supported"
+case $(uname -m) in
+  x86_64|amd64)  arch=amd64 ;;
+  aarch64|arm64) arch=arm64 ;;
+  *) die "architecture $(uname -m) is not supported (amd64 and arm64 only)" ;;
+esac
+
+need_root() {
+  [ "$binary_only" = 1 ] && return 0
+  [ "$(id -u)" -eq 0 ] || die "root is required: run with sudo (sudo liteup $cmd)"
+}
+
+if command -v curl >/dev/null 2>&1; then
+  fetch() { curl -fsSL --proto '=https,file' --tlsv1.2 -o "$2" "$1"; }
+  latest_tag() {
+    curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" | sed 's|.*/||'
+  }
+elif command -v wget >/dev/null 2>&1; then
+  fetch() { wget -q -O "$2" "$1"; }
+  latest_tag() {
+    wget -q --max-redirect=0 -S -O /dev/null "https://github.com/$REPO/releases/latest" 2>&1 | sed -n 's|.*[Ll]ocation: .*/||p' | tr -d '\r' | head -n 1
+  }
+else
+  fetch() { die "curl or wget is required"; }
+  latest_tag() { die "curl or wget is required"; }
+fi
+
+installed_version() {
+  if [ -x "$prefix/lite-deploy" ]; then "$prefix/lite-deploy" version 2>/dev/null | head -n 1 | sed 's/^lite-deploy //'; fi
+}
+
+# ---- package manager (only needed to install minisign) ----
+as_root() {
+  if [ "$(id -u)" -eq 0 ]; then "$@"
+  elif command -v sudo >/dev/null 2>&1; then sudo "$@"
+  else die "root or sudo is required (or install the package by hand)"; fi
+}
+if command -v apt-get >/dev/null 2>&1; then pm=apt
+elif command -v dnf >/dev/null 2>&1; then pm=dnf
+elif command -v zypper >/dev/null 2>&1; then pm=zypper
+elif command -v pacman >/dev/null 2>&1; then pm=pacman
+else pm=""; fi
+apt_updated=0
+pkg_install() {
+  case $pm in
+    apt)
+      if [ "$apt_updated" = 0 ]; then as_root apt-get update -qq; apt_updated=1; fi
+      as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$@" >/dev/null ;;
+    dnf)    as_root dnf install -y -q "$@" ;;
+    zypper) as_root zypper --non-interactive --quiet install "$@" ;;
+    pacman) as_root pacman -S --noconfirm --needed "$@" ;;
+    *) die "unknown package manager on this system: install ${*} by hand" ;;
+  esac
+}
+
+# ---- install ----
+do_install() {
+  need_root
+  if [ "$binary_only" != 1 ]; then
+    [ -d /run/systemd/system ] || die "systemd is required"
+  fi
+  case $version in
+    latest|v[0-9]*) ;;
+    *) die "the version must look like v1.2.3 or latest" ;;
+  esac
+  command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required"
+
+  if [ -n "${LITE_DEPLOY_BASE_URL:-}" ]; then
+    base=$LITE_DEPLOY_BASE_URL
+  elif [ "$version" = latest ]; then
+    base="https://github.com/$REPO/releases/latest/download"
+  else
+    base="https://github.com/$REPO/releases/download/$version"
+  fi
+
+  sig_note=""
+  if [ "$skip_sig" != 1 ]; then
+    [ "$MINISIGN_PUBKEY" != "REPLACE_WITH_MINISIGN_PUBLIC_KEY" ] || die "this script has no signing key (a release problem, please report it)"
+    if ! command -v minisign >/dev/null 2>&1; then
+      say "Installing minisign to verify the signature..."
+      pkg_install minisign || die "could not install minisign (on RHEL it is in EPEL): install it by hand or use --skip-sig (SHA256 only, unsafe)"
+      command -v minisign >/dev/null 2>&1 || die "minisign did not appear after installation: install it by hand or use --skip-sig (SHA256 only, unsafe)"
+    fi
+  else
+    say "WARNING: the signature is not verified, only SHA256 from the same address."
+  fi
+
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT INT TERM
+  name="lite-deploy-linux-$arch"
+
+  say "[1/4] Downloading $name ($version)"
+  fetch "$base/$name" "$tmp/$name" || die "could not download $base/$name"
+  fetch "$base/SHA256SUMS" "$tmp/SHA256SUMS" || die "could not download SHA256SUMS"
+  if [ "$skip_sig" != 1 ]; then
+    fetch "$base/SHA256SUMS.minisig" "$tmp/SHA256SUMS.minisig" || die "could not download SHA256SUMS.minisig"
+    minisign -Vm "$tmp/SHA256SUMS" -P "$MINISIGN_PUBKEY" -x "$tmp/SHA256SUMS.minisig" >/dev/null \
+      || die "the SHA256SUMS signature is invalid: the files may have been tampered with, installation cancelled"
+    sig_note="signature OK, "
+  fi
+
+  verify_asset() { # verify_asset FILE NAME
+    want=$(awk -v n="$2" '$2==n || $2=="*"n {print $1}' "$tmp/SHA256SUMS")
+    [ -n "$want" ] || return 1
+    got=$(sha256sum "$1" | awk '{print $1}')
+    [ "$want" = "$got" ] || die "checksum mismatch for $2 (expected $want, got $got)"
+  }
+  verify_asset "$tmp/$name" "$name" || die "SHA256SUMS has no entry for $name"
+  say "[2/4] Verified: ${sig_note}SHA256 OK"
+
+  # liteup itself comes from the same signed release, so it is updated together with lite
+  have_liteup=0
+  if fetch "$base/liteup" "$tmp/liteup" 2>/dev/null && verify_asset "$tmp/liteup" liteup; then have_liteup=1; fi
+
+  chmod 755 "$tmp/$name"
+  if [ -w "$prefix" ] 2>/dev/null || { [ ! -e "$prefix" ] && mkdir -p "$prefix" 2>/dev/null; }; then
+    install -m 755 "$tmp/$name" "$prefix/lite-deploy"
+    [ "$have_liteup" = 0 ] || install -m 755 "$tmp/liteup" "$prefix/liteup"
+  elif command -v sudo >/dev/null 2>&1; then
+    say "Write access to $prefix is needed, using sudo."
+    sudo install -d -m 755 "$prefix"
+    sudo install -m 755 "$tmp/$name" "$prefix/lite-deploy"
+    [ "$have_liteup" = 0 ] || sudo install -m 755 "$tmp/liteup" "$prefix/liteup"
+  else
+    die "no write access to $prefix and no sudo (run as root or pass --prefix)"
+  fi
+  ln -sf lite-deploy "$prefix/lite" 2>/dev/null || { command -v sudo >/dev/null 2>&1 && sudo ln -sf lite-deploy "$prefix/lite"; } || true
+  if [ "$have_liteup" = 1 ]; then
+    say "[3/4] Installed $prefix/lite-deploy (short names: lite, liteup)"
+  else
+    say "[3/4] Installed $prefix/lite-deploy (short name: lite)"
+  fi
+
+  [ "$binary_only" != 1 ] || return 0
+  say "[4/4] Installing the agent (systemd)"
+  "$prefix/lite-deploy" agent install >/dev/null
+}
+
+do_uninstall() {
+  need_root
+  if [ "$assume_yes" != 1 ]; then
+    if [ -r /dev/tty ] && [ -t 1 ] 2>/dev/null; then
+      printf 'Remove lite-deploy and the agent from this server? Projects, databases and backups stay. [y/N] ' >/dev/tty
+      read -r ans </dev/tty || ans=n
+      case $ans in y|Y|yes|YES) ;; *) die "canceled, nothing was changed" ;; esac
+    else
+      die "no terminal to ask on: run again with --yes"
+    fi
+  fi
+  if [ "$purge" = 1 ] && [ "$assume_yes" != 1 ]; then
+    die "--purge deletes settings, secrets and backups for good: add --yes to confirm"
+  fi
+  if [ "$binary_only" != 1 ] && [ -x "$prefix/lite-deploy" ]; then
+    say "[1/3] Removing the agent"
+    "$prefix/lite-deploy" agent uninstall >/dev/null || say "WARNING: the agent could not be removed cleanly, check systemctl status lite-deploy-agent"
+  else
+    say "[1/3] No agent to remove"
+  fi
+  say "[2/3] Removing the binaries"
+  rm -f "$prefix/lite-deploy" "$prefix/lite" "$prefix/liteup"
+  if [ "$purge" = 1 ]; then
+    say "[3/3] Deleting settings, secrets and backups (--purge)"
+    rm -rf /etc/lite-deploy /var/lib/lite-deploy /var/backups/lite-deploy
+  else
+    say "[3/3] Kept: /etc/lite-deploy (settings and keys), /var/lib/lite-deploy (state and secrets), /var/backups/lite-deploy (backups)"
+  fi
+  say "Done. Project users, containers and databases were not touched."
+}
+
+case $cmd in
+  install)
+    do_install
+    say "Done: $(installed_version)."
+    say "Next: sudo lite init --user YOUR_NAME   (creates an administrator with your SSH key; run lite --help for all commands)"
+    ;;
+  update)
+    need_root
+    cur=$(installed_version)
+    [ -n "$cur" ] || die "lite-deploy is not installed in $prefix: run liteup install"
+    if [ "$version" = latest ]; then target=$(latest_tag); else target=$version; fi
+    [ -n "$target" ] || die "could not find out the latest version"
+    if [ "$cur" = "$target" ] && [ "$force" != 1 ]; then
+      say "Already up to date: $cur"
+      exit 0
+    fi
+    say "Updating $cur -> $target"
+    version=$target
+    do_install
+    say "Done: $(installed_version). The agent was restarted."
+    ;;
+  reinstall)
+    need_root
+    cur=$(installed_version)
+    if [ "$version" = latest ]; then
+      case $cur in v[0-9]*) version=$cur ;; esac
+    fi
+    assume_yes=1
+    do_uninstall
+    do_install
+    say "Done: $(installed_version)."
+    ;;
+  uninstall)
+    do_uninstall
+    ;;
+  status|version)
+    cur=$(installed_version)
+    say "installed: ${cur:-not installed}"
+    say "latest:    $(latest_tag 2>/dev/null || echo unknown)"
+    if command -v systemctl >/dev/null 2>&1; then
+      say "agent:     $(systemctl is-active lite-deploy-agent.socket 2>/dev/null || echo not installed)"
+    fi
+    ;;
+esac

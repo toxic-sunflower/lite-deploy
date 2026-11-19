@@ -23,7 +23,7 @@ func keys(t *testing.T) (sec, pub string) {
 
 func TestRoundTrip(t *testing.T) {
 	sec, pub := keys(t)
-	for _, v := range []string{"p@ss w0rd", "значение с юникодом", `quote"back\slash`, strings.Repeat("x", MaxValueBytes), "a\nb"} {
+	for _, v := range []string{"p@ss w0rd", "a value with unicode", `quote"back\slash`, strings.Repeat("x", MaxValueBytes), "a\nb"} {
 		ct, err := Encrypt(pub, "shop", "api_key", []byte(v), now)
 		if err != nil {
 			t.Fatalf("%.20q: %v", v, err)
@@ -39,16 +39,16 @@ func TestCiphertextShapeAndNoPlaintext(t *testing.T) {
 	sec, pub := keys(t)
 	ct, _ := Encrypt(pub, "shop", "api_key", []byte("SUPER-SECRET-VALUE"), now)
 	if !regexp.MustCompile(ArmorPattern).MatchString(ct) {
-		t.Fatalf("форма шифртекста:\n%s", ct)
+		t.Fatalf("ciphertext shape:\n%s", ct)
 	}
 	for _, leak := range []string{"SUPER-SECRET-VALUE", "shop", "api_key"} {
 		if strings.Contains(ct, leak) {
-			t.Errorf("шифртекст содержит %q", leak)
+			t.Errorf("the ciphertext contains %q", leak)
 		}
 	}
 	ct2, _ := Encrypt(pub, "shop", "api_key", []byte("SUPER-SECRET-VALUE"), now)
 	if ct == ct2 {
-		t.Error("два шифрования одного значения должны различаться")
+		t.Error("two encryptions of one value must differ")
 	}
 	_ = sec
 }
@@ -57,10 +57,10 @@ func TestBindingRejected(t *testing.T) {
 	sec, pub := keys(t)
 	ct, _ := Encrypt(pub, "shop", "api_key", []byte("v1"), now)
 	if _, err := Decrypt(sec, ct, "other", "api_key"); !errors.Is(err, ErrBinding) {
-		t.Errorf("другой проект: %v", err)
+		t.Errorf("another project: %v", err)
 	}
 	if _, err := Decrypt(sec, ct, "shop", "other_key"); !errors.Is(err, ErrBinding) {
-		t.Errorf("другое имя: %v", err)
+		t.Errorf("another name: %v", err)
 	}
 }
 
@@ -71,18 +71,18 @@ func TestDecryptFailures(t *testing.T) {
 	lines := strings.Split(ct, "\n")
 	flipped := strings.Join(append(append([]string{}, lines[:2]...), append([]string{swapFirst(lines[2])}, lines[3:]...)...), "\n")
 	cases := map[string]struct{ key, ct string }{
-		"чужой ключ":        {otherSec, ct},
-		"усечённый":         {sec, ct[:len(ct)/2]},
-		"повреждённый байт": {sec, flipped},
-		"пустой":            {sec, ""},
-		"не age":            {sec, "-----BEGIN AGE ENCRYPTED FILE-----\nAAAAAAAAAAAAAAAAAAAAAAAA\n-----END AGE ENCRYPTED FILE-----"},
-		"мусор":             {sec, "hello"},
-		"плохой закрытый":   {"AGE-SECRET-KEY-1BAD", ct},
-		"слишком длинный":   {sec, strings.Repeat("A", MaxCiphertextSize+1)},
+		"a foreign key":     {otherSec, ct},
+		"truncated":         {sec, ct[:len(ct)/2]},
+		"a corrupt byte":    {sec, flipped},
+		"empty":             {sec, ""},
+		"not age":           {sec, "-----BEGIN AGE ENCRYPTED FILE-----\nAAAAAAAAAAAAAAAAAAAAAAAA\n-----END AGE ENCRYPTED FILE-----"},
+		"garbage":           {sec, "hello"},
+		"a bad private key": {"AGE-SECRET-KEY-1BAD", ct},
+		"too long":          {sec, strings.Repeat("A", MaxCiphertextSize+1)},
 	}
 	for name, c := range cases {
 		if _, err := Decrypt(c.key, c.ct, "shop", "api_key"); err == nil {
-			t.Errorf("%s: ожидали ошибку", name)
+			t.Errorf("%s: expected an error", name)
 		}
 	}
 }
@@ -112,11 +112,11 @@ func TestEncryptValidation(t *testing.T) {
 	}
 	for _, c := range bad {
 		if _, err := Encrypt(c.pub, c.project, c.name, []byte(c.value), now); !errors.Is(err, ErrInvalid) {
-			t.Errorf("%+v: ожидали ErrInvalid, получили %v", c, err)
+			t.Errorf("%+v: expected ErrInvalid, got %v", c, err)
 		}
 	}
 	if _, err := Encrypt(pub, "shop", "_db_password", []byte("v"), now); err != nil {
-		t.Errorf("служебное имя разрешено: %v", err)
+		t.Errorf("an internal name is allowed: %v", err)
 	}
 }
 
@@ -125,7 +125,7 @@ func TestMaxValueFitsCiphertextLimit(t *testing.T) {
 	// худший случай по размеру: 8 КиБ значения из символов, которые JSON экранирует шестью байтами
 	v := strings.Repeat("\x01", MaxValueBytes)
 	if ct, err := Encrypt(pub, "shop", "api_key", []byte(v), now); err == nil && len(ct) > MaxCiphertextSize {
-		t.Fatalf("шифртекст %d байт больше предела", len(ct))
+		t.Fatalf("the ciphertext of %d bytes is over the limit", len(ct))
 	}
 }
 
@@ -138,13 +138,13 @@ func TestStore(t *testing.T) {
 		t.Fatal(changed, err)
 	}
 	if m.Perms["/var/lib/lite-deploy/secrets/shop/api_key"] != 0o600 || m.Dirs["/var/lib/lite-deploy/secrets"] != 0o700 || m.Dirs["/var/lib/lite-deploy/secrets/shop"] != 0o700 {
-		t.Errorf("права: %v %v", m.Perms, m.Dirs)
+		t.Errorf("permissions: %v %v", m.Perms, m.Dirs)
 	}
 	if changed, _ := s.Put("shop", "api_key", []byte("v1")); changed {
-		t.Error("то же значение: unchanged")
+		t.Error("the same value: unchanged")
 	}
 	if changed, _ := s.Put("shop", "api_key", []byte("v2")); !changed {
-		t.Error("новое значение: changed")
+		t.Error("new value: changed")
 	}
 	_, _ = s.Put("shop", "_db_password", []byte("x"))
 	got, err := s.Get("shop", "api_key")
@@ -167,7 +167,7 @@ func TestStore(t *testing.T) {
 		}
 	}
 	if _, err := s.Put("shop", "ok_name", nil); !errors.Is(err, ErrInvalid) {
-		t.Error("пустое значение")
+		t.Error("an empty value")
 	}
 }
 
@@ -178,22 +178,22 @@ func TestEnsureKey(t *testing.T) {
 		t.Fatal(pub, created, err)
 	}
 	if m.Perms[DefaultKeyPath] != 0o600 || m.Perms[DefaultPubPath] != 0o644 || m.Dirs["/etc/lite-deploy"] != 0o755 {
-		t.Errorf("права: %v %v", m.Perms, m.Dirs)
+		t.Errorf("permissions: %v %v", m.Perms, m.Dirs)
 	}
 	before := string(m.Files[DefaultKeyPath])
 	pub2, created2, err := EnsureKey(m, DefaultKeyPath, DefaultPubPath)
 	if err != nil || created2 || pub2 != pub || string(m.Files[DefaultKeyPath]) != before {
-		t.Fatal("повторный вызов не должен менять ключ")
+		t.Fatal("a repeated call must not change the key")
 	}
 	// открытый ключ восстанавливается из закрытого, закрытый не трогается
 	delete(m.Files, DefaultPubPath)
 	if p, c, err := EnsureKey(m, DefaultKeyPath, DefaultPubPath); err != nil || c || p != pub || strings.TrimSpace(string(m.Files[DefaultPubPath])) != pub {
-		t.Fatal("восстановление открытого ключа")
+		t.Fatal("restoring the public key")
 	}
 	// повреждённый закрытый ключ не перезаписывается
 	m.Files[DefaultKeyPath] = []byte("garbage")
 	if _, _, err := EnsureKey(m, DefaultKeyPath, DefaultPubPath); err == nil || string(m.Files[DefaultKeyPath]) != "garbage" {
-		t.Fatal("повреждённый ключ должен давать ошибку и не затираться")
+		t.Fatal("a corrupt key must give an error and not be overwritten")
 	}
 	// шифрование под созданным ключом работает
 	m2 := host.NewMemFS()

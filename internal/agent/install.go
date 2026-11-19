@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"strings"
@@ -137,7 +138,40 @@ func Install(ctx context.Context, r host.Runner, fsys host.FS, bin string) (grou
 	if err := must("systemctl", "enable", "--now", "lite-deploy-agent.socket", "lite-deploy-exec.socket"); err != nil {
 		return "", err
 	}
+	// the agent process is long-lived and keeps running the old binary after an upgrade: restart it if it is running
+	// (the executor starts per request, so it always uses the new binary)
+	if err := must("systemctl", "try-restart", "lite-deploy-agent.service"); err != nil {
+		return "", err
+	}
 	return group, nil
+}
+
+// Uninstall stops and removes the agent and the executor: units, sockets and the service user.
+// Project data, secrets, settings and backups are not touched.
+func Uninstall(ctx context.Context, r host.Runner, fsys host.FS) error {
+	run := func(name string, args ...string) (host.Result, error) {
+		return r.Run(ctx, host.Cmd{Name: name, Args: args})
+	}
+	// disable errors are ignored: the units may be missing already (a repeated uninstall must succeed)
+	_, _ = run("systemctl", "disable", "--now", "lite-deploy-agent.socket", "lite-deploy-exec.socket", "lite-deploy-agent.service")
+	for name := range Units("", DefaultGroup) {
+		if err := fsys.Remove(UnitDir + "/" + name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	if res, err := run("systemctl", "daemon-reload"); err != nil {
+		return err
+	} else if res.ExitCode != 0 {
+		return fmt.Errorf("systemctl daemon-reload: %s", strings.TrimSpace(string(res.Stderr)))
+	}
+	if res, err := run("id", "-u", ServiceUser); err == nil && res.ExitCode == 0 {
+		if res, err := run("userdel", ServiceUser); err != nil {
+			return err
+		} else if res.ExitCode != 0 {
+			return fmt.Errorf("userdel %s: %s", ServiceUser, strings.TrimSpace(string(res.Stderr)))
+		}
+	}
+	return nil
 }
 
 // AuditPath путь журнала агента в каталоге состояния службы.

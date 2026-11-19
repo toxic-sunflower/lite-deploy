@@ -1,7 +1,7 @@
 name: release
 
-# Релиз по тегу vX.Y.Z: бинарники linux amd64/arm64, SHA256SUMS и его подпись minisign.
-# Секрет репозитория: MINISIGN_KEY (содержимое minisign.key, ключ без пароля).
+# Release on a vX.Y.Z tag: linux amd64/arm64 binaries, the liteup script, SHA256SUMS and its minisign signature.
+# Repository secret: MINISIGN_KEY (the content of minisign.key, a key without a password).
 on:
   push:
     tags: ["v*"]
@@ -17,9 +17,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Тесты
+      - name: Tests
         run: go test -race -count=1 ./...
-      - name: Сборка
+      - name: Build
         run: |
           mkdir dist
           for arch in amd64 arm64; do
@@ -27,8 +27,9 @@ jobs:
               -ldflags "-s -w -X github.com/toxic-sunflower/lite-deploy/internal/cli.Version=${GITHUB_REF_NAME}" \
               -o dist/lite-deploy-linux-$arch ./cmd/lite-deploy
           done
-          (cd dist && sha256sum lite-deploy-linux-* > SHA256SUMS)
-      - name: Подпись SHA256SUMS
+          cp site/liteup dist/liteup
+          (cd dist && sha256sum lite-deploy-linux-* liteup > SHA256SUMS)
+      - name: Sign SHA256SUMS
         env:
           MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
         run: |
@@ -38,7 +39,7 @@ jobs:
           minisign -S -s "$RUNNER_TEMP/minisign.key" -m dist/SHA256SUMS
           rm -f "$RUNNER_TEMP/minisign.key"
           minisign -Vm dist/SHA256SUMS -p minisign.pub
-      - name: Публикация релиза
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes

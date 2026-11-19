@@ -38,7 +38,7 @@ func TestBundlePreviewReturnsHashAndSteps(t *testing.T) {
 		t.Fatalf("%+v", data)
 	}
 	if len(data["steps"].([]any)) < 10 {
-		t.Fatalf("шагов мало: %v", data["steps"])
+		t.Fatalf("too few steps: %v", data["steps"])
 	}
 }
 
@@ -49,13 +49,13 @@ func TestBundleRejectsStaleHashBadFlagsAndBadInput(t *testing.T) {
 		stdin string
 		code  string
 	}{
-		{"хэш устарел", []string{"--yes"}, bundleJSON(t, func(b *bundle) { b.ExpectHash = "sha256:" + strings.Repeat("0", 64) }), "precondition_failed"},
-		{"нет флага", nil, bundleJSON(t, nil), "usage"},
-		{"оба флага", []string{"--yes", "--dry-run"}, bundleJSON(t, nil), "usage"},
-		{"не JSON", []string{"--dry-run"}, "не json", "usage"},
-		{"неизвестное поле", []string{"--dry-run"}, `{"project":{},"extra":1}`, "usage"},
-		{"плохое описание", []string{"--dry-run"}, `{"project":{"name":"x"}}`, "invalid_project"},
-		{"нет секретов", []string{"--dry-run"}, bundleJSON(t, func(b *bundle) { b.Ciphertexts = map[string]string{} }), "secret_missing"},
+		{"the hash is outdated", []string{"--yes"}, bundleJSON(t, func(b *bundle) { b.ExpectHash = "sha256:" + strings.Repeat("0", 64) }), "precondition_failed"},
+		{"no flag", nil, bundleJSON(t, nil), "usage"},
+		{"both flags", []string{"--yes", "--dry-run"}, bundleJSON(t, nil), "usage"},
+		{"not JSON", []string{"--dry-run"}, "not json", "usage"},
+		{"unknown field", []string{"--dry-run"}, `{"project":{},"extra":1}`, "usage"},
+		{"a bad description", []string{"--dry-run"}, `{"project":{"name":"x"}}`, "invalid_project"},
+		{"no secrets", []string{"--dry-run"}, bundleJSON(t, func(b *bundle) { b.Ciphertexts = map[string]string{} }), "secret_missing"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

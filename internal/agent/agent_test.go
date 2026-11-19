@@ -38,7 +38,7 @@ func TestCLIArgs(t *testing.T) {
 	for want, req := range ok {
 		got, err := req.CLIArgs()
 		if err != nil || strings.Join(got, " ") != want {
-			t.Errorf("%+v: %v %v, ожидалось %q", req, got, err, want)
+			t.Errorf("%+v: %v %v, expected %q", req, got, err, want)
 		}
 	}
 	bad := []Request{
@@ -51,12 +51,12 @@ func TestCLIArgs(t *testing.T) {
 		{Cmd: "plugin.run"}, {Cmd: "plugin.run", Args: []string{"package"}}, {Cmd: "plugin.run", Args: []string{"Package", "install"}},
 		{Cmd: "plugin.run", Args: []string{"package", "install", "a\nb"}}, {Cmd: "info", Args: []string{"x"}},
 		{Cmd: "firewall.remove", Args: []string{"80/tcp", "", "drop"}}, {Cmd: "firewall.enable", Args: []string{"x"}},
-		{Cmd: "project.create"}, {Cmd: "project.preview", Body: "не json"}, {Cmd: "project.create", Body: strings.Repeat("a", MaxBody+1)},
+		{Cmd: "project.create"}, {Cmd: "project.preview", Body: "not json"}, {Cmd: "project.create", Body: strings.Repeat("a", MaxBody+1)},
 		{Cmd: "project.create", Args: []string{"x"}, Body: "{}"}, {Cmd: "status", Body: "{}"}, {Cmd: "fix", Args: []string{"--dry-run"}}, {Cmd: "deploy", Args: []string{"shop", sha}, Body: "{}"},
 	}
 	for _, req := range bad {
 		if _, err := req.CLIArgs(); err == nil {
-			t.Errorf("%+v должен отклоняться", req)
+			t.Errorf("%+v must be rejected", req)
 		}
 	}
 }
@@ -77,14 +77,14 @@ func TestExec(t *testing.T) {
 		ran = nil
 		Exec(strings.NewReader(in), &out, run, &journal)
 		if len(ran) != 0 || !strings.Contains(out.String(), `"ok":false`) {
-			t.Errorf("%q: выполнено %v, ответ %s", in, ran, out.String())
+			t.Errorf("%q: ran %v, answer %s", in, ran, out.String())
 		}
 	}
 	// имя вызывающего в журнале проверяется: подделка не должна ломать строку журнала
 	journal.Reset()
-	Exec(strings.NewReader(`{"cmd":"status","caller":"x\nвзлом: root"}`), &out, run, &journal)
+	Exec(strings.NewReader(`{"cmd":"status","caller":"x\nhack: root"}`), &out, run, &journal)
 	if strings.Count(journal.String(), "\n") != 1 {
-		t.Fatalf("журнал: %q", journal.String())
+		t.Fatalf("journal: %q", journal.String())
 	}
 }
 
@@ -148,15 +148,15 @@ func TestAgentRoutes(t *testing.T) {
 		}
 	}
 	if len(ran) != len(cases) {
-		t.Fatalf("выполнено %v", ran)
+		t.Fatalf("ran %v", ran)
 	}
 	for i, c := range cases {
 		if ran[i] != c.want {
-			t.Errorf("%d: %q, ожидалось %q", i, ran[i], c.want)
+			t.Errorf("%d: %q, expected %q", i, ran[i], c.want)
 		}
 	}
 	if n := strings.Count(audit.String(), "\n"); n != len(cases) || !strings.Contains(audit.String(), `"user":"anna"`) {
-		t.Fatalf("журнал агента: %s", audit.String())
+		t.Fatalf("agent journal: %s", audit.String())
 	}
 }
 
@@ -165,10 +165,10 @@ func TestAgentAuthAndValidation(t *testing.T) {
 	a, _ := newAgent(t, &ran, true)
 	h := a.Handler()
 	if w := req(h, 1001, "GET", "/v1/status", ""); w.Code != 403 {
-		t.Fatalf("чужой uid: %d", w.Code)
+		t.Fatalf("a foreign uid: %d", w.Code)
 	}
 	if w := req(h, -1, "GET", "/v1/status", ""); w.Code != 403 {
-		t.Fatalf("неизвестный uid: %d", w.Code)
+		t.Fatalf("unknown uid: %d", w.Code)
 	}
 	for _, c := range []struct{ method, path, body string }{
 		{"POST", "/v1/deploy", `{"project":"shop","sha":"zzz"}`},
@@ -182,18 +182,18 @@ func TestAgentAuthAndValidation(t *testing.T) {
 	}
 	for _, body := range []string{`[]`, `"x"`, `{`, strings.Repeat("x", MaxBody+10)} {
 		if w := req(h, 1000, "POST", "/v1/project/create", body); w.Code != 400 {
-			t.Errorf("тело %.10q принято: %d", body, w.Code)
+			t.Errorf("the body %.10q was accepted: %d", body, w.Code)
 		}
 	}
 	if w := req(h, 1000, "GET", "/v1/deploy", ""); w.Code != 405 {
-		t.Fatalf("метод: %d", w.Code)
+		t.Fatalf("method: %d", w.Code)
 	}
 	if len(ran) != 0 {
-		t.Fatalf("при отказе исполнитель не вызывается: %v", ran)
+		t.Fatalf("on a refusal the executor is not called: %v", ran)
 	}
 	a2, _ := newAgent(t, &ran, false)
 	if w := req(a2.Handler(), 1000, "GET", "/v1/status", ""); w.Code != 403 {
-		t.Fatalf("не в группе: %d", w.Code)
+		t.Fatalf("not in the group: %d", w.Code)
 	}
 }
 
@@ -215,7 +215,7 @@ func TestGroupAllowed(t *testing.T) {
 	allowed := GroupAllowed(m, "lite-deploy-admins")
 	for uid, want := range map[int]bool{0: false, 1000: false, 1001: true, 1002: true, 4242: false} {
 		if _, ok := allowed(uid); ok != want {
-			t.Errorf("uid %d: %v, ожидалось %v", uid, ok, want)
+			t.Errorf("uid %d: %v, expected %v", uid, ok, want)
 		}
 	}
 }
@@ -240,23 +240,23 @@ func TestInstall(t *testing.T) {
 			t.Fatalf("%s: %q %v", tc.has, group, err)
 		}
 		joined := strings.Join(calls, "\n")
-		for _, want := range []string{"useradd --system", "systemctl daemon-reload", "systemctl enable --now lite-deploy-agent.socket lite-deploy-exec.socket"} {
+		for _, want := range []string{"useradd --system", "systemctl daemon-reload", "systemctl enable --now lite-deploy-agent.socket lite-deploy-exec.socket", "systemctl try-restart lite-deploy-agent.service"} {
 			if !strings.Contains(joined, want) {
-				t.Errorf("нет вызова %q в\n%s", want, joined)
+				t.Errorf("no call %q in\n%s", want, joined)
 			}
 		}
 		if strings.Contains(joined, "groupadd") || strings.Contains(joined, "usermod") {
-			t.Errorf("новых групп и правки пользователей быть не должно:\n%s", joined)
+			t.Errorf("there must be no new groups or user edits:\n%s", joined)
 		}
 		for name, body := range Units("/usr/local/bin/lite-deploy", tc.want) {
 			if got, ok := m.Files[UnitDir+"/"+name]; !ok || string(got) != body {
-				t.Errorf("unit %s не записан", name)
+				t.Errorf("unit %s was not written", name)
 			}
 		}
 		if !strings.Contains(string(m.Files[UnitDir+"/lite-deploy-exec.socket"]), "SocketMode=0600") ||
 			!strings.Contains(string(m.Files[UnitDir+"/lite-deploy-agent.socket"]), "SocketGroup="+tc.want) ||
 			!strings.Contains(string(m.Files[UnitDir+"/lite-deploy-agent.service"]), "agent serve --group "+tc.want) {
-			t.Fatal("права сокетов и группа")
+			t.Fatal("socket permissions and group")
 		}
 	}
 }
@@ -264,7 +264,7 @@ func TestInstall(t *testing.T) {
 func TestInstallNoAdminGroup(t *testing.T) {
 	r := &host.FakeRunner{Handler: func(host.Cmd) (host.Result, error) { return host.Result{ExitCode: 2}, nil }}
 	if _, err := Install(context.Background(), r, host.NewMemFS(), "/x"); err == nil {
-		t.Fatal("без группы sudo и wheel установка должна отказать")
+		t.Fatal("without the sudo and wheel groups the installation must refuse")
 	}
 }
 
@@ -276,6 +276,42 @@ func TestStatusProjectQuery(t *testing.T) {
 		t.Fatalf("%d %v", w.Code, ran)
 	}
 	if w := req(h, 1000, "GET", "/v1/status?project=../x", ""); w.Code != 400 {
-		t.Fatalf("плохое имя проекта: %d", w.Code)
+		t.Fatalf("a bad project name: %d", w.Code)
+	}
+}
+
+func TestUninstallRemovesEverythingAndIsRepeatable(t *testing.T) {
+	m := host.NewMemFS()
+	for name := range Units("/usr/local/bin/lite-deploy", "sudo") {
+		m.Files[UnitDir+"/"+name] = []byte("x")
+	}
+	m.Files["/etc/lite-deploy/exec.age"] = []byte("key")
+	m.Files["/var/lib/lite-deploy/secrets/shop/api"] = []byte("secret")
+	var calls []string
+	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		calls = append(calls, c.Name+" "+strings.Join(c.Args, " "))
+		return host.Result{}, nil
+	}}
+	for i := 0; i < 2; i++ { // the second run: nothing is left, it must still succeed
+		if err := Uninstall(context.Background(), r, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name := range Units("", "sudo") {
+		if _, ok := m.Files[UnitDir+"/"+name]; ok {
+			t.Errorf("unit %s was not removed", name)
+		}
+	}
+	joined := strings.Join(calls, "\n")
+	for _, want := range []string{"systemctl disable --now lite-deploy-agent.socket", "systemctl daemon-reload", "userdel lite-deploy"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("no call %q in\n%s", want, joined)
+		}
+	}
+	if _, ok := m.Files["/etc/lite-deploy/exec.age"]; !ok {
+		t.Error("the executor key must not be removed")
+	}
+	if _, ok := m.Files["/var/lib/lite-deploy/secrets/shop/api"]; !ok {
+		t.Error("secrets must not be removed")
 	}
 }

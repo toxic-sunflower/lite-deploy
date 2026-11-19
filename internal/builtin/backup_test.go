@@ -38,7 +38,7 @@ func backupEnv(t *testing.T, stdin string) (plugin.Env, *host.MemFS, *[]host.Cmd
 func TestBackupRequiresKey(t *testing.T) {
 	env, _, _ := backupEnv(t, "")
 	if _, err := (Backup{}).Run(context.Background(), env, "run", nil); err == nil || !strings.Contains(err.Error(), "without encryption") {
-		t.Fatalf("без ключа копия не снимается: %v", err)
+		t.Fatalf("without a key the backup is not taken: %v", err)
 	}
 }
 
@@ -54,7 +54,7 @@ func TestBackupEncryptsAndRestores(t *testing.T) {
 	name := "config-20261119T030000Z.tar.gz.age"
 	enc := mem.Files[configDir+"/"+name]
 	if len(enc) == 0 || bytes.Contains(enc, []byte("secret-value")) || mem.Perms[configDir+"/"+name] != 0o600 {
-		t.Fatalf("копия не зашифрована или права не 600 (%v)", mem.Perms[configDir+"/"+name])
+		t.Fatalf("the backup is not encrypted or the mode is not 600 (%v)", mem.Perms[configDir+"/"+name])
 	}
 	var tarArgs string
 	for _, c := range *cmds {
@@ -64,7 +64,7 @@ func TestBackupEncryptsAndRestores(t *testing.T) {
 	}
 	for _, want := range []string{"--exclude=etc/lite-deploy/exec.age", "var/lib/lite-deploy/secrets", "etc/lite-deploy"} {
 		if !strings.Contains(tarArgs, want) {
-			t.Errorf("в tar нет %q: %s", want, tarArgs)
+			t.Errorf("tar has no %q: %s", want, tarArgs)
 		}
 	}
 	// закрытый ключ расшифровывает, чужой нет
@@ -73,13 +73,13 @@ func TestBackupEncryptsAndRestores(t *testing.T) {
 		t.Fatal(err)
 	}
 	if plain, _ := io.ReadAll(r); string(plain) != "TARDATA-with-secret-value" {
-		t.Fatalf("расшифровано: %q", plain)
+		t.Fatalf("decrypted: %q", plain)
 	}
 	other, _ := age.GenerateX25519Identity()
 	renv := env
 	renv.Stdin = strings.NewReader(other.String() + "\n")
 	if _, err := (Backup{}).Run(context.Background(), renv, "restore", []string{name, "--identity-stdin"}); err == nil {
-		t.Fatal("чужой ключ не должен расшифровывать")
+		t.Fatal("a foreign key must not decrypt")
 	}
 	renv.Stdin = strings.NewReader(id.String() + "\n")
 	*cmds = nil
@@ -88,14 +88,14 @@ func TestBackupEncryptsAndRestores(t *testing.T) {
 	}
 	last := (*cmds)[len(*cmds)-1]
 	if last.Name != "tar" || last.Args[0] != "-xzf" || string(last.Stdin) != "TARDATA-with-secret-value" {
-		t.Fatalf("распаковка: %+v", last)
+		t.Fatalf("unpacking: %+v", last)
 	}
 }
 
 func TestBackupRotationAndSetupValidation(t *testing.T) {
 	env, mem, _ := backupEnv(t, "")
 	if _, err := (Backup{}).Run(context.Background(), env, "setup", []string{"not-a-key"}); err == nil {
-		t.Fatal("неверный ключ должен отклоняться")
+		t.Fatal("an invalid key must be rejected")
 	}
 	id, _ := age.GenerateX25519Identity()
 	_, _ = (Backup{}).Run(context.Background(), env, "setup", []string{id.Recipient().String()})
@@ -107,7 +107,7 @@ func TestBackupRotationAndSetupValidation(t *testing.T) {
 	}
 	names, _ := mem.ReadDir(configDir)
 	if len(names) != configKeep {
-		t.Fatalf("осталось %d копий, ждали %d", len(names), configKeep)
+		t.Fatalf("%d backups are left, expected %d", len(names), configKeep)
 	}
 }
 
@@ -132,7 +132,7 @@ func TestBackblazeFetchValidation(t *testing.T) {
 	env := b2Env("", &calls, 0)
 	env.FS.(*host.MemFS).Files[Backblaze.settings()] = []byte(`{"path":"my-backups"}`)
 	if _, err := Backblaze.Run(context.Background(), env, "fetch", []string{"../x"}); err == nil {
-		t.Fatal("неверный аргумент должен отклоняться")
+		t.Fatal("an invalid argument must be rejected")
 	}
 	if _, err := Backblaze.Run(context.Background(), env, "fetch", nil); err != nil {
 		t.Fatal(err)
@@ -175,24 +175,24 @@ func TestPGDumpsAreEncryptedWhenEnabled(t *testing.T) {
 	}
 	enc := PGBackupDir + "/shop-20261119T030000Z.dump.age"
 	if b := mem.Files[enc]; len(b) == 0 || strings.Contains(string(b), "secret-rows") {
-		t.Fatal("копия должна быть зашифрована")
+		t.Fatal("the backup must be encrypted")
 	}
 	if _, plain := mem.Files[PGBackupDir+"/shop-20261119T030000Z.dump"]; plain {
-		t.Fatal("открытая копия не должна оставаться")
+		t.Fatal("the plain backup must not remain")
 	}
 	// восстановление без ключа отказывает, с ключом расшифровывает во временный файл и убирает его
 	if _, err := (PG{}).Run(context.Background(), env, "restore", []string{"shop", "shop-20261119T030000Z.dump.age"}); err == nil {
-		t.Fatal("без ключа восстановление должно отказать")
+		t.Fatal("without a key the restore must refuse")
 	}
 	env.Stdin = strings.NewReader(id.String() + "\n")
 	if _, err := (PG{}).Run(context.Background(), env, "restore", []string{"shop", "shop-20261119T030000Z.dump.age", "--identity-stdin"}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(strings.Join(calls, "\n"), "RESTORED:DUMP-CONTENT-secret-rows") {
-		t.Fatalf("pg_restore не получил расшифрованные данные:\n%s", strings.Join(calls, "\n"))
+		t.Fatalf("pg_restore did not receive the decrypted data:\n%s", strings.Join(calls, "\n"))
 	}
 	if _, left := mem.Files[PGBackupDir+"/.restore-shop.dump"]; left {
-		t.Fatal("временный файл должен быть удалён")
+		t.Fatal("the temporary file must be removed")
 	}
 }
 
@@ -205,7 +205,7 @@ func TestParseIdentitySkipsAgeKeygenComments(t *testing.T) {
 	}
 	for _, bad := range []string{"", "# only comment\n", "AGE-SECRET-KEY-nope"} {
 		if _, err := parseIdentity(bad); err == nil {
-			t.Errorf("%q должен отклоняться", bad)
+			t.Errorf("%q must be rejected", bad)
 		}
 	}
 }
