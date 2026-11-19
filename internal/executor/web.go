@@ -16,6 +16,7 @@ import (
 
 func init() {
 	handlers[actions.InstallQuadletName] = installQuadlet
+	handlers[actions.InstallUnitName] = installUnit
 	handlers[actions.ReloadUserUnitsName] = reloadUserUnits
 	handlers[actions.InstallCaddySiteName] = installCaddySite
 	handlers[actions.InstallReloadRuleName] = installReloadRule
@@ -25,10 +26,42 @@ func init() {
 	handlers[actions.RecordProjectName] = recordProject
 }
 
+// ensureDataDirs создаёт постоянные каталоги компонента (общие для слотов).
+func (r *run) ensureDataDirs(project string, names []string) (bool, error) {
+	changed := false
+	for _, n := range names {
+		made, err := r.ensureDir(home(project)+"/"+render.DataDir(n), 0o750, project, project)
+		if err != nil {
+			return changed, err
+		}
+		changed = changed || made
+	}
+	return changed, nil
+}
+
 func installQuadlet(_ context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.InstallQuadlet)
+	if _, err := r.ensureDataDirs(p.Project, p.Data); err != nil {
+		return outcome{}, err
+	}
 	path := home(p.Project) + "/.config/containers/systemd/" + render.UnitName(p.Project, p.Service, p.Slot) + ".container"
 	changed, bak, err := r.ensureFile(fileSpec{path: path, data: []byte(render.Quadlet(*p)), perm: 0o600, owner: p.Project, group: p.Project})
+	if err != nil {
+		return outcome{}, err
+	}
+	if changed {
+		r.unitsChanged = true
+	}
+	return outcome{changed: changed, detail: bakNote(bak)}, nil
+}
+
+func installUnit(_ context.Context, r *run, v any) (outcome, error) {
+	p := v.(*actions.InstallUnit)
+	if _, err := r.ensureDataDirs(p.Project, p.Data); err != nil {
+		return outcome{}, err
+	}
+	path := home(p.Project) + "/.config/systemd/user/" + render.UnitName(p.Project, p.Service, p.Slot) + ".service"
+	changed, bak, err := r.ensureFile(fileSpec{path: path, data: []byte(render.Unit(*p)), perm: 0o600, owner: p.Project, group: p.Project})
 	if err != nil {
 		return outcome{}, err
 	}

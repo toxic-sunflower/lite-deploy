@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/firewall"
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
@@ -94,6 +95,10 @@ func (s *sec) sshdEffective() (map[string]string, error) {
 				m[k] = strings.TrimSpace(v)
 			}
 		}
+	}
+	// в новых версиях OpenSSH sshd -T печатает prohibit-password как without-password: это одно значение
+	if m["permitrootlogin"] == "without-password" {
+		m["permitrootlogin"] = "prohibit-password"
 	}
 	return m, nil
 }
@@ -276,6 +281,8 @@ func (s *sec) applySSH(c sshConf) error {
 			_ = fs.Remove(SSHSecurity)
 		}
 	}
+	// каталог разделения привилегий создаёт служба ssh при старте; при запуске по сокету его может ещё не быть
+	_ = fs.MkdirAll("/run/sshd", 0o755)
 	if err := s.must("sshd", "-t"); err != nil {
 		restore()
 		return plugin.Errorf("step_failed", "новая настройка sshd не прошла проверку, возвращена прежняя: %v", err)
@@ -291,14 +298,23 @@ func (s *sec) applySSH(c sshConf) error {
 		e.Hint = "проверьте sshd -T и файлы в " + sshdDir + " и /etc/ssh/sshd_config"
 		return e
 	}
-	if s.must("systemctl", "reload", "ssh") != nil {
-		if err := s.must("systemctl", "reload", "sshd"); err != nil {
+	// служба называется ssh (Debian, Ubuntu) или sshd; если ни одна не запущена (запуск по сокету), перечитывать нечего:
+	// настройки применятся при старте
+	for _, unit := range []string{"ssh", "sshd"} {
+		if !s.ok("systemctl", "is-active", "--quiet", unit) {
+			continue
+		}
+		if err := s.must("systemctl", "reload", unit); err != nil {
 			restore()
 			return plugin.Errorf("step_failed", "не удалось перечитать настройки sshd, возвращены прежние: %v", err)
 		}
+		break
 	}
 	return nil
 }
+
+// waitStep пауза между повторами шагов, которые ждут службу; в тестах подменяется.
+var waitStep = time.Sleep
 
 func (s *sec) fail2ban() error {
 	if err := s.install("fail2ban"); err != nil {
@@ -317,7 +333,15 @@ func (s *sec) fail2ban() error {
 	if err := s.must("systemctl", "restart", "fail2ban"); err != nil {
 		return err
 	}
-	if err := s.must("fail2ban-client", "status", "sshd"); err != nil {
+	// после restart fail2ban поднимает сокет не сразу: ждём до 20 секунд
+	var jailErr error
+	for i := 0; i < 20; i++ {
+		if jailErr = s.must("fail2ban-client", "status", "sshd"); jailErr == nil {
+			break
+		}
+		waitStep(time.Second)
+	}
+	if err := jailErr; err != nil {
 		return plugin.Errorf("step_failed", "fail2ban запущен, но защита SSH (jail sshd) не работает: %v", err)
 	}
 	return nil

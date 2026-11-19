@@ -1,0 +1,338 @@
+package builtin
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+
+	"filippo.io/age"
+
+	"github.com/toxic-sunflower/lite-deploy/internal/host"
+	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
+)
+
+const (
+	backupConf     = "/etc/lite-deploy/backup.json"
+	configDir      = backupRoot + "/config"
+	configKeep     = 14
+	backupSvc      = "/etc/systemd/system/lite-backup.service"
+	backupTimerPth = "/etc/systemd/system/lite-backup.timer"
+)
+
+var configFileRe = regexp.MustCompile(`^config-(\d{8}T\d{6}Z)\.tar\.gz\.age$`)
+
+// Backup плагин `backup`: копии настроек проектов, секретов и баз; отправка в места хранения (backblaze).
+// Секреты в копию входят только зашифрованными ключом владельца: на сервере хранится лишь публичная часть.
+type Backup struct{}
+
+func (Backup) Name() string       { return "backup" }
+func (Backup) Kind() string       { return "builtin" }
+func (Backup) Requires() []string { return nil }
+func (Backup) Description() string {
+	return "резервные копии: настройки и секреты проектов (шифруются), базы pg, отправка в места хранения"
+}
+func (Backup) Commands() []plugin.Command {
+	return []plugin.Command{
+		{Name: "setup", Confirm: true, Args: "ПУБЛИЧНЫЙ_КЛЮЧ_age [--encrypt-dumps]", Help: "задать ключ шифрования копий (age1…); закрытая часть только у вас; --encrypt-dumps шифрует и дампы баз"},
+		{Name: "run", Root: true, Help: "снять копии: настройки и секреты (шифруются), базы pg; отправить в места хранения"},
+		{Name: "list", Root: true, Help: "копии настроек и секретов"},
+		{Name: "restore", Confirm: true, Args: "ФАЙЛ --identity-stdin", Help: "развернуть копию настроек и секретов в / (на новом сервере); закрытый ключ age со stdin"},
+		{Name: "schedule", Confirm: true, Args: "on|off", Help: "ежедневная копия по таймеру systemd (около 03:00)"},
+	}
+}
+
+type backupConfig struct {
+	Recipient    string `json:"recipient"`
+	EncryptDumps bool   `json:"encrypt_dumps,omitempty"`
+}
+
+func (t tools) backupConfig() (backupConfig, error) {
+	b, err := t.env.FS.ReadFile(backupConf)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			e := plugin.Errorf("precondition_failed", "ключ шифрования копий не задан: секреты без шифрования не копируются")
+			e.Hint = "age-keygen (на вашем компьютере), затем sudo lite backup setup age1…"
+			return backupConfig{}, e
+		}
+		return backupConfig{}, plugin.Errorf("step_failed", "%s: %v", backupConf, err)
+	}
+	var c backupConfig
+	if err := json.Unmarshal(b, &c); err != nil || c.Recipient == "" {
+		return backupConfig{}, plugin.Errorf("step_failed", "файл %s повреждён", backupConf)
+	}
+	return c, nil
+}
+
+// configArchive собирает tar.gz настроек и секретов. Ключ исполнителя и ключи мест хранения не входят: на новом сервере выпускаются заново.
+func (t tools) configArchive() ([]byte, error) {
+	args := []string{"-czf", "-", "-C", "/",
+		"--exclude=etc/lite-deploy/exec.age", "--exclude=etc/lite-deploy/backblaze",
+		"etc/lite-deploy", "var/lib/lite-deploy/state", "var/lib/lite-deploy/secrets"}
+	res, err := t.env.Runner.Run(t.ctx, host.Cmd{Name: "tar", Args: args, Timeout: 10 * time.Minute})
+	if err != nil {
+		return nil, plugin.Errorf("step_failed", "tar: %v", err)
+	}
+	// код 1: «файл изменился при чтении»; для наших небольших файлов допустим, остальное ошибка
+	if res.ExitCode != 0 && res.ExitCode != 1 {
+		return nil, plugin.Errorf("step_failed", "tar: %s", strings.TrimSpace(string(res.Stderr)))
+	}
+	return res.Stdout, nil
+}
+
+func encryptTo(recipient string, data []byte) ([]byte, error) {
+	r, err := age.ParseX25519Recipient(recipient)
+	if err != nil {
+		return nil, plugin.Errorf("usage", "неверный ключ age: %v", err)
+	}
+	var out bytes.Buffer
+	w, err := age.Encrypt(&out, r)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := w.Write(data); err != nil {
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+type configFile struct {
+	Name string
+	At   time.Time
+}
+
+func (t tools) configFiles() []configFile {
+	names, err := t.env.FS.ReadDir(configDir)
+	if err != nil {
+		return nil
+	}
+	var out []configFile
+	for _, n := range names {
+		if m := configFileRe.FindStringSubmatch(n); m != nil {
+			if at, err := time.Parse(stampLayout, m[1]); err == nil {
+				out = append(out, configFile{n, at})
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].At.After(out[j].At) })
+	return out
+}
+
+func (t tools) backupRun() (plugin.Output, error) {
+	cfg, err := t.backupConfig()
+	if err != nil {
+		return plugin.Output{}, err
+	}
+	plain, err := t.configArchive()
+	if err != nil {
+		return plugin.Output{}, err
+	}
+	enc, err := encryptTo(cfg.Recipient, plain)
+	if err != nil {
+		return plugin.Output{}, err
+	}
+	if err := t.env.FS.MkdirAll(configDir, 0o700); err != nil {
+		return plugin.Output{}, plugin.Errorf("step_failed", "%s: %v", configDir, err)
+	}
+	name := "config-" + t.now().UTC().Format(stampLayout) + ".tar.gz.age"
+	if err := t.env.FS.WriteFile(configDir+"/"+name, enc, 0o600); err != nil {
+		return plugin.Output{}, plugin.Errorf("step_failed", "%s: %v", name, err)
+	}
+	for i, f := range t.configFiles() {
+		if i >= configKeep {
+			_ = t.env.FS.Remove(configDir + "/" + f.Name)
+		}
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Настройки и секреты: %s (зашифровано)\n", name)
+	data := map[string]any{"config": name}
+	if t.ok("psql", "--version") {
+		out, err := t.pgBackup(nil)
+		if err != nil {
+			return plugin.Output{}, err
+		}
+		sb.WriteString(out.Text)
+		data["pg"] = out.Data
+	}
+	var sent []string
+	for _, st := range Stores {
+		if !st.Configured(t.env) {
+			continue
+		}
+		if _, err := st.Upload(t); err != nil {
+			return plugin.Output{}, err
+		}
+		sent = append(sent, st.PluginName)
+		sb.WriteString("Отправлено: " + st.Title + ".\n")
+	}
+	data["uploaded"] = append([]string{}, sent...)
+	return plugin.Output{Text: sb.String(), Data: data}, nil
+}
+
+func (t tools) backupRestore(args []string) (plugin.Output, error) {
+	var rest []string
+	stdin := false
+	for _, a := range args {
+		if a == "--identity-stdin" {
+			stdin = true
+			continue
+		}
+		rest = append(rest, a)
+	}
+	if len(rest) != 1 || !stdin || !configFileRe.MatchString(rest[0]) {
+		return plugin.Output{}, plugin.Errorf("usage", "использование: echo AGE-SECRET-KEY-… | lite backup restore config-…tar.gz.age --identity-stdin")
+	}
+	if t.env.Stdin == nil {
+		return plugin.Output{}, plugin.Errorf("usage", "закрытый ключ age читается из stdin")
+	}
+	keyText, err := io.ReadAll(io.LimitReader(t.env.Stdin, 4096))
+	if err != nil {
+		return plugin.Output{}, plugin.Errorf("step_failed", "чтение ключа: %v", err)
+	}
+	id, err := parseIdentity(string(keyText))
+	if err != nil {
+		return plugin.Output{}, plugin.Errorf("usage", "неверный закрытый ключ age")
+	}
+	enc, err := t.env.FS.ReadFile(configDir + "/" + rest[0])
+	if err != nil {
+		return plugin.Output{}, plugin.Errorf("precondition_failed", "файла %s нет в %s (скачайте его из места хранения: lite backblaze fetch)", rest[0], configDir)
+	}
+	r, err := age.Decrypt(bytes.NewReader(enc), id)
+	if err != nil {
+		return plugin.Output{}, plugin.Errorf("precondition_failed", "не удалось расшифровать копию этим ключом")
+	}
+	plain, err := io.ReadAll(r)
+	if err != nil {
+		return plugin.Output{}, plugin.Errorf("step_failed", "расшифровка: %v", err)
+	}
+	res, err := t.env.Runner.Run(t.ctx, host.Cmd{Name: "tar", Args: []string{"-xzf", "-", "-C", "/"}, Stdin: plain, Timeout: 10 * time.Minute})
+	if err != nil || res.ExitCode != 0 {
+		msg := ""
+		if err != nil {
+			msg = err.Error()
+		} else {
+			msg = strings.TrimSpace(string(res.Stderr))
+		}
+		return plugin.Output{}, plugin.Errorf("step_failed", "tar: %s", msg)
+	}
+	return textOut("Настройки и секреты развёрнуты. Дальше: lite pg restore для баз, затем deploy проектов.\n"), nil
+}
+
+func (t tools) backupSchedule(args []string) (plugin.Output, error) {
+	if len(args) != 1 || (args[0] != "on" && args[0] != "off") {
+		return plugin.Output{}, plugin.Errorf("usage", "использование: lite backup schedule on|off")
+	}
+	if args[0] == "off" {
+		_ = t.must("systemctl", "disable", "--now", "lite-backup.timer")
+		_ = t.env.FS.Remove(backupTimerPth)
+		_ = t.env.FS.Remove(backupSvc)
+		_ = t.must("systemctl", "daemon-reload")
+		return textOut("Ежедневная копия выключена.\n"), nil
+	}
+	if _, err := t.backupConfig(); err != nil {
+		return plugin.Output{}, err
+	}
+	svc := "[Unit]\nDescription=lite-deploy: резервные копии\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/lite-deploy backup run\n"
+	tm := "[Unit]\nDescription=lite-deploy: ежедневные резервные копии\n\n[Timer]\nOnCalendar=*-*-* 03:00:00\nRandomizedDelaySec=15min\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n"
+	for p, c := range map[string]string{backupSvc: svc, backupTimerPth: tm} {
+		if err := t.env.FS.WriteFile(p, []byte(c), 0o644); err != nil {
+			return plugin.Output{}, plugin.Errorf("step_failed", "%s: %v", p, err)
+		}
+	}
+	if err := t.must("systemctl", "daemon-reload"); err != nil {
+		return plugin.Output{}, err
+	}
+	if err := t.must("systemctl", "enable", "--now", "lite-backup.timer"); err != nil {
+		return plugin.Output{}, err
+	}
+	return textOut("Копии (настройки, секреты, базы, отправка) будут сниматься ежедневно около 03:00.\n"), nil
+}
+
+func (Backup) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (plugin.Output, error) {
+	t := tools{ctx, env}
+	switch cmd {
+	case "restore":
+		return t.backupRestore(args)
+	case "schedule":
+		return t.backupSchedule(args)
+	case "setup":
+		encDumps := false
+		var rest []string
+		for _, a := range args {
+			if a == "--encrypt-dumps" {
+				encDumps = true
+				continue
+			}
+			rest = append(rest, a)
+		}
+		if len(rest) != 1 {
+			return plugin.Output{}, plugin.Errorf("usage", "использование: lite backup setup age1… [--encrypt-dumps]")
+		}
+		if _, err := age.ParseX25519Recipient(rest[0]); err != nil {
+			return plugin.Output{}, plugin.Errorf("usage", "это не публичный ключ age (age1…): %v", err)
+		}
+		b, _ := json.Marshal(backupConfig{Recipient: rest[0], EncryptDumps: encDumps})
+		if err := env.FS.MkdirAll("/etc/lite-deploy", 0o755); err != nil {
+			return plugin.Output{}, plugin.Errorf("step_failed", "%v", err)
+		}
+		if err := env.FS.WriteFile(backupConf, append(b, '\n'), 0o644); err != nil {
+			return plugin.Output{}, plugin.Errorf("step_failed", "%s: %v", backupConf, err)
+		}
+		msg := "Ключ шифрования копий записан. Закрытую часть храните у себя вне сервера: без неё копии не расшифровать.\n"
+		if encDumps {
+			msg += "Дампы баз тоже будут шифроваться (восстановление: lite pg restore БАЗА ФАЙЛ.age --identity-stdin).\n"
+		}
+		return textOut(msg), nil
+	}
+	if err := noArgs(args, cmd, "backup"); err != nil {
+		return plugin.Output{}, err
+	}
+	switch cmd {
+	case "run":
+		return t.backupRun()
+	case "list":
+		var sb strings.Builder
+		list := []string{}
+		for _, f := range t.configFiles() {
+			fmt.Fprintln(&sb, f.Name)
+			list = append(list, f.Name)
+		}
+		if sb.Len() == 0 {
+			sb.WriteString("Копий нет.\n")
+		}
+		return plugin.Output{Text: sb.String(), Data: map[string]any{"config": list}}, nil
+	}
+	return plugin.Output{}, plugin.Errorf("usage", "у плагина backup нет команды %q", cmd)
+}
+
+func (Backup) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
+	t := tools{ctx, env}
+	secretsExist := false
+	if names, err := env.FS.ReadDir("/var/lib/lite-deploy/secrets"); err == nil && len(names) > 0 {
+		secretsExist = true
+	}
+	if _, err := t.backupConfig(); err != nil {
+		if secretsExist {
+			return []plugin.Finding{finding("backup", "key", plugin.LevelFail, "на сервере есть секреты проектов, но копии не настроены: потеря сервера потеряет и их", "sudo lite backup setup age1…")}
+		}
+		return []plugin.Finding{finding("backup", "key", plugin.LevelOK, "копии настроек не настроены (секретов пока нет)", "")}
+	}
+	files := t.configFiles()
+	switch {
+	case len(files) == 0:
+		return []plugin.Finding{finding("backup", "config", plugin.LevelWarn, "копий настроек и секретов ещё нет", "sudo lite backup run; sudo lite backup schedule on")}
+	case t.now().Sub(files[0].At) > pgStale:
+		return []plugin.Finding{finding("backup", "config", plugin.LevelFail, "последняя копия настроек и секретов старше 36 часов ("+files[0].At.Format(time.RFC3339)+")", "sudo lite backup schedule on")}
+	}
+	return []plugin.Finding{finding("backup", "config", plugin.LevelOK, "копия настроек и секретов свежая ("+files[0].At.Format(time.RFC3339)+")", "")}
+}

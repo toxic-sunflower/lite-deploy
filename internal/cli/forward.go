@@ -1,0 +1,268 @@
+package cli
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os/user"
+	"strings"
+
+	"github.com/toxic-sunflower/lite-deploy/internal/agent"
+	"github.com/toxic-sunflower/lite-deploy/internal/deploy"
+	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
+)
+
+// Команды, которым нужны права root, обычный администратор (группа sudo или wheel) выполняет без sudo:
+// CLI передаёт их агенту, а исполнитель (root, запускается systemd) выполняет только действия из фиксированного списка.
+// Под root (sudo) команды по-прежнему выполняются на месте.
+
+func (e Env) agentSock() string {
+	if e.Getenv != nil && e.Getenv("LITE_DEPLOY_SOCK") != "" {
+		return e.Getenv("LITE_DEPLOY_SOCK")
+	}
+	return agent.APISocket
+}
+
+// callAgent отправляет запрос агенту и возвращает конверт ответа.
+func callAgent(env Env, method, path string, body any) ([]byte, *ErrorBody) {
+	var raw []byte
+	if body != nil {
+		raw, _ = json.Marshal(body)
+	}
+	call := env.AgentCall
+	if call == nil {
+		call = agent.Call
+	}
+	out, err := call(context.Background(), env.agentSock(), method, path, raw)
+	if err != nil {
+		return nil, &ErrorBody{Code: "precondition_failed", Message: err.Error(),
+			Hint: "агент ставится при установке сервера (install.sh); пользователь должен быть администратором (группа sudo или wheel). Либо запустите команду через sudo"}
+	}
+	return []byte(strings.TrimSpace(string(out))), nil
+}
+
+// fromEnvelope превращает ответ агента в результат команды (для читаемого вывода данные печатаются как есть).
+func fromEnvelope(raw []byte, command string) result {
+	var e Envelope
+	if err := json.Unmarshal(raw, &e); err != nil {
+		return fail(command, CodeIO, "агент вернул не JSON")
+	}
+	if e.Command != "" && command == "" {
+		command = e.Command
+	}
+	r := result{command: command, data: e.Data, warn: e.Warnings, err: e.Error}
+	if e.OK {
+		r.text = renderData(e.Data)
+	}
+	return r
+}
+
+func renderData(d any) string {
+	switch v := d.(type) {
+	case nil:
+		return "Готово.\n"
+	case map[string]any:
+		if s, ok := v["output"].(string); ok {
+			return strings.TrimRight(s, "\n") + "\n"
+		}
+	}
+	b, _ := json.MarshalIndent(d, "", "  ")
+	return string(b) + "\n"
+}
+
+// pipedStdin читает стандартный ввод, если он не терминал (так передаются пароли и ключи, а не аргументами).
+func pipedStdin(env Env) (string, error) {
+	if env.Stdin == nil || (env.Interactive != nil && env.Interactive()) {
+		return "", nil
+	}
+	b, err := io.ReadAll(io.LimitReader(env.Stdin, agent.MaxPluginStdin+1))
+	if err != nil {
+		return "", err
+	}
+	if len(b) > agent.MaxPluginStdin {
+		return "", fmt.Errorf("стандартный ввод больше %d байт", agent.MaxPluginStdin)
+	}
+	return string(b), nil
+}
+
+// forwardPlugin выполняет команду плагина через агента.
+func forwardPlugin(env Env, command, plug, cmd string, args []string) result {
+	in, err := pipedStdin(env)
+	if err != nil {
+		return fail(command, CodeUsage, err.Error())
+	}
+	if args == nil {
+		args = []string{}
+	}
+	body := map[string]any{"plugin": plug, "command": cmd, "args": args}
+	if in != "" {
+		body["stdin"] = in
+	}
+	raw, bad := callAgent(env, "POST", "/v1/plugin", body)
+	if bad != nil {
+		return result{command: command, err: bad}
+	}
+	return fromEnvelope(raw, command)
+}
+
+// forwardFix выполняет безопасные исправления через агента.
+func forwardFix(env Env) result {
+	raw, bad := callAgent(env, "POST", "/v1/fix", map[string]string{})
+	if bad != nil {
+		return result{command: "fix", err: bad}
+	}
+	return fromEnvelope(raw, "fix")
+}
+
+// forwardProjectCreate создаёт проект без sudo: предпросмотр плана и создание идут через агента.
+func forwardProjectCreate(env Env, file string, yes, rotate bool, cts []string) result {
+	const command = "project.create"
+	data, err := readInput(env, file)
+	if err != nil {
+		return fail(command, CodeIO, "не удалось прочитать описание проекта: "+err.Error())
+	}
+	ciphertexts := map[string]string{}
+	for _, c := range cts {
+		name, path, ok := strings.Cut(c, "=")
+		if !ok || name == "" || path == "" {
+			return fail(command, CodeUsage, "--ciphertext ожидает имя=файл")
+		}
+		b, err := env.FS.ReadFile(path)
+		if err != nil {
+			return fail(command, CodeIO, "не удалось прочитать шифртекст "+name+": "+err.Error())
+		}
+		ciphertexts[name] = strings.TrimSpace(string(b))
+	}
+	bundle := map[string]any{"project": json.RawMessage(data), "ciphertexts": ciphertexts, "rotate_password": rotate}
+	raw, bad := callAgent(env, "POST", "/v1/project/preview", bundle)
+	if bad != nil {
+		return result{command: command, err: bad}
+	}
+	prev := fromEnvelope(raw, command)
+	if prev.err != nil {
+		return prev
+	}
+	if !yes {
+		if env.Interactive == nil || !env.Interactive() {
+			return fail(command, "confirmation_required", "без терминала применение требует флага --yes")
+		}
+		_, _ = fmt.Fprint(env.Stderr, "Предпросмотр (ничего не изменено):\n"+previewSteps(prev.data)+"\nВведите yes, чтобы применить: ")
+		line, _ := bufio.NewReader(env.Stdin).ReadString('\n')
+		if strings.TrimSpace(line) != "yes" {
+			return fail(command, "confirmation_required", "применение отменено: подтверждение не получено")
+		}
+	}
+	if m, ok := prev.data.(map[string]any); ok {
+		if h, ok := m["project_hash"].(string); ok {
+			bundle["expect_project_hash"] = h
+		}
+	}
+	raw, bad = callAgent(env, "POST", "/v1/project/create", bundle)
+	if bad != nil {
+		return result{command: command, err: bad}
+	}
+	return fromEnvelope(raw, command)
+}
+
+func previewSteps(d any) string {
+	m, _ := d.(map[string]any)
+	steps, _ := m["steps"].([]any)
+	var sb strings.Builder
+	for _, s := range steps {
+		if st, ok := s.(map[string]any); ok {
+			fmt.Fprintf(&sb, "  %v  %-20v %v\n", st["id"], st["action"], st["state"])
+		}
+	}
+	return sb.String()
+}
+
+// forwardVerify выполняет verify через агента. false: агент недоступен, проверку нужно делать на месте (с неполными правами).
+func forwardVerify(env Env) (result, bool) {
+	raw, bad := callAgent(env, "GET", "/v1/verify", nil)
+	if bad != nil {
+		return result{}, false
+	}
+	var e Envelope
+	if err := json.Unmarshal(raw, &e); err != nil {
+		return result{}, false
+	}
+	m, ok := e.Data.(map[string]any)
+	if !ok {
+		return fromEnvelope(raw, "verify"), true
+	}
+	b, _ := json.Marshal(m["findings"])
+	var findings []plugin.Finding
+	if json.Unmarshal(b, &findings) != nil {
+		return fromEnvelope(raw, "verify"), true
+	}
+	r := verifyResult(findings)
+	return r, true
+}
+
+func (e Env) currentUser() string {
+	if e.CurrentUser != nil {
+		return e.CurrentUser()
+	}
+	if u, err := user.Current(); err == nil {
+		return u.Username
+	}
+	return ""
+}
+
+// viaAgent: выкатку и откат проекта выполняет сам пользователь проекта (CI через привратник) или root.
+// Администратор, не являющийся ни тем ни другим, передаёт команду агенту: исполнитель выполнит её от имени проекта.
+func (e Env) viaAgent(project string) bool { return !e.root() && e.currentUser() != project }
+
+func forwardProject(env Env, command, path string, body map[string]string) result {
+	raw, bad := callAgent(env, "POST", path, body)
+	if bad != nil {
+		return result{command: command, err: bad}
+	}
+	r := fromEnvelope(raw, command)
+	if m, ok := r.data.(map[string]any); ok && r.err == nil {
+		switch command {
+		case "deploy":
+			r.text = fmt.Sprintf("Выкачено %v, проект %v, слот %v (был %v). Трафик переключён.\n", short(fmt.Sprint(m["version"])), m["project"], m["slot"], m["previous_slot"])
+		case "rollback":
+			r.text = fmt.Sprintf("Откат выполнен: проект %v, слот %v (был %v), версия %v.\n", m["project"], m["slot"], m["previous_slot"], short(fmt.Sprint(m["version"])))
+		}
+	}
+	return r
+}
+
+// forwardStatus показывает состояние проектов через агента.
+func forwardStatus(env Env, pos []string) result {
+	path := "/v1/status"
+	if len(pos) == 1 {
+		path += "?project=" + pos[0]
+	}
+	raw, bad := callAgent(env, "GET", path, nil)
+	if bad != nil {
+		return result{command: "status", err: bad}
+	}
+	r := fromEnvelope(raw, "status")
+	if r.err != nil {
+		return r
+	}
+	b, _ := json.Marshal(r.data)
+	var text strings.Builder
+	var multi struct {
+		Projects []*deploy.StatusResult `json:"projects"`
+	}
+	if json.Unmarshal(b, &multi) == nil && multi.Projects != nil {
+		for _, p := range multi.Projects {
+			text.WriteString(statusText(p))
+		}
+	} else {
+		var one deploy.StatusResult
+		if json.Unmarshal(b, &one) == nil && one.Project != "" {
+			text.WriteString(statusText(&one))
+		}
+	}
+	if text.Len() > 0 {
+		r.text = text.String()
+	}
+	return r
+}

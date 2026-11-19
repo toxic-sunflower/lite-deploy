@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"context"
+	"errors"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
+	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
 func TestPackageCommands(t *testing.T) {
@@ -59,10 +63,25 @@ func TestPackageCommands(t *testing.T) {
 		t.Fatalf("неверное имя: код %d %s", c, out.String())
 	}
 	out.Reset()
-	// не root: изменяющая команда запрещена, чтение можно
+	// не root: изменяющая команда уходит агенту (без sudo), чтение выполняется на месте
 	env.IsRoot = func() bool { return false }
-	if c := run(t, env, "package", "install", "nginx", "--yes", "--json"); c != 4 {
+	var sentPath, sentBody string
+	env.AgentCall = func(_ context.Context, _, method, path string, body []byte) ([]byte, error) {
+		sentPath, sentBody = method+" "+path, string(body)
+		return []byte(`{"ok":true,"api_version":"v1","command":"plugin.run","data":{"output":"установлен"}}`), nil
+	}
+	if c := run(t, env, "package", "install", "nginx", "--yes", "--json"); c != 0 {
 		t.Fatalf("не root: код %d %s", c, out.String())
+	}
+	if sentPath != "POST /v1/plugin" || sentBody != `{"args":["nginx"],"command":"install","plugin":"package"}` {
+		t.Fatalf("агенту ушло: %s %s", sentPath, sentBody)
+	}
+	out.Reset()
+	env.AgentCall = func(context.Context, string, string, string, []byte) ([]byte, error) {
+		return nil, errors.New("агент недоступен (/run/lite-deploy/api.sock)")
+	}
+	if c := run(t, env, "package", "install", "nginx", "--yes", "--json"); c != 3 || !strings.Contains(out.String(), "агент недоступен") {
+		t.Fatalf("агент недоступен: код %d %s", c, out.String())
 	}
 	out.Reset()
 	if c := run(t, env, "package", "check", "nginx", "--json"); c != 0 {
@@ -136,6 +155,26 @@ func TestPluginsDeniedForRootLogin(t *testing.T) {
 		out.Reset()
 		if c := run(t, env, append(a, "--json")...); c != 4 {
 			t.Errorf("%v при входе под root: код %d", a, c)
+		}
+	}
+}
+
+func TestProjectRequirementsInVerify(t *testing.T) {
+	env, _, _ := testEnv(t)
+	m := env.FS.(*host.MemFS)
+	b, err := os.ReadFile("../../testdata/shop/project.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Files["/etc/lite-deploy/projects/shop.json"] = b
+	got := map[string]string{}
+	for _, f := range projectRequirements(context.Background(), env) {
+		got[f.Check] = f.Level
+	}
+	// на тестовом сервере ничего не установлено (команды возвращают 127)
+	for _, k := range []string{"shop/podman", "shop/pg", "shop/caddy"} {
+		if got[k] != plugin.LevelFail {
+			t.Errorf("%s: %q, ждали ошибку", k, got[k])
 		}
 	}
 }

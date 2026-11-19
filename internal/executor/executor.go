@@ -101,6 +101,7 @@ type run struct {
 	undo         []siteUndo // для отката файлов сайтов при ошибке проверки Caddy
 	expectUnits  map[string][]string
 	needPostgres bool
+	noPodman     bool
 }
 
 type siteUndo struct {
@@ -133,8 +134,18 @@ func Apply(ctx context.Context, e Env, pl *plan.Plan, dry bool) (*Report, error)
 	// Предварительный просмотр плана: что нужно предыдущим шагам знать о последующих.
 	for _, s := range pl.Steps {
 		switch s.Action {
+		case actions.VerifyHostName:
+			v, _ := actions.Decode(s.Action, s.Params)
+			if vh, ok := v.(*actions.VerifyHost); ok {
+				r.noPodman = vh.NoPodman
+			}
 		case actions.ProvisionPostgresName:
 			r.needPostgres = true
+		case actions.InstallUnitName:
+			v, _ := actions.Decode(s.Action, s.Params)
+			if q, ok := v.(*actions.InstallUnit); ok {
+				r.expectUnits[q.Project] = append(r.expectUnits[q.Project], q.Project+"-"+q.Service+"-"+q.Slot+".service")
+			}
 		case actions.InstallQuadletName:
 			v, _ := actions.Decode(s.Action, s.Params)
 			if q, ok := v.(*actions.InstallQuadlet); ok {

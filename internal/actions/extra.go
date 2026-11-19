@@ -3,6 +3,7 @@ package actions
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/project"
 	"github.com/toxic-sunflower/lite-deploy/internal/schema"
@@ -44,8 +45,38 @@ func checkEnv(v any) []schema.Issue {
 			if e.Value != "npgsql" && e.Value != "url" && e.Value != "libpq" {
 				bad(i, "/value", "enum", "для database нужен формат: npgsql, url или libpq")
 			}
-			if e.Secret != "" {
-				bad(i, "/secret", "unexpected", "для database secret не задаётся")
+			if e.Host != "" {
+				if e.Secret == "" {
+					bad(i, "/secret", "required", "для базы на другом сервере нужен секрет с паролем")
+				}
+			} else if e.Secret != "" || e.Port != 0 {
+				bad(i, "/host", "required", "secret и port задаются только вместе с host")
+			}
+		}
+		if e.Kind != "database" && (e.Host != "" || e.Port != 0) {
+			bad(i, "/host", "unexpected", "host и port только для database")
+		}
+	}
+	return out
+}
+
+func checkExec(v any) []schema.Issue {
+	u := v.(*InstallUnit)
+	var out []schema.Issue
+	for i, a := range u.Exec {
+		if a == "" || len(a) > 512 || strings.ContainsAny(a, "\r\n\x00") {
+			out = append(out, schema.Issue{Path: "/exec/" + strconv.Itoa(i), Code: "pattern", Message: "аргумент не пустой, без переводов строки, до 512 знаков"})
+		}
+	}
+	for i, a := range u.Stop {
+		if a == "" || len(a) > 512 || strings.ContainsAny(a, "\r\n\x00") {
+			out = append(out, schema.Issue{Path: "/stop/" + strconv.Itoa(i), Code: "pattern", Message: "аргумент не пустой, без переводов строки, до 512 знаков"})
+		}
+	}
+	if len(u.Exec) > 0 {
+		for _, part := range strings.Split(u.Exec[0], "/") {
+			if part == ".." {
+				out = append(out, schema.Issue{Path: "/exec/0", Code: "pattern", Message: "путь к программе не должен содержать «..»"})
 			}
 		}
 	}

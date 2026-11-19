@@ -1,5 +1,5 @@
 {
-  "$id": "lite-deploy/project/v1",
+  "$id": "lite-deploy/project/v2",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -23,6 +23,22 @@
           "enum": [
             "postgres"
           ],
+          "type": "string"
+        },
+        "password_secret": {
+          "description": "для базы на другом сервере: секрет с паролем роли (роль и база называются как проект, дефисы заменены на _)",
+          "pattern": "^secret://[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        },
+        "port": {
+          "description": "порт PostgreSQL на другом сервере; по умолчанию 5432",
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "server": {
+          "description": "сервер из реестра (lite server add), на котором работает PostgreSQL; по умолчанию local",
+          "pattern": "^[a-z][a-z0-9-]{0,30}$",
           "type": "string"
         }
       },
@@ -82,7 +98,8 @@
     "schema": {
       "description": "версия схемы",
       "enum": [
-        "lite-deploy/project/v1"
+        "lite-deploy/project/v1",
+        "lite-deploy/project/v2"
       ],
       "type": "string"
     },
@@ -91,9 +108,18 @@
         "additionalProperties": false,
         "properties": {
           "container_port": {
+            "description": "для quadlet: порт приложения в контейнере",
             "maximum": 65535,
             "minimum": 1,
             "type": "integer"
+          },
+          "data": {
+            "description": "постоянные каталоги компонента (общие для слотов blue и green, переживают выкатки): unit видит их в переменных LITE_DATA_\u003cИМЯ\u003e, контейнер в /data/\u003cимя\u003e",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
           },
           "database_env": {
             "description": "переменная со строкой подключения к базе",
@@ -111,6 +137,15 @@
               "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
             },
             "type": "object"
+          },
+          "exec": {
+            "description": "для unit: команда запуска (путь к программе и аргументы); порт передаётся в переменной PORT",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array"
           },
           "health": {
             "additionalProperties": false,
@@ -149,6 +184,14 @@
             "pattern": "^[a-z0-9]+([._-][a-z0-9]+)*(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)+$",
             "type": "string"
           },
+          "kind": {
+            "description": "как запускается: quadlet (контейнер, по умолчанию) или unit (процесс на хосте)",
+            "enum": [
+              "quadlet",
+              "unit"
+            ],
+            "type": "string"
+          },
           "limits": {
             "additionalProperties": false,
             "properties": {
@@ -164,6 +207,33 @@
             },
             "type": "object"
           },
+          "release": {
+            "additionalProperties": false,
+            "description": "для unit: откуда берётся релиз",
+            "properties": {
+              "minisign_key": {
+                "description": "открытый ключ minisign, которым CI подписывает архив; подпись лежит рядом: адрес архива плюс .minisig",
+                "pattern": "^RW[A-Za-z0-9+/]{54}$",
+                "type": "string"
+              },
+              "token_secret": {
+                "description": "ссылка secret://имя; токен передаётся как Authorization: Bearer",
+                "pattern": "^secret://[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "url": {
+                "description": "адрес архива tar.gz; {sha} заменяется хэшем выкатываемой версии",
+                "maxLength": 512,
+                "pattern": "^https://[A-Za-z0-9.-]+(:[0-9]{2,5})?/[^\\s{}]*\\{sha\\}[^\\s{}]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "url",
+              "minisign_key"
+            ],
+            "type": "object"
+          },
           "secrets": {
             "additionalProperties": {
               "pattern": "^secret://[a-z][a-z0-9_]{1,63}$",
@@ -174,12 +244,17 @@
               "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
             },
             "type": "object"
+          },
+          "stop": {
+            "description": "для unit: команда остановки (ExecStop), например podman compose down",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array"
           }
         },
-        "required": [
-          "image",
-          "container_port"
-        ],
         "type": "object"
       },
       "maxProperties": 8,

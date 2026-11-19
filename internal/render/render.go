@@ -4,7 +4,10 @@ package render
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/actions"
@@ -37,9 +40,67 @@ func Quadlet(a actions.InstallQuadlet) string {
 	if a.DatabaseSocket {
 		b.WriteString("Volume=/var/run/postgresql:/var/run/postgresql\n")
 	}
+	for _, d := range a.Data {
+		fmt.Fprintf(&b, "Volume=%%h/%s:/data/%s:U\n", DataDir(d), d)
+	}
 	b.WriteString("ReadOnly=true\nTmpfs=/tmp\nNoNewPrivileges=true\nDropCapability=ALL\n")
-	fmt.Fprintf(&b, "PidsLimit=%d\nMemory=%s\n\n", a.Pids, a.Memory)
+	fmt.Fprintf(&b, "PidsLimit=%d\nPodmanArgs=--memory=%s\n\n", a.Pids, a.Memory)
 	b.WriteString("[Service]\nRestart=always\nRestartSec=5\nTimeoutStartSec=120\n\n[Install]\nWantedBy=default.target\n")
+	return b.String()
+}
+
+// DataDir каталог постоянных данных компонента внутри домашнего каталога пользователя проекта.
+func DataDir(name string) string { return ".local/share/lite-deploy/data/" + name }
+
+// AppDir каталог релиза слота внутри домашнего каталога пользователя проекта (для kind unit).
+func AppDir(service, slot string) string {
+	return ".local/share/lite-deploy/app/" + service + "/" + slot
+}
+
+// unitArg один аргумент для ExecStart: в двойных кавычках, с экранированием кавычек, обратной косой, % и $.
+func unitArg(s string) string { return unitArgWith("", s) }
+
+// unitArgWith как unitArg, но prefix (например %h) вставляется как есть, чтобы systemd его раскрыл.
+func unitArgWith(prefix, s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "%", "%%", "$", "$$")
+	return `"` + prefix + r.Replace(s) + `"`
+}
+
+func systemdSize(s string) string { // 768m → 768M
+	return strings.ToUpper(s)
+}
+
+// Unit текст пользовательского юнита systemd одного слота компонента kind unit.
+func Unit(a actions.InstallUnit) string {
+	var b strings.Builder
+	dir := "%h/" + AppDir(a.Service, a.Slot)
+	fmt.Fprintf(&b, "[Unit]\nDescription=%s %s (слот %s)\nAfter=network-online.target\nWants=network-online.target\nConditionPathExists=%s/.release\n\n", a.Project, a.Service, a.Slot, dir)
+	prog := unitArg(a.Exec[0])
+	if !strings.HasPrefix(a.Exec[0], "/") {
+		prog = unitArgWith("%h/"+AppDir(a.Service, a.Slot)+"/", strings.TrimPrefix(a.Exec[0], "./"))
+	}
+	args := []string{prog}
+	for _, x := range a.Exec[1:] {
+		args = append(args, unitArg(x))
+	}
+	fmt.Fprintf(&b, "[Service]\nWorkingDirectory=%s\nEnvironmentFile=%%h/.config/lite-deploy/env/%s.env\nEnvironment=PORT=%d\n", dir, a.Service, a.HostPort)
+	for _, d := range a.Data {
+		fmt.Fprintf(&b, "Environment=LITE_DATA_%s=%%h/%s\n", strings.ToUpper(strings.ReplaceAll(d, "-", "_")), DataDir(d))
+	}
+	fmt.Fprintf(&b, "ExecStart=%s\n", strings.Join(args, " "))
+	if len(a.Stop) > 0 {
+		stop := unitArg(a.Stop[0])
+		if !strings.HasPrefix(a.Stop[0], "/") {
+			stop = unitArgWith("%h/"+AppDir(a.Service, a.Slot)+"/", strings.TrimPrefix(a.Stop[0], "./"))
+		}
+		sargs := []string{stop}
+		for _, x := range a.Stop[1:] {
+			sargs = append(sargs, unitArg(x))
+		}
+		fmt.Fprintf(&b, "ExecStop=%s\n", strings.Join(sargs, " "))
+	}
+	fmt.Fprintf(&b, "Restart=always\nRestartSec=5\nTimeoutStartSec=120\n")
+	fmt.Fprintf(&b, "NoNewPrivileges=true\nPrivateTmp=true\nMemoryMax=%s\nTasksMax=%d\n\n[Install]\nWantedBy=default.target\n", systemdSize(a.Memory), a.Pids)
 	return b.String()
 }
 
@@ -118,4 +179,32 @@ func DatabaseURL(format, role, db, password string) (string, error) {
 		return fmt.Sprintf("host=/var/run/postgresql dbname=%s user=%s password=%s", db, role, password), nil
 	}
 	return "", fmt.Errorf("неизвестный формат строки подключения %q", format)
+}
+
+// RemoteDatabaseURL строка подключения к PostgreSQL на другом сервере: по сети и только с шифрованием (sslmode=require).
+func RemoteDatabaseURL(format, host string, port int, role, db, password string) (string, error) {
+	if port == 0 {
+		port = 5432
+	}
+	switch format {
+	case "npgsql":
+		return fmt.Sprintf("Host=%s;Port=%d;Database=%s;Username=%s;Password=%s;SSL Mode=Require", host, port, db, role, npgsqlValue(password)), nil
+	case "url":
+		u := url.URL{Scheme: "postgresql", User: url.UserPassword(role, password), Host: net.JoinHostPort(host, strconv.Itoa(port)), Path: "/" + db, RawQuery: "sslmode=require"}
+		return u.String(), nil
+	case "libpq":
+		return fmt.Sprintf("host=%s port=%d dbname=%s user=%s password=%s sslmode=require", host, port, db, role, libpqValue(password)), nil
+	}
+	return "", fmt.Errorf("неизвестный формат строки подключения %q", format)
+}
+
+func npgsqlValue(s string) string {
+	if strings.ContainsAny(s, ";\"' ") || s == "" {
+		return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+	}
+	return s
+}
+
+func libpqValue(s string) string {
+	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
 }

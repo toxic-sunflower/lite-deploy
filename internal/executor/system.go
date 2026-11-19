@@ -30,7 +30,10 @@ func verifyHost(ctx context.Context, r *run, _ any) (outcome, error) {
 			problems = append(problems, fmt.Sprintf("нужна Ubuntu 24.04 или новее, найдено %s %s", kv["ID"], kv["VERSION_ID"]))
 		}
 	}
-	tools := [][]string{{"podman", "--version"}, {"caddy", "version"}, {"loginctl", "--version"}, {"visudo", "--version"}}
+	tools := [][]string{{"caddy", "version"}, {"loginctl", "--version"}, {"visudo", "--version"}}
+	if !r.noPodman {
+		tools = append([][]string{{"podman", "--version"}}, tools...)
+	}
 	if r.needPostgres {
 		tools = append(tools, []string{"psql", "--version"})
 	}
@@ -130,7 +133,7 @@ func createProjectUser(ctx context.Context, r *run, v any) (outcome, error) {
 			}
 		}
 	}
-	for _, d := range []string{".config", ".config/containers", ".config/containers/systemd", ".config/lite-deploy", ".config/lite-deploy/env", ".local", ".local/state", ".local/state/lite-deploy"} {
+	for _, d := range []string{".config", ".config/containers", ".config/containers/systemd", ".config/lite-deploy", ".config/lite-deploy/env", ".config/systemd", ".config/systemd/user", ".local", ".local/state", ".local/state/lite-deploy", ".local/share", ".local/share/lite-deploy", ".local/share/lite-deploy/data"} {
 		perm := fsMode(0o755)
 		if d == ".config/lite-deploy/env" || d == ".local/state/lite-deploy" || d == ".config/lite-deploy" {
 			perm = 0o700

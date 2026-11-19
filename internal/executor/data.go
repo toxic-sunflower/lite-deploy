@@ -21,6 +21,7 @@ func init() {
 	handlers[actions.ProvisionPostgresName] = provisionPostgres
 	handlers[actions.SetSecretName] = setSecret
 	handlers[actions.RegistryLoginName] = registryLogin
+	handlers[actions.WriteReleaseAuthName] = writeReleaseAuth
 	handlers[actions.WriteServiceEnvName] = writeServiceEnv
 }
 
@@ -318,7 +319,11 @@ func writeServiceEnv(_ context.Context, r *run, v any) (outcome, error) {
 			lines = append(lines, render.EnvLine{Name: e.Name, Value: string(val)})
 		case "database":
 			role := project.RoleName(p.Project)
-			pw, pending, err := r.getSecret(p.Project, dbPasswordName)
+			pwName := dbPasswordName
+			if e.Host != "" {
+				pwName = e.Secret
+			}
+			pw, pending, err := r.getSecret(p.Project, pwName)
 			if err != nil {
 				return outcome{}, fmt.Errorf("пароль базы: %w", err)
 			}
@@ -326,7 +331,12 @@ func writeServiceEnv(_ context.Context, r *run, v any) (outcome, error) {
 				unknown = true
 				continue
 			}
-			s, err := render.DatabaseURL(e.Value, role, role, string(pw))
+			var s string
+			if e.Host != "" {
+				s, err = render.RemoteDatabaseURL(e.Value, e.Host, e.Port, role, role, string(pw))
+			} else {
+				s, err = render.DatabaseURL(e.Value, role, role, string(pw))
+			}
 			if err != nil {
 				return outcome{}, err
 			}
@@ -353,4 +363,25 @@ func bakNote(bak string) string {
 		return ""
 	}
 	return "старый файл сохранён: " + bak
+}
+
+// writeReleaseAuth: заголовок Authorization для скачивания релиза; файл 600 у пользователя проекта.
+func writeReleaseAuth(_ context.Context, r *run, v any) (outcome, error) {
+	p := v.(*actions.WriteReleaseAuth)
+	token, pending, err := r.getSecret(p.Project, p.Secret)
+	if err != nil {
+		return outcome{}, fmt.Errorf("токен релиза: %w", err)
+	}
+	if pending {
+		return outcome{changed: true, detail: "токен будет записан предыдущим шагом"}, nil
+	}
+	if strings.ContainsAny(string(token), "\r\n\x00") {
+		return outcome{}, errors.New("токен релиза содержит перевод строки")
+	}
+	path := home(p.Project) + "/.config/lite-deploy/release-" + p.Service + ".hdr"
+	changed, _, err := r.ensureFile(fileSpec{path: path, data: []byte("Authorization: Bearer " + string(token) + "\n"), perm: 0o600, owner: p.Project, group: p.Project})
+	if err != nil {
+		return outcome{}, err
+	}
+	return outcome{changed: changed}, nil
 }

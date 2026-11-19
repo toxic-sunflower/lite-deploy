@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"path"
 	"regexp"
@@ -85,6 +86,8 @@ type Env struct {
 	User   string // имя пользователя, от чьего имени выполняется команда
 	// Projects пользователи проектов (CI заходит под ними по SSH): плагины не должны их отключать.
 	Projects []string
+	// Stdin стандартный ввод команды (для паролей и ключей, которые нельзя передавать аргументами); может быть nil.
+	Stdin io.Reader
 }
 
 // Plugin плагин.

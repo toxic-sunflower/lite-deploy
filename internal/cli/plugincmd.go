@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/builtin"
+	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/pkgmgr"
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
+	"github.com/toxic-sunflower/lite-deploy/internal/project"
 )
 
 const pluginUsage = "использование: lite plugin list | lite plugin run ПЛАГИН КОМАНДА [аргументы] | lite ПЛАГИН КОМАНДА [аргументы]"
@@ -17,7 +19,7 @@ const pluginUsage = "использование: lite plugin list | lite plugin 
 // registry собирает встроенные и внешние плагины. Ошибки загрузки внешних плагинов возвращаются отдельно.
 func registry(env Env) (*plugin.Registry, []error) {
 	r := plugin.NewRegistry()
-	for _, p := range []plugin.Plugin{builtin.Pkg{}, builtin.Security{}, builtin.Firewall{}, builtin.Caddy{}, builtin.Podman{}, builtin.PG{}} {
+	for _, p := range []plugin.Plugin{builtin.Pkg{}, builtin.Security{}, builtin.Firewall{}, builtin.Caddy{}, builtin.Podman{}, builtin.PG{}, builtin.Redis{}, builtin.Backblaze, builtin.S3, builtin.SFTP, builtin.Server{}, builtin.Backup{}} {
 		if err := r.Add(p); err != nil {
 			panic(err) // ошибка в самой программе: встроенные имена фиксированы
 		}
@@ -39,7 +41,7 @@ func (e Env) pluginEnv() plugin.Env {
 	if e.Getenv != nil {
 		user = e.Getenv("SUDO_USER")
 	}
-	return plugin.Env{Runner: e.Runner, FS: e.FS, Now: e.Now, User: user, Projects: projectNames(e)}
+	return plugin.Env{Runner: e.Runner, FS: e.FS, Now: e.Now, User: user, Projects: projectNames(e), Stdin: e.Stdin}
 }
 
 func pluginFail(command string, err error) result {
@@ -90,13 +92,14 @@ func cmdPluginRun(name string, args []string, env Env) result {
 	if !plugin.ValidArgs(cargs) {
 		return fail(command, CodeUsage, "неверные аргументы: без управляющих символов, не длиннее 256 знаков, не больше 16")
 	}
-	if (c.Confirm || c.Root) && !env.root() {
-		return fail(command, "permission_denied", "команда требует root: sudo lite "+name+" "+cmd+" …")
-	}
 	if c.Confirm {
 		if !yes && !confirm(env, fmt.Sprintf("Выполнить: lite %s %s %s?", name, cmd, strings.Join(cargs, " "))) {
 			return fail(command, "confirmation_required", "это изменит систему; повторите с --yes")
 		}
+	}
+	if (c.Confirm || c.Root) && !env.root() {
+		// без sudo: агент и исполнитель выполняют команду от root; подтверждение уже получено выше
+		return forwardPlugin(env, command, name, cmd, cargs)
 	}
 	out, err := p.Run(context.Background(), env.pluginEnv(), cmd, cargs)
 	if err != nil {
@@ -169,15 +172,17 @@ func cmdInfo(env Env, command string) result {
 
 // cmdVerify: lite verify (только чтение): проверки всех плагинов.
 func cmdVerify(env Env) result {
-	r, errs := registry(env)
-	ctx := context.Background()
-	var all []plugin.Finding
-	for _, p := range r.List() {
-		all = append(all, p.Check(ctx, env.pluginEnv())...)
+	// без root часть проверок (sshd -T, fail2ban-client) даёт ложные ответы: их выполняет исполнитель через агента
+	if !env.root() {
+		if r, ok := forwardVerify(env); ok {
+			return r
+		}
 	}
-	for _, e := range errs {
-		all = append(all, plugin.Finding{Plugin: "plugin", Check: "load", Level: plugin.LevelFail, Message: e.Error()})
-	}
+	return verifyResult(collectFindings(env))
+}
+
+// verifyResult оформляет найденное в читаемый и машинный вид.
+func verifyResult(all []plugin.Finding) result {
 	var sb strings.Builder
 	counts := map[string]int{}
 	for _, f := range all {
@@ -200,6 +205,21 @@ func cmdVerify(env Env) result {
 	return res
 }
 
+// collectFindings собирает проверки всех плагинов и зависимостей проектов (только чтение).
+func collectFindings(env Env) []plugin.Finding {
+	r, errs := registry(env)
+	ctx := context.Background()
+	var all []plugin.Finding
+	for _, p := range r.List() {
+		all = append(all, p.Check(ctx, env.pluginEnv())...)
+	}
+	all = append(all, projectRequirements(ctx, env)...)
+	for _, e := range errs {
+		all = append(all, plugin.Finding{Plugin: "plugin", Check: "load", Level: plugin.LevelFail, Message: e.Error()})
+	}
+	return all
+}
+
 // projectNames имена проектов (они же пользователи проектов) по описаниям в /etc/lite-deploy/projects.
 func projectNames(env Env) []string {
 	var out []string
@@ -208,6 +228,36 @@ func projectNames(env Env) []string {
 			if p, ok := strings.CutSuffix(n, ".json"); ok {
 				out = append(out, p)
 			}
+		}
+	}
+	return out
+}
+
+// requirementProbe команда, по которой видно, что нужный проекту плагин установлен.
+var requirementProbe = map[string][]string{"podman": {"podman", "--version"}, "pg": {"psql", "--version"}, "caddy": {"caddy", "version"}}
+
+// projectRequirements проверяет, что для каждого проекта на сервере есть то, что он требует (R-20).
+func projectRequirements(ctx context.Context, env Env) []plugin.Finding {
+	var out []plugin.Finding
+	for _, name := range projectNames(env) {
+		b, err := env.FS.ReadFile("/etc/lite-deploy/projects/" + name + ".json")
+		if err != nil {
+			continue
+		}
+		p, issues := project.Parse(b)
+		if len(issues) > 0 {
+			out = append(out, plugin.Finding{Plugin: "project", Check: name, Level: plugin.LevelFail, Message: "описание проекта " + name + " не читается: " + issues[0].Message})
+			continue
+		}
+		for _, need := range project.Requires(p) {
+			probe := requirementProbe[need]
+			res, err := env.Runner.Run(ctx, host.Cmd{Name: probe[0], Args: probe[1:]})
+			if err != nil || res.ExitCode != 0 {
+				out = append(out, plugin.Finding{Plugin: "project", Check: name + "/" + need, Level: plugin.LevelFail,
+					Message: "проекту " + name + " нужен плагин " + need + ", его нет на сервере", Fix: "sudo lite " + need + " install"})
+				continue
+			}
+			out = append(out, plugin.Finding{Plugin: "project", Check: name + "/" + need, Level: plugin.LevelOK, Message: "проекту " + name + " нужен " + need + ": есть"})
 		}
 	}
 	return out

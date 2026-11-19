@@ -46,7 +46,11 @@ type Env struct {
 	// пути ключа исполнителя и хранилища секретов; пусто: значения по умолчанию из пакета secrets
 	KeyPath, PubPath, SecretsDir string
 	IsRoot                       func() bool
-	Now                          func() time.Time
+	// CurrentUser имя пользователя процесса; nil: os/user
+	CurrentUser func() string
+	// AgentCall вызов агента (подменяется в тестах); nil: agent.Call
+	AgentCall func(ctx context.Context, sock, method, path string, body []byte) ([]byte, error)
+	Now       func() time.Time
 	// для apply и project create: запуск команд, HTTP-проверки, случайность, признак интерактивного терминала, uid
 	Runner      host.Runner
 	HTTP        host.HTTPClient
@@ -184,6 +188,8 @@ func dispatch(args []string, env Env) result {
 			return cmdList(env)
 		case "create":
 			return cmdProjectCreate(args[2:], env)
+		case "bundle":
+			return cmdProjectBundle(args[2:], env)
 		}
 		return fail("project", CodeUsage, "неизвестная подкоманда project: "+args[1])
 	case "apply":
@@ -212,7 +218,12 @@ func dispatch(args []string, env Env) result {
 		return cmdPlugin(args[1:], env)
 	case "info":
 		return cmdInfo(env, "info")
+	case "fix":
+		return cmdFix(args[1:], env)
 	case "verify":
+		if len(args) > 1 && args[1] == "--autofix" {
+			return cmdFix(args[2:], env)
+		}
 		return cmdVerify(env)
 	}
 	// команда плагина: lite ПЛАГИН КОМАНДА
@@ -354,7 +365,25 @@ func preparePlan(command string, args []string, env Env) (*prepared, *result) {
 		return nil, bad
 	}
 	out, rotate, cts := extra[0], extra[1] == "true", extra[2:]
+	ciphertexts := map[string]string{}
+	for _, c := range cts {
+		name, path, ok := strings.Cut(c, "=")
+		if !ok || name == "" || path == "" {
+			r := fail(command, CodeUsage, "--ciphertext ожидает имя=файл")
+			return nil, &r
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			r := fail(command, CodeIO, "не удалось прочитать шифртекст "+name+": "+err.Error())
+			return nil, &r
+		}
+		ciphertexts[name] = strings.TrimSpace(string(b))
+	}
+	return buildPlan(command, p, out, rotate, ciphertexts, env)
+}
 
+// buildPlan строит план по готовому описанию и шифртекстам (общая часть файлового и пакетного путей).
+func buildPlan(command string, p *project.Project, out string, rotate bool, ciphertexts map[string]string, env Env) (*prepared, *result) {
 	st, err := plan.LoadState(env.FS, env.Paths)
 	if err != nil {
 		r := fail(command, plan.CodePrecondition, err.Error())
@@ -369,20 +398,7 @@ func preparePlan(command string, args []string, env Env) (*prepared, *result) {
 	st.PortRange = [2]int{cfg.Limits.PortRange[0], cfg.Limits.PortRange[1]}
 	st.MaxProjects = cfg.Limits.Projects
 	st.RotatePassword = rotate
-	st.Ciphertexts = map[string]string{}
-	for _, c := range cts {
-		name, path, ok := strings.Cut(c, "=")
-		if !ok || name == "" || path == "" {
-			r := fail(command, CodeUsage, "--ciphertext ожидает имя=файл")
-			return nil, &r
-		}
-		b, err := os.ReadFile(path)
-		if err != nil {
-			r := fail(command, CodeIO, "не удалось прочитать шифртекст "+name+": "+err.Error())
-			return nil, &r
-		}
-		st.Ciphertexts[name] = strings.TrimSpace(string(b))
-	}
+	st.Ciphertexts = ciphertexts
 
 	pl, berr := plan.Build(p, st)
 	if berr != nil {
@@ -539,7 +555,7 @@ func cmdProjectCreate(args []string, env Env) result {
 	fs := flag.NewFlagSet("project.create", flag.ContinueOnError)
 	yes := fs.Bool("yes", false, "")
 	fs.String("out", "", "")
-	fs.Bool("rotate-password", false, "")
+	rotate := fs.Bool("rotate-password", false, "")
 	var cts listFlag
 	fs.Var(&cts, "ciphertext", "")
 	pos, err := parseArgs(fs, args)
@@ -547,7 +563,7 @@ func cmdProjectCreate(args []string, env Env) result {
 		return fail("project.create", CodeUsage, "использование: lite-deploy project create <project.json|-> [--yes] [--ciphertext имя=файл] [--rotate-password]")
 	}
 	if !env.root() {
-		return fail("project.create", "permission_denied", "project create выполняется от root: sudo lite-deploy project create …")
+		return forwardProjectCreate(env, pos[0], *yes, *rotate, cts)
 	}
 	// stdin читается один раз: "-" нельзя использовать и для описания, и для подтверждения
 	var rest []string

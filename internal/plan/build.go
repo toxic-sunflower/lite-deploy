@@ -62,6 +62,7 @@ type State struct {
 	ExistingUsers  map[string]bool         // системные пользователи, существующие на сервере
 	Ciphertexts    map[string]string       // шифртекст секретов, которые владелец передаёт в этом плане
 	RotatePassword bool                    // для adopt: сменить пароль существующей роли
+	Servers        map[string]string       // реестр серверов: имя → адрес (lite server add)
 }
 
 // Build строит план project.create из проверенного описания (SPEC-v0.md, раздел 3).
@@ -98,6 +99,12 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 		}
 	}
 
+	if db := p.Database; db != nil && !db.IsLocal() {
+		if _, ok := st.Servers[db.Server]; !ok {
+			return nil, &BuildError{Code: CodePrecondition, Message: fmt.Sprintf("сервера %q нет в реестре", db.Server), Hint: "sudo lite server add " + db.Server + " АДРЕС"}
+		}
+	}
+
 	projHash, err := ProjectHash(p)
 	if err != nil {
 		return nil, &BuildError{Code: CodePrecondition, Message: err.Error()}
@@ -115,7 +122,11 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 	}
 
 	b := &builder{}
-	b.add(actions.VerifyHostName, actions.VerifyHost{}, "Проверка сервера: ОС, podman, caddy, postgresql, правила Caddy и ufw")
+	hasContainers := false
+	for _, s := range d.Services {
+		hasContainers = hasContainers || s.KindOf() == project.KindQuadlet
+	}
+	b.add(actions.VerifyHostName, actions.VerifyHost{NoPodman: !hasContainers}, "Проверка сервера: ОС, podman, caddy, postgresql, правила Caddy и ufw")
 	b.add(actions.CreateProjectUserName, actions.CreateProjectUser{Project: name}, fmt.Sprintf("Пользователь %s без пароля и sudo, linger, каталоги конфигурации", name))
 
 	// В режиме adopt пароль существующей роли должен быть записан до provision_postgres.
@@ -124,7 +135,7 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 			b.add(actions.SetSecretName, s, "Служебный секрет _db_password (существующий пароль роли), только шифртекст")
 		}
 	}
-	if d.Database != nil {
+	if d.Database != nil && d.Database.IsLocal() {
 		b.add(actions.ProvisionPostgresName, actions.ProvisionPostgres{
 			Project: name, ConnectionFormat: d.Database.ConnectionFormat, RotatePassword: p.Adopt && !managed && st.RotatePassword,
 		}, fmt.Sprintf("Роль и база %s в PostgreSQL, правило pg_hba для этой пары, пароль создаётся на сервере", project.RoleName(name)))
@@ -143,15 +154,26 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 	svcNames := sortedKeys(d.Services)
 	for _, sn := range svcNames {
 		s := d.Services[sn]
-		b.add(actions.WriteServiceEnvName, actions.WriteServiceEnv{Project: name, Service: sn, Env: envFor(s, d)},
+		b.add(actions.WriteServiceEnvName, actions.WriteServiceEnv{Project: name, Service: sn, Env: envFor(s, d, st)},
 			fmt.Sprintf("Файл настроек сервиса %s (права 600)", sn))
+		if s.KindOf() == project.KindUnit && s.Release != nil && s.Release.TokenSecret != "" {
+			b.add(actions.WriteReleaseAuthName, actions.WriteReleaseAuth{Project: name, Service: sn, Secret: secretName(s.Release.TokenSecret)},
+				fmt.Sprintf("Заголовок авторизации для скачивания релиза %s (права 600)", sn))
+		}
 	}
 	for _, sn := range svcNames {
 		s := d.Services[sn]
 		for i, slot := range []string{"blue", "green"} {
+			if s.KindOf() == project.KindUnit {
+				b.add(actions.InstallUnitName, actions.InstallUnit{
+					Project: name, Service: sn, Slot: slot, HostPort: ports.Services[sn][i], Exec: s.Exec, Stop: s.Stop, Data: s.Data,
+					Memory: s.Limits.Memory, Pids: s.Limits.Pids,
+				}, fmt.Sprintf("Юнит systemd %s-%s-%s, порт 127.0.0.1:%d", name, sn, slot, ports.Services[sn][i]))
+				continue
+			}
 			b.add(actions.InstallQuadletName, actions.InstallQuadlet{
 				Project: name, Service: sn, Slot: slot, HostPort: ports.Services[sn][i], ContainerPort: s.ContainerPort,
-				Memory: s.Limits.Memory, Pids: s.Limits.Pids, DatabaseSocket: s.DatabaseEnv != "",
+				Memory: s.Limits.Memory, Pids: s.Limits.Pids, DatabaseSocket: s.DatabaseEnv != "" && d.Database.IsLocal(), Data: s.Data,
 			}, fmt.Sprintf("Юнит Quadlet %s-%s-%s, порт 127.0.0.1:%d", name, sn, slot, ports.Services[sn][i]))
 		}
 	}
@@ -244,7 +266,7 @@ func siteRoutes(s project.Site) []actions.SiteRoute {
 	return out
 }
 
-func envFor(s project.Service, d *project.Project) []actions.EnvVar {
+func envFor(s project.Service, d *project.Project, st State) []actions.EnvVar {
 	var out []actions.EnvVar
 	for _, k := range sortedKeys(s.Env) {
 		out = append(out, actions.EnvVar{Name: k, Kind: "literal", Value: s.Env[k]})
@@ -253,7 +275,11 @@ func envFor(s project.Service, d *project.Project) []actions.EnvVar {
 		out = append(out, actions.EnvVar{Name: k, Kind: "secret", Secret: secretName(s.Secrets[k])})
 	}
 	if s.DatabaseEnv != "" {
-		out = append(out, actions.EnvVar{Name: s.DatabaseEnv, Kind: "database", Value: d.Database.ConnectionFormat})
+		ev := actions.EnvVar{Name: s.DatabaseEnv, Kind: "database", Value: d.Database.ConnectionFormat}
+		if !d.Database.IsLocal() {
+			ev.Host, ev.Port, ev.Secret = st.Servers[d.Database.Server], d.Database.Port, secretName(d.Database.PasswordSecret)
+		}
+		out = append(out, ev)
 	}
 	return out
 }
@@ -265,9 +291,15 @@ func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) (
 		for _, ref := range s.Secrets {
 			need[secretName(ref)] = true
 		}
+		if s.Release != nil && s.Release.TokenSecret != "" {
+			need[secretName(s.Release.TokenSecret)] = true
+		}
 	}
 	if d.Registry != nil {
 		need[secretName(d.Registry.TokenSecret)] = true
+	}
+	if d.Database != nil && !d.Database.IsLocal() {
+		need[secretName(d.Database.PasswordSecret)] = true
 	}
 	have := map[string]bool{}
 	for _, n := range cur.Secrets {
@@ -309,7 +341,7 @@ func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) (
 		return nil, &BuildError{Code: CodeSecretMissing, Message: "не хватает секретов: " + strings.Join(missing, ", "),
 			Hint: "зашифруйте значения командой secret encrypt и передайте шифртексты в план"}
 	}
-	if d.Adopt && d.Database != nil && !managed && !st.RotatePassword && st.Ciphertexts[DBPasswordSecret] == "" && !have[DBPasswordSecret] {
+	if d.Adopt && d.Database != nil && d.Database.IsLocal() && !managed && !st.RotatePassword && st.Ciphertexts[DBPasswordSecret] == "" && !have[DBPasswordSecret] {
 		return nil, &BuildError{Code: CodeAdoptPassword, Message: "пароль существующей роли неизвестен",
 			Hint: "задайте секрет _db_password или разрешите смену пароля (rotate_password)"}
 	}

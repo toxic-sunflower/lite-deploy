@@ -111,6 +111,10 @@ func TestQuadletMatchesLegacy(t *testing.T) {
 			if moved.MatchString(l) || strings.HasPrefix(l, "Description=") {
 				continue
 			}
+			// Memory= есть только в Quadlet podman 5; PodmanArgs=--memory работает и в podman 4.x (Ubuntu 24.04)
+			if m, ok := strings.CutPrefix(l, "Memory="); ok {
+				l = "PodmanArgs=--memory=" + m
+			}
 			if !contains(gen, l) {
 				t.Errorf("%s: строки %q нет в сгенерированном юните", c.file, l)
 			}

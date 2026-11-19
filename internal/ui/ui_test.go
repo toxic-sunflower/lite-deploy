@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"filippo.io/age"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -224,5 +225,52 @@ func TestPluginValidation(t *testing.T) {
 	}
 	if len(r.Calls) != 0 {
 		t.Fatalf("неверные запросы не должны доходить до сервера: %v", r.Calls)
+	}
+}
+
+func TestProjectPreviewEncryptsSecretsLocally(t *testing.T) {
+	id, _ := age.GenerateX25519Identity()
+	var calls []host.Cmd
+	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		calls = append(calls, c)
+		if strings.Contains(strings.Join(c.Args, " "), "/v1/project/key") {
+			return host.Result{Stdout: []byte(`{"ok":true,"api_version":"v1","command":"secret.pubkey","data":{"public_key":"` + id.Recipient().String() + `"}}`)}, nil
+		}
+		return host.Result{Stdout: []byte(`{"ok":true,"api_version":"v1","command":"project.bundle","data":{}}`)}, nil
+	}}
+	s := &Server{Runner: r, Bin: "/bin/lite-deploy", Token: tok}
+	h := s.Handler()
+	body := `{"project":{"name":"shop"},"secrets":{"api_key":"S3CRET-VALUE-123"},"expect_project_hash":"sha256:x"}`
+	if w := do(h, "POST", "/api/project/preview", body, tok); w.Code != 200 || !strings.Contains(w.Body.String(), `"ok":true`) {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	if len(calls) != 2 || strings.Join(calls[1].Args, " ") != "call POST /v1/project/preview" {
+		t.Fatalf("вызовы: %+v", calls)
+	}
+	sent := string(calls[1].Stdin)
+	if strings.Contains(sent, "S3CRET-VALUE-123") || !strings.Contains(sent, "BEGIN AGE ENCRYPTED FILE") || !strings.Contains(sent, `"expect_project_hash":"sha256:x"`) {
+		t.Fatalf("на сервер должен уйти шифртекст, а не значение: %s", sent)
+	}
+}
+
+func TestProjectEndpointsValidate(t *testing.T) {
+	s, r := newServer("")
+	h := s.Handler()
+	for _, c := range []struct {
+		path, body, token string
+		code              int
+	}{
+		{"/api/project/create", `{"project":{"name":"shop"}}`, "", 401},
+		{"/api/project/create", `{"project":{"name":"Bad Name"}}`, tok, 400},
+		{"/api/project/create", `{"project":{}}`, tok, 400},
+		{"/api/project/create", `{"project":{"name":"shop"},"x":1}`, tok, 400},
+		{"/api/project/preview", `не json`, tok, 400},
+	} {
+		if w := do(h, "POST", c.path, c.body, c.token); w.Code != c.code {
+			t.Errorf("%s %s: %d, ждали %d", c.path, c.body, w.Code, c.code)
+		}
+	}
+	if len(r.Calls) != 0 {
+		t.Fatalf("при неверном запросе агент не вызывается: %v", r.Calls)
 	}
 }

@@ -1,7 +1,9 @@
 package host
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -74,4 +76,49 @@ func (m *MemFS) Overwrite(p string, data []byte) error {
 	m.Files[p] = append([]byte(nil), data...)
 	m.Times[p] = m.Now()
 	return nil
+}
+
+// Open открывает файл для чтения.
+func (OSFS) Open(p string) (io.ReadCloser, error) { return os.Open(p) } //nolint:gosec // путь задаёт вызывающий код ядра
+
+// Create создаёт файл с точными правами perm.
+func (OSFS) Create(p string, perm fs.FileMode) (io.WriteCloser, error) {
+	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm) //nolint:gosec // путь задаёт вызывающий код ядра
+	if err != nil {
+		return nil, err
+	}
+	if err := f.Chmod(perm); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
+// Open открывает копию содержимого файла.
+func (m *MemFS) Open(p string) (io.ReadCloser, error) {
+	b, ok := m.Files[filepath.Clean(p)]
+	if !ok {
+		return nil, &fs.PathError{Op: "open", Path: p, Err: fs.ErrNotExist}
+	}
+	return io.NopCloser(bytes.NewReader(b)), nil
+}
+
+type memWriter struct {
+	m    *MemFS
+	path string
+	buf  bytes.Buffer
+}
+
+func (w *memWriter) Write(b []byte) (int, error) { return w.buf.Write(b) }
+func (w *memWriter) Close() error {
+	w.m.Files[w.path] = append([]byte(nil), w.buf.Bytes()...)
+	return nil
+}
+
+// Create начинает запись файла; содержимое появляется при Close.
+func (m *MemFS) Create(p string, perm fs.FileMode) (io.WriteCloser, error) {
+	p = filepath.Clean(p)
+	m.Perms[p] = perm
+	m.Times[p] = m.Now()
+	return &memWriter{m: m, path: p}, nil
 }

@@ -14,7 +14,7 @@ Tmpfs=/tmp
 NoNewPrivileges=true
 DropCapability=ALL
 PidsLimit=512
-Memory=768m
+PodmanArgs=--memory=768m
 
 [Service]
 Restart=always

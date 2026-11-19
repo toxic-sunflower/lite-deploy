@@ -26,6 +26,10 @@ func TestCLIArgs(t *testing.T) {
 		"verify":                                 {Cmd: "verify"},
 		"plugin run package install nginx --yes": {Cmd: "plugin.run", Args: []string{"package", "install", "nginx"}},
 		"firewall enable --yes":                  {Cmd: "firewall.enable"},
+		"project bundle --dry-run":               {Cmd: "project.preview", Body: `{"project":{}}`},
+		"project bundle --yes":                   {Cmd: "project.create", Body: `{"project":{}}`},
+		"secret pubkey":                          {Cmd: "project.key"},
+		"fix --yes":                              {Cmd: "fix"},
 		"firewall allow 80/tcp --yes":            {Cmd: "firewall.allow", Args: []string{"80/tcp", ""}},
 		"firewall allow 80/tcp --from 10.0.0.0/8 --yes":                {Cmd: "firewall.allow", Args: []string{"80/tcp", "10.0.0.0/8"}},
 		"firewall remove 8080/udp --action limit --yes":                {Cmd: "firewall.remove", Args: []string{"8080/udp", "", "limit"}},
@@ -47,6 +51,8 @@ func TestCLIArgs(t *testing.T) {
 		{Cmd: "plugin.run"}, {Cmd: "plugin.run", Args: []string{"package"}}, {Cmd: "plugin.run", Args: []string{"Package", "install"}},
 		{Cmd: "plugin.run", Args: []string{"package", "install", "a\nb"}}, {Cmd: "info", Args: []string{"x"}},
 		{Cmd: "firewall.remove", Args: []string{"80/tcp", "", "drop"}}, {Cmd: "firewall.enable", Args: []string{"x"}},
+		{Cmd: "project.create"}, {Cmd: "project.preview", Body: "не json"}, {Cmd: "project.create", Body: strings.Repeat("a", MaxBody+1)},
+		{Cmd: "project.create", Args: []string{"x"}, Body: "{}"}, {Cmd: "status", Body: "{}"}, {Cmd: "fix", Args: []string{"--dry-run"}}, {Cmd: "deploy", Args: []string{"shop", sha}, Body: "{}"},
 	}
 	for _, req := range bad {
 		if _, err := req.CLIArgs(); err == nil {
@@ -130,6 +136,10 @@ func TestAgentRoutes(t *testing.T) {
 		{"POST", "/v1/firewall/allow", `{"port":8080,"proto":"tcp","from":"10.0.0.0/8"}`, "firewall allow 8080/tcp --from 10.0.0.0/8 --yes --json"},
 		{"POST", "/v1/firewall/remove", `{"port":8080,"proto":"tcp","action":"allow"}`, "firewall remove 8080/tcp --action allow --yes --json"},
 		{"POST", "/v1/firewall/enable", `{}`, "firewall enable --yes --json"},
+		{"POST", "/v1/project/preview", `{"project":{"name":"shop"}}`, "project bundle --dry-run --json"},
+		{"POST", "/v1/project/create", `{"project":{"name":"shop"}}`, "project bundle --yes --json"},
+		{"GET", "/v1/project/key", "", "secret pubkey --json"},
+		{"POST", "/v1/fix", `{}`, "fix --yes --json"},
 	}
 	for _, c := range cases {
 		w := req(h, 1000, c.method, c.path, c.body)
@@ -168,6 +178,11 @@ func TestAgentAuthAndValidation(t *testing.T) {
 	} {
 		if w := req(h, 1000, c.method, c.path, c.body); w.Code != 400 && !strings.Contains(w.Body.String(), `"ok":false`) {
 			t.Errorf("%s %s: %d", c.method, c.path, w.Code)
+		}
+	}
+	for _, body := range []string{`[]`, `"x"`, `{`, strings.Repeat("x", MaxBody+10)} {
+		if w := req(h, 1000, "POST", "/v1/project/create", body); w.Code != 400 {
+			t.Errorf("тело %.10q принято: %d", body, w.Code)
 		}
 	}
 	if w := req(h, 1000, "GET", "/v1/deploy", ""); w.Code != 405 {
@@ -250,5 +265,17 @@ func TestInstallNoAdminGroup(t *testing.T) {
 	r := &host.FakeRunner{Handler: func(host.Cmd) (host.Result, error) { return host.Result{ExitCode: 2}, nil }}
 	if _, err := Install(context.Background(), r, host.NewMemFS(), "/x"); err == nil {
 		t.Fatal("без группы sudo и wheel установка должна отказать")
+	}
+}
+
+func TestStatusProjectQuery(t *testing.T) {
+	var ran []string
+	a, _ := newAgent(t, &ran, true)
+	h := a.Handler()
+	if w := req(h, 1000, "GET", "/v1/status?project=shop", ""); w.Code != 200 || len(ran) != 1 || ran[0] != "status shop --json" {
+		t.Fatalf("%d %v", w.Code, ran)
+	}
+	if w := req(h, 1000, "GET", "/v1/status?project=../x", ""); w.Code != 400 {
+		t.Fatalf("плохое имя проекта: %d", w.Code)
 	}
 }

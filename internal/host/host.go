@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -97,6 +98,10 @@ type FS interface {
 	Append(path string, data []byte, perm fs.FileMode) error
 	// Overwrite записывает существующий файл на месте, сохраняя владельца и права.
 	Overwrite(path string, data []byte) error
+	// Open открывает файл для чтения потоком (большие файлы не читаются в память целиком).
+	Open(path string) (io.ReadCloser, error)
+	// Create создаёт или усекает файл с правами perm для записи потоком.
+	Create(path string, perm fs.FileMode) (io.WriteCloser, error)
 }
 
 // Info описание записи файловой системы.

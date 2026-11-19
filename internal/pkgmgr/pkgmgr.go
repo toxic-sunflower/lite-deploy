@@ -28,6 +28,9 @@ var protected = map[string]bool{
 	"minisign": true,
 }
 
+// forbidden пакеты, которые lite не ставит: контейнеры только podman и Quadlet (R-11), доступ к демону Docker равен root.
+var forbidden = regexp.MustCompile(`^(docker|docker\.io|docker-ce|docker-ce-cli|docker-ce-rootless-extras|docker-compose|docker-compose-plugin|docker-buildx-plugin|docker-engine|containerd\.io|moby-engine|moby-cli)$`)
+
 // Error ошибка с кодом для конверта CLI.
 type Error struct{ Code, Message string }
 
@@ -103,6 +106,16 @@ func checkNames(names []string) *Error {
 	for _, n := range names {
 		if !nameRe.MatchString(n) {
 			return fail("usage", "неверное имя пакета %q", n)
+		}
+	}
+	return nil
+}
+
+// checkAllowed отклоняет пакеты, которые lite не ставит и не обновляет.
+func checkAllowed(names []string) *Error {
+	for _, n := range names {
+		if forbidden.MatchString(n) {
+			return fail("protected_rule", "пакет %s не ставится: контейнеры только podman и Quadlet, доступ к демону Docker равен root на сервере", n)
 		}
 	}
 	return nil
@@ -247,6 +260,9 @@ func (m *Manager) Install(ctx context.Context, names ...string) error {
 	if e := checkNames(names); e != nil {
 		return e
 	}
+	if e := checkAllowed(names); e != nil {
+		return e
+	}
 	mgr, err := m.Detect(ctx)
 	if err != nil {
 		return err
@@ -284,6 +300,9 @@ func (m *Manager) Install(ctx context.Context, names ...string) error {
 // Update обновляет пакеты и версию в журнале.
 func (m *Manager) Update(ctx context.Context, names ...string) error {
 	if e := checkNames(names); e != nil {
+		return e
+	}
+	if e := checkAllowed(names); e != nil {
 		return e
 	}
 	mgr, err := m.Detect(ctx)

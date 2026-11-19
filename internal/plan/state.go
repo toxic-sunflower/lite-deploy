@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/toxic-sunflower/lite-deploy/internal/servers"
 	"io/fs"
 	"strings"
 
@@ -65,12 +66,25 @@ func LoadState(fsys host.FS, p Paths) (State, error) {
 		st.Projects[strings.TrimSuffix(n, ".json")] = ps
 	}
 
+	if servers, err := servers.Load(fsys); err == nil {
+		st.Servers = servers
+	}
+
 	st.ExistingUsers = map[string]bool{}
 	if pw, err := fsys.ReadFile(p.Passwd); err == nil {
 		for _, line := range strings.Split(string(pw), "\n") {
-			if i := strings.IndexByte(line, ':'); i > 0 {
-				st.ExistingUsers[line[:i]] = true
+			f := strings.Split(line, ":")
+			if len(f) < 6 || f[0] == "" {
+				continue
 			}
+			// пользователь, которого уже создал незавершённый project create (есть наш каталог настроек), не считается чужим:
+			// повторный запуск продолжает работу
+			if _, managed := st.Projects[f[0]]; !managed && f[5] != "" {
+				if _, err := fsys.Stat(f[5] + "/.config/lite-deploy"); err == nil {
+					continue
+				}
+			}
+			st.ExistingUsers[f[0]] = true
 		}
 	}
 	return st, nil

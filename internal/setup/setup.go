@@ -38,7 +38,7 @@ type Options struct {
 	Users    []string // имена; пусто и !AllUsers: текущий пользователь
 	AllUsers bool
 	Current  string   // кто запустил sudo (пусто: запуск прямо от root)
-	Firewall string   // off, http, max
+	Firewall string   // off, http, max или keep (не менять)
 	Plugins  []string // podman, postgres
 	Yes      bool     // не спрашивать подтверждение плана
 }
@@ -176,6 +176,8 @@ func (e Env) Plan(o Options, users []string) ([]string, error) {
 		}
 	}
 	switch o.Firewall {
+	case "keep":
+		p = append(p, "файервол: не менять (оставить настроенное вручную)")
 	case firewall.ModeOff:
 		p = append(p, "файервол: выключить (без фильтрации трафика)")
 	case firewall.ModeHTTP:
@@ -183,7 +185,7 @@ func (e Env) Plan(o Options, users []string) ([]string, error) {
 	case firewall.ModeMax:
 		p = append(p, "файервол: сбросить правила, открыть только SSH (сайты на 80 и 443 снаружи недоступны, пока режим не сменён на http)")
 	default:
-		return nil, fmt.Errorf("режим файервола: off, http или max")
+		return nil, fmt.Errorf("режим файервола: keep, off, http или max")
 	}
 	for _, pl := range o.Plugins {
 		switch pl {
@@ -191,7 +193,7 @@ func (e Env) Plan(o Options, users []string) ([]string, error) {
 			p = append(p, "плагин caddy: установить Caddy, главный Caddyfile (подключает сайты проектов из /etc/caddy/conf.d), запустить службу")
 		case "security":
 			p = append(p, "плагин security: защита сервера: SSH только по ключу для всех и root только по ключу, fail2ban, автообновления безопасности, защитные параметры ядра")
-		case "podman", "pg", "postgres":
+		case "podman", "pg", "postgres", "redis", "backblaze", "s3", "sftp":
 			p = append(p, "плагин "+pl+": установить пакеты")
 		default:
 			return nil, fmt.Errorf("неизвестный плагин %q (есть: %s)", pl, strings.Join(builtin.PluginNames(), ", "))
@@ -238,8 +240,10 @@ func (e Env) Apply(ctx context.Context, o Options) error {
 			return fmt.Errorf("плагин %s: %w", pl, err)
 		}
 	}
-	if err := e.firewall(ctx, o.Firewall); err != nil {
-		return err
+	if o.Firewall != "keep" {
+		if err := e.firewall(ctx, o.Firewall); err != nil {
+			return err
+		}
 	}
 	if err := e.sshKeyOnly(ctx, keyed); err != nil {
 		return err
@@ -422,11 +426,15 @@ func (e Env) sshKeyOnly(ctx context.Context, users []string) error {
 		restore()
 		return fmt.Errorf("новая настройка sshd не прошла проверку, возвращена прежняя: %w", err)
 	}
-	if e.must(ctx, "systemctl", "reload", "ssh") != nil {
-		if err := e.must(ctx, "systemctl", "reload", "sshd"); err != nil {
+	for _, unit := range []string{"ssh", "sshd"} {
+		if e.must(ctx, "systemctl", "is-active", "--quiet", unit) != nil {
+			continue
+		}
+		if err := e.must(ctx, "systemctl", "reload", unit); err != nil {
 			restore()
 			return fmt.Errorf("не удалось перечитать настройки sshd, возвращена прежняя: %w", err)
 		}
+		break
 	}
 	e.say("Вход по SSH по паролю отключён для: %s (остался вход по ключу).", strings.Join(users, ", "))
 	return nil

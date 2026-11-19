@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/toxic-sunflower/lite-deploy/internal/builtin"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
 
@@ -325,5 +326,31 @@ func TestCaddyValidateFailureStopsBeforeStart(t *testing.T) {
 	}
 	if w.index("systemctl enable --now caddy") >= 0 {
 		t.Fatal("со сломанным Caddyfile службу не запускаем")
+	}
+}
+
+func TestEveryInstallablePluginIsAcceptedByPlan(t *testing.T) {
+	e := Env{FS: host.NewMemFS(), Runner: &host.FakeRunner{Handler: func(host.Cmd) (host.Result, error) { return host.Result{}, nil }}}
+	for _, n := range append(builtin.PluginNames(), "postgres") {
+		if _, err := e.Plan(Options{Firewall: "off", Plugins: []string{n}}, nil); err != nil && strings.Contains(err.Error(), "неизвестный плагин") {
+			t.Errorf("плагин %s из PluginNames отклонён планом: %v", n, err)
+		}
+	}
+}
+
+func TestFirewallKeepDoesNotTouchUfw(t *testing.T) {
+	var calls []string
+	mem := host.NewMemFS()
+	mem.Files["/etc/passwd"] = []byte("root:x:0:0::/root:/bin/bash\n")
+	e := Env{FS: mem, Runner: &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		calls = append(calls, c.Name+" "+strings.Join(c.Args, " "))
+		return host.Result{}, nil
+	}}}
+	p, err := e.Plan(Options{Firewall: "keep"}, nil)
+	if err != nil || !strings.Contains(strings.Join(p, "\n"), "не менять") {
+		t.Fatalf("%v %v", p, err)
+	}
+	if _, err := e.Plan(Options{Firewall: "bogus"}, nil); err == nil {
+		t.Fatal("неизвестный режим должен отклоняться")
 	}
 }

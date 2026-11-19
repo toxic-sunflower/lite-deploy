@@ -179,3 +179,19 @@ func TestOtherManagers(t *testing.T) {
 		}
 	}
 }
+
+func TestDockerIsForbidden(t *testing.T) {
+	m := &Manager{Runner: &host.FakeRunner{Handler: func(host.Cmd) (host.Result, error) { return host.Result{}, nil }}, FS: host.NewMemFS()}
+	for _, n := range []string{"docker", "docker.io", "docker-ce", "docker-compose-plugin", "containerd.io", "moby-engine"} {
+		for name, op := range map[string]func(context.Context, ...string) error{"install": m.Install, "update": m.Update} {
+			err := op(context.Background(), n)
+			var pe *Error
+			if !errors.As(err, &pe) || pe.Code != "protected_rule" {
+				t.Errorf("%s %s: %v", name, n, err)
+			}
+		}
+	}
+	if forbidden.MatchString("podman") || forbidden.MatchString("docker-clean") {
+		t.Error("лишние пакеты попали под запрет")
+	}
+}

@@ -98,11 +98,23 @@ func (a *Agent) exec(ctx context.Context, req Request) []byte {
 	return out
 }
 
+// readBundle читает тело запроса целиком (JSON-пакет) с пределом MaxBody.
+func readBundle(r *http.Request) (string, bool) {
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		return "", false
+	}
+	b, err := io.ReadAll(io.LimitReader(r.Body, MaxBody+1))
+	if err != nil || len(b) == 0 || len(b) > MaxBody || !json.Valid(b) || b[0] != '{' {
+		return "", false
+	}
+	return string(b), true
+}
+
 func readJSON(r *http.Request, v any) bool {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 		return false
 	}
-	dec := json.NewDecoder(io.LimitReader(r.Body, 4096))
+	dec := json.NewDecoder(io.LimitReader(r.Body, 4096+2*MaxPluginStdin))
 	dec.DisallowUnknownFields()
 	return dec.Decode(v) == nil
 }
@@ -140,7 +152,15 @@ func (a *Agent) Handler() http.Handler {
 			_, _ = w.Write(append(body, '\n'))
 		})
 	}
-	route(http.MethodGet, "/v1/status", func(*http.Request) (Request, bool) { return Request{Cmd: "status"}, true })
+	route(http.MethodGet, "/v1/status", func(r *http.Request) (Request, bool) {
+		if p := r.URL.Query().Get("project"); p != "" {
+			if !projectRe.MatchString(p) {
+				return Request{}, false
+			}
+			return Request{Cmd: "status", Args: []string{p}}, true
+		}
+		return Request{Cmd: "status"}, true
+	})
 	route(http.MethodPost, "/v1/deploy", func(r *http.Request) (Request, bool) {
 		var in struct{ Project, SHA string }
 		if !readJSON(r, &in) {
@@ -155,18 +175,37 @@ func (a *Agent) Handler() http.Handler {
 		}
 		return Request{Cmd: "rollback", Args: []string{in.Project}}, true
 	})
+	route(http.MethodGet, "/v1/project/key", func(*http.Request) (Request, bool) { return Request{Cmd: "project.key"}, true })
+	for _, cmd := range []string{"preview", "create"} {
+		cmd := cmd
+		route(http.MethodPost, "/v1/project/"+cmd, func(r *http.Request) (Request, bool) {
+			body, ok := readBundle(r)
+			if !ok {
+				return Request{}, false
+			}
+			return Request{Cmd: "project." + cmd, Body: body}, true
+		})
+	}
 	route(http.MethodGet, "/v1/plugins", func(*http.Request) (Request, bool) { return Request{Cmd: "info"}, true })
+	route(http.MethodPost, "/v1/fix", func(r *http.Request) (Request, bool) {
+		var in struct{}
+		if !readJSON(r, &in) {
+			return Request{}, false
+		}
+		return Request{Cmd: "fix"}, true
+	})
 	route(http.MethodGet, "/v1/verify", func(*http.Request) (Request, bool) { return Request{Cmd: "verify"}, true })
 	route(http.MethodPost, "/v1/plugin", func(r *http.Request) (Request, bool) {
 		var in struct {
 			Plugin  string   `json:"plugin"`
 			Command string   `json:"command"`
 			Args    []string `json:"args"`
+			Stdin   string   `json:"stdin,omitempty"`
 		}
-		if !readJSON(r, &in) {
+		if !readJSON(r, &in) || len(in.Stdin) > MaxPluginStdin {
 			return Request{}, false
 		}
-		return Request{Cmd: "plugin.run", Args: append([]string{in.Plugin, in.Command}, in.Args...)}, true
+		return Request{Cmd: "plugin.run", Args: append([]string{in.Plugin, in.Command}, in.Args...), Body: in.Stdin}, true
 	})
 	route(http.MethodGet, "/v1/firewall", func(*http.Request) (Request, bool) { return Request{Cmd: "firewall.status"}, true })
 	route(http.MethodPost, "/v1/firewall/enable", func(r *http.Request) (Request, bool) {

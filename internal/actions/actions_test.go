@@ -19,6 +19,8 @@ var goodParams = map[string]string{
 	"registry_login":      `{"project":"shop","registry":"ghcr.io","username":"me","secret":"tok"}`,
 	"write_service_env":   `{"project":"shop","service":"api","env":[{"name":"A","kind":"literal","value":"1"},{"name":"B","kind":"secret","secret":"b_secret"},{"name":"C","kind":"database","value":"url"}]}`,
 	"install_quadlet":     `{"project":"shop","service":"api","slot":"blue","host_port":18001,"container_port":8080,"memory":"512m","pids":256,"database_socket":true}`,
+	"install_unit":        `{"project":"shop","service":"api","slot":"blue","host_port":18001,"exec":["./bin/app","--port","8080"],"memory":"512m","pids":256}`,
+	"write_release_auth":  `{"project":"shop","service":"api","secret":"rel_token"}`,
 	"reload_user_units":   `{"project":"shop"}`,
 	"install_caddy_site":  `{"project":"shop","site":"main","host":"shop.example.com","listen_port":18000,"upstream_initial":"not_deployed","trusted_proxy":"none","max_body":"5MB"}`,
 	"install_reload_rule": `{"project":"shop"}`,
@@ -39,8 +41,8 @@ func TestEveryActionHasGoodExample(t *testing.T) {
 			t.Errorf("%s: %v", n, issues)
 		}
 	}
-	if len(Names()) != 14 {
-		t.Errorf("в v0 ровно 14 действий, получили %d: %v", len(Names()), Names())
+	if len(Names()) != 16 {
+		t.Errorf("в списке ровно 16 действий, получили %d: %v", len(Names()), Names())
 	}
 }
 
@@ -126,6 +128,19 @@ func TestClassesAreNormalInV0(t *testing.T) {
 		d, _ := Lookup(n)
 		if d.Class != ClassNormal {
 			t.Errorf("%s: класс %s", n, d.Class)
+		}
+	}
+}
+
+func TestInstallUnitRejectsBadExec(t *testing.T) {
+	for _, raw := range []string{
+		`{"project":"shop","service":"api","slot":"blue","host_port":18001,"exec":["../x"],"memory":"512m","pids":256}`,
+		`{"project":"shop","service":"api","slot":"blue","host_port":18001,"exec":["a/../../x"],"memory":"512m","pids":256}`,
+		`{"project":"shop","service":"api","slot":"blue","host_port":18001,"exec":["app","a\nb"],"memory":"512m","pids":256}`,
+		`{"project":"shop","service":"api","slot":"blue","host_port":18001,"exec":[""],"memory":"512m","pids":256}`,
+	} {
+		if _, issues := Decode("install_unit", json.RawMessage(raw)); len(issues) == 0 {
+			t.Errorf("должно быть отклонено: %s", raw)
 		}
 	}
 }

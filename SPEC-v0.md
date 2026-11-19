@@ -290,7 +290,7 @@ Tmpfs=/tmp
 NoNewPrivileges=true
 DropCapability=ALL
 PidsLimit=<pids>
-Memory=<memory>
+PodmanArgs=--memory=<memory>   # ключ Memory= в Quadlet появился только в podman 5, PodmanArgs работает и в 4.x
 
 [Service]
 Restart=always

@@ -16,8 +16,13 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-// MaxRequest предел размера запроса к исполнителю, байт.
-const MaxRequest = 8192
+// MaxRequest предел размера обычного запроса к исполнителю, байт; MaxBody предел тела (пакет создания проекта).
+const (
+	MaxRequest = 8192
+	MaxBody    = 128 * 1024
+	// MaxPluginStdin предел стандартного ввода команды плагина (пароль, ключ).
+	MaxPluginStdin = 4096
+)
 
 var (
 	projectRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,30}$`)
@@ -32,6 +37,8 @@ type Request struct {
 	Cmd    string   `json:"cmd"`
 	Args   []string `json:"args"`
 	Caller string   `json:"caller"`
+	// Body JSON-пакет для project.preview и project.create; у остальных запросов пусто.
+	Body string `json:"body,omitempty"`
 }
 
 func checkSpec(spec, from string) error {
@@ -50,6 +57,12 @@ func checkSpec(spec, from string) error {
 // Всё, чего нет в списке, отклоняется.
 func (r Request) CLIArgs() ([]string, error) {
 	a := r.Args
+	if r.Body != "" && r.Cmd != "project.preview" && r.Cmd != "project.create" && r.Cmd != "plugin.run" {
+		return nil, fmt.Errorf("%s: тело запроса не допускается", r.Cmd)
+	}
+	if r.Cmd == "plugin.run" && len(r.Body) > MaxPluginStdin {
+		return nil, fmt.Errorf("plugin.run: стандартный ввод больше %d байт", MaxPluginStdin)
+	}
 	need := func(n int) error {
 		if len(a) != n {
 			return fmt.Errorf("%s: нужно аргументов: %d", r.Cmd, n)
@@ -87,6 +100,27 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, errors.New("неверное имя проекта")
 		}
 		return []string{"rollback", a[0]}, nil
+	case "project.preview", "project.create": // тело: пакет {project, ciphertexts, ...}; create применяет, preview только описывает
+		if err := need(0); err != nil {
+			return nil, err
+		}
+		if r.Body == "" || len(r.Body) > MaxBody || !json.Valid([]byte(r.Body)) {
+			return nil, errors.New(r.Cmd + ": нужно тело: JSON-пакет не больше 128 КиБ")
+		}
+		if r.Cmd == "project.preview" {
+			return []string{"project", "bundle", "--dry-run"}, nil
+		}
+		return []string{"project", "bundle", "--yes"}, nil
+	case "fix": // исправляет только то, что разрешено списком безопасных исправлений в lite fix
+		if err := need(0); err != nil {
+			return nil, err
+		}
+		return []string{"fix", "--yes"}, nil
+	case "project.key":
+		if err := need(0); err != nil {
+			return nil, err
+		}
+		return []string{"secret", "pubkey"}, nil
 	case "info", "verify":
 		if err := need(0); err != nil {
 			return nil, err
@@ -149,8 +183,13 @@ func ErrorJSON(command, code, msg string) []byte {
 // run выполняет команду lite-deploy с аргументами (включая --json) и возвращает её конверт.
 // journal получает строку на каждое действие (журнал systemd, недоступный агенту для изменения).
 func Exec(r io.Reader, w io.Writer, run func(args []string) []byte, journal io.Writer) {
+	ExecBody(r, w, func(args []string, _ []byte) []byte { return run(args) }, journal)
+}
+
+// ExecBody как Exec, но run получает ещё и тело запроса (стандартный ввод команды).
+func ExecBody(r io.Reader, w io.Writer, run func(args []string, stdin []byte) []byte, journal io.Writer) {
 	var req Request
-	dec := json.NewDecoder(io.LimitReader(r, MaxRequest))
+	dec := json.NewDecoder(io.LimitReader(r, MaxRequest+2*MaxBody))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&req); err != nil {
 		_, _ = w.Write(ErrorJSON("exec", "usage", "неверный запрос"))
@@ -167,6 +206,6 @@ func Exec(r io.Reader, w io.Writer, run func(args []string) []byte, journal io.W
 		caller = "?"
 	}
 	_, _ = fmt.Fprintf(journal, "выполняется: caller=%s %s\n", caller, strings.Join(args, " "))
-	out := run(append(args, "--json"))
+	out := run(append(args, "--json"), []byte(req.Body))
 	_, _ = w.Write(out)
 }

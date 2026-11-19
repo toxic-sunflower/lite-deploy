@@ -59,7 +59,40 @@ func TestValidateRules(t *testing.T) {
 		{"нет сервисов", func(p *Project) { p.Services = nil }, "/services", "minProperties"},
 		{"плохое имя сервиса", func(p *Project) { p.Services["Bad"] = p.Services["api"] }, "/services/Bad", "pattern"},
 		{"образ с тегом", func(p *Project) { s := p.Services["api"]; s.Image = "ghcr.io/a/b:latest"; p.Services["api"] = s }, "/services/api/image", "pattern"},
-		{"порт контейнера 0", func(p *Project) { s := p.Services["api"]; s.ContainerPort = 0; p.Services["api"] = s }, "/services/api/container_port", "minimum"},
+		{"порт контейнера 0", func(p *Project) { s := p.Services["api"]; s.ContainerPort = 0; p.Services["api"] = s }, "/services/api/container_port", "required"},
+		{"контейнер без образа", func(p *Project) { s := p.Services["api"]; s.Image = ""; p.Services["api"] = s }, "/services/api/image", "required"},
+		{"неизвестный вид", func(p *Project) { s := p.Services["api"]; s.Kind = "vm"; p.Services["api"] = s }, "/services/api/kind", "enum"},
+		{"unit без exec", func(p *Project) { p.Services["api"] = Service{Kind: KindUnit, HostPorts: []int{18081, 18082}} }, "/services/api/exec", "required"},
+		{"unit с образом", func(p *Project) {
+			p.Services["api"] = Service{Kind: KindUnit, Exec: []string{"/srv/app"}, Image: "a/b", HostPorts: []int{18081, 18082}}
+		}, "/services/api", "not_applicable"},
+		{"unit без release", func(p *Project) {
+			p.Services["api"] = Service{Kind: KindUnit, Exec: []string{"/srv/app"}, HostPorts: []int{18081, 18082}}
+		}, "/services/api/release", "required"},
+		{"unit с .. в пути", func(p *Project) {
+			p.Services["api"] = Service{Kind: KindUnit, Exec: []string{"../app"}, HostPorts: []int{18081, 18082}, Release: &Release{MinisignKey: "RWQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", URL: "https://example.com/a-{sha}.tar.gz"}}
+		}, "/services/api/exec/0", "pattern"},
+		{"release по http", func(p *Project) {
+			p.Services["api"] = Service{Kind: KindUnit, Exec: []string{"app"}, HostPorts: []int{18081, 18082}, Release: &Release{MinisignKey: "RWQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", URL: "http://example.com/a-{sha}.tar.gz"}}
+		}, "/services/api/release/url", "pattern"},
+		{"release без {sha}", func(p *Project) {
+			p.Services["api"] = Service{Kind: KindUnit, Exec: []string{"app"}, HostPorts: []int{18081, 18082}, Release: &Release{MinisignKey: "RWQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", URL: "https://example.com/latest.tar.gz"}}
+		}, "/services/api/release/url", "pattern"},
+		{"release без ключа подписи", func(p *Project) {
+			p.Services["api"] = Service{Kind: KindUnit, Exec: []string{"app"}, HostPorts: []int{18081, 18082}, Release: &Release{URL: "https://example.com/a-{sha}.tar.gz"}}
+		}, "/services/api/release/minisign_key", "required"},
+		{"release с неверным ключом подписи", func(p *Project) {
+			p.Services["api"] = Service{Kind: KindUnit, Exec: []string{"app"}, HostPorts: []int{18081, 18082}, Release: &Release{URL: "https://example.com/a-{sha}.tar.gz", MinisignKey: "abc"}}
+		}, "/services/api/release/minisign_key", "pattern"},
+		{"release у контейнера", func(p *Project) {
+			s := p.Services["api"]
+			s.Release = &Release{MinisignKey: "RWQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", URL: "https://example.com/a-{sha}.tar.gz"}
+			p.Services["api"] = s
+		}, "/services/api/release", "not_applicable"},
+		{"база на другом сервере без пароля", func(p *Project) { p.Database.Server = "db1" }, "/database/password_secret", "required"},
+		{"порт у локальной базы", func(p *Project) { p.Database.Port = 5432 }, "/database/port", "not_applicable"},
+		{"пароль у локальной базы", func(p *Project) { p.Database.PasswordSecret = "secret://x_pw" }, "/database/password_secret", "not_applicable"},
+		{"неизвестная схема", func(p *Project) { p.Schema = "x" }, "/schema", "enum"},
 		{"порт контейнера 70000", func(p *Project) { s := p.Services["api"]; s.ContainerPort = 70000; p.Services["api"] = s }, "/services/api/container_port", "maximum"},
 		{"host_ports вне диапазона", func(p *Project) { s := p.Services["api"]; s.HostPorts = []int{80, 18082}; p.Services["api"] = s }, "/services/api/host_ports/0", "minimum"},
 		{"host_ports один", func(p *Project) { s := p.Services["api"]; s.HostPorts = []int{18081}; p.Services["api"] = s }, "/services/api/host_ports", "minItems"},
@@ -179,5 +212,71 @@ func TestDefaults(t *testing.T) {
 func TestRoleName(t *testing.T) {
 	if RoleName("shop") != "shop" {
 		t.Fatal("роль")
+	}
+}
+
+func TestRequires(t *testing.T) {
+	p := load(t)
+	got := strings.Join(Requires(p), ",")
+	if got != "caddy,pg,podman" {
+		t.Fatalf("Requires = %s", got)
+	}
+	p.Database = nil
+	for n, s := range p.Services {
+		s.Kind = KindUnit
+		p.Services[n] = s
+	}
+	if got := strings.Join(Requires(p), ","); got != "caddy" {
+		t.Fatalf("без базы и контейнеров: %s", got)
+	}
+}
+
+func TestV1SchemaStillAccepted(t *testing.T) {
+	p := load(t)
+	p.Schema = SchemaIDv1
+	if issues := Validate(p); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+}
+
+func TestUnitWithReleaseIsValid(t *testing.T) {
+	p := load(t)
+	p.Services["api"] = Service{Kind: KindUnit, Exec: []string{"./bin/app"}, HostPorts: []int{18081, 18082},
+		Release: &Release{MinisignKey: "RWQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", URL: "https://example.com/dl/app-{sha}.tar.gz", TokenSecret: "secret://rel_token"}}
+	if issues := Validate(p); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+}
+
+func TestRemoteDatabaseIsValidAndNeedsNoLocalPG(t *testing.T) {
+	p := load(t)
+	p.Database.Server = "db1"
+	p.Database.PasswordSecret = "secret://db_password"
+	if issues := Validate(p); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	if got := strings.Join(Requires(p), ","); got != "caddy,podman" {
+		t.Fatalf("Requires = %s", got)
+	}
+}
+
+func TestDataAndStopValidation(t *testing.T) {
+	p := load(t)
+	s := p.Services["api"]
+	s.Data = []string{"uploads", "Bad", "uploads"}
+	p.Services["api"] = s
+	got := codes(p)
+	if !hasIssue(got, "/services/api/data/1", "pattern") || !hasIssue(got, "/services/api/data/2", "duplicate") {
+		t.Fatalf("%v", got)
+	}
+	s.Data, s.Stop = nil, []string{"x"}
+	p.Services["api"] = s
+	if !hasIssue(codes(p), "/services/api/stop", "not_applicable") {
+		t.Fatal("stop у контейнера должен отклоняться")
+	}
+	p.Services["api"] = Service{Kind: KindUnit, Exec: []string{"/usr/bin/podman", "compose", "up"}, Stop: []string{"/usr/bin/podman", "compose", "down"},
+		Data: []string{"uploads"}, HostPorts: []int{18081, 18082}, Release: &Release{MinisignKey: "RWQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", URL: "https://example.com/a-{sha}.tar.gz"}}
+	if issues := Validate(p); len(issues) != 0 {
+		t.Fatal(issues)
 	}
 }

@@ -85,6 +85,8 @@ const (
 	RegistryLoginName     = "registry_login"
 	WriteServiceEnvName   = "write_service_env"
 	InstallQuadletName    = "install_quadlet"
+	InstallUnitName       = "install_unit"
+	WriteReleaseAuthName  = "write_release_auth"
 	ReloadUserUnitsName   = "reload_user_units"
 	InstallCaddySiteName  = "install_caddy_site"
 	InstallReloadRuleName = "install_reload_rule"
@@ -95,7 +97,9 @@ const (
 )
 
 // VerifyHost только читает: проверяет предусловия сервера.
-type VerifyHost struct{}
+type VerifyHost struct {
+	NoPodman bool `json:"no_podman,omitempty" doc:"в проекте нет контейнеров: podman не нужен"`
+}
 
 // CreateProjectUser создаёт системного пользователя проекта.
 type CreateProjectUser struct {
@@ -129,7 +133,9 @@ type EnvVar struct {
 	Name   string `json:"name" pattern:"^[A-Za-z_][A-Za-z0-9_]*$"`
 	Kind   string `json:"kind" enum:"literal,secret,database"`
 	Value  string `json:"value,omitempty" pattern:"^[^\\r\\n]*$" maxLen:"1024" doc:"значение для literal; формат строки подключения для database"`
-	Secret string `json:"secret,omitempty" pattern:"^[a-z][a-z0-9_]{1,63}$" doc:"имя секрета для secret"`
+	Secret string `json:"secret,omitempty" pattern:"^[a-z][a-z0-9_]{1,63}$" doc:"имя секрета: для secret значение переменной, для database с host пароль роли"`
+	Host   string `json:"host,omitempty" pattern:"^[A-Za-z0-9.:-]{1,253}$" doc:"только database: адрес PostgreSQL на другом сервере; без него база на этом сервере по сокету"`
+	Port   int    `json:"port,omitempty" min:"1" max:"65535" doc:"только database с host"`
 }
 
 // WriteServiceEnv собирает env-файл сервиса.
@@ -141,14 +147,35 @@ type WriteServiceEnv struct {
 
 // InstallQuadlet пишет юнит Quadlet одного слота сервиса.
 type InstallQuadlet struct {
-	Project        string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
-	Service        string `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
-	Slot           string `json:"slot" enum:"blue,green"`
-	HostPort       int    `json:"host_port" min:"18000" max:"18999"`
-	ContainerPort  int    `json:"container_port" min:"1" max:"65535"`
-	Memory         string `json:"memory" pattern:"^[1-9][0-9]*[mg]$"`
-	Pids           int    `json:"pids" min:"16" max:"4096"`
-	DatabaseSocket bool   `json:"database_socket"`
+	Project        string   `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
+	Service        string   `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
+	Slot           string   `json:"slot" enum:"blue,green"`
+	HostPort       int      `json:"host_port" min:"18000" max:"18999"`
+	ContainerPort  int      `json:"container_port" min:"1" max:"65535"`
+	Memory         string   `json:"memory" pattern:"^[1-9][0-9]*[mg]$"`
+	Pids           int      `json:"pids" min:"16" max:"4096"`
+	DatabaseSocket bool     `json:"database_socket"`
+	Data           []string `json:"data,omitempty" maxItems:"8" pattern:"^[a-z][a-z0-9-]{0,15}$" doc:"постоянные каталоги, монтируются в /data/<имя>"`
+}
+
+// InstallUnit пишет пользовательский юнит systemd одного слота компонента kind unit (процесс на хосте).
+type InstallUnit struct {
+	Project  string   `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
+	Service  string   `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
+	Slot     string   `json:"slot" enum:"blue,green"`
+	HostPort int      `json:"host_port" min:"18000" max:"18999"`
+	Exec     []string `json:"exec" minItems:"1" maxItems:"32" doc:"программа (относительно каталога релиза или абсолютный путь) и аргументы"`
+	Stop     []string `json:"stop,omitempty" maxItems:"32" doc:"команда остановки (ExecStop)"`
+	Data     []string `json:"data,omitempty" maxItems:"8" pattern:"^[a-z][a-z0-9-]{0,15}$" doc:"постоянные каталоги, доступные в LITE_DATA_<ИМЯ>"`
+	Memory   string   `json:"memory" pattern:"^[1-9][0-9]*[mg]$"`
+	Pids     int      `json:"pids" min:"16" max:"4096"`
+}
+
+// WriteReleaseAuth записывает заголовок авторизации для скачивания релиза (файл 600 у пользователя проекта).
+type WriteReleaseAuth struct {
+	Project string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
+	Service string `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
+	Secret  string `json:"secret" pattern:"^[a-z][a-z0-9_]{1,63}$"`
 }
 
 // ReloadUserUnits перечитывает юниты в сессии проектного пользователя.
@@ -216,6 +243,8 @@ func init() {
 	register(Def{Name: RegistryLoginName, Class: ClassNormal, New: func() any { return &RegistryLogin{} }})
 	register(Def{Name: WriteServiceEnvName, Class: ClassNormal, New: func() any { return &WriteServiceEnv{} }, Extra: checkEnv})
 	register(Def{Name: InstallQuadletName, Class: ClassNormal, New: func() any { return &InstallQuadlet{} }})
+	register(Def{Name: InstallUnitName, Class: ClassNormal, New: func() any { return &InstallUnit{} }, Extra: checkExec})
+	register(Def{Name: WriteReleaseAuthName, Class: ClassNormal, New: func() any { return &WriteReleaseAuth{} }})
 	register(Def{Name: ReloadUserUnitsName, Class: ClassNormal, New: func() any { return &ReloadUserUnits{} }})
 	register(Def{Name: InstallCaddySiteName, Class: ClassNormal, New: func() any { return &InstallCaddySite{} }})
 	register(Def{Name: InstallReloadRuleName, Class: ClassNormal, New: func() any { return &InstallReloadRule{} }})

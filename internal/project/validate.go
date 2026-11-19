@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,8 @@ import (
 
 // MaxBytes предел размера файла описания (SPEC-v0.md, раздел 8).
 const MaxBytes = 64 * 1024
+
+var dataNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,15}$`)
 
 var reservedNames = map[string]bool{
 	"root": true, "postgres": true, "caddy": true, "cloudflared": true,
@@ -56,6 +59,21 @@ func Validate(p *Project) []schema.Issue {
 	add := func(path, code, format string, args ...any) {
 		issues = append(issues, schema.Issue{Path: path, Code: code, Message: fmt.Sprintf(format, args...)})
 	}
+	if p.Schema != "" && p.Schema != SchemaID && p.Schema != SchemaIDv1 {
+		add("/schema", "enum", "неизвестная версия схемы %q", p.Schema)
+	}
+	if d := p.Database; d != nil {
+		if d.IsLocal() {
+			if d.Port != 0 {
+				add("/database/port", "not_applicable", "port задаётся только для базы на другом сервере")
+			}
+			if d.PasswordSecret != "" {
+				add("/database/password_secret", "not_applicable", "для базы на этом сервере пароль создаётся автоматически")
+			}
+		} else if d.PasswordSecret == "" {
+			add("/database/password_secret", "required", "для базы на другом сервере нужен password_secret")
+		}
+	}
 	if p.Name != "" && Reserved(p.Name) {
 		add("/name", "reserved", "имя %q зарезервировано", p.Name)
 	}
@@ -80,6 +98,61 @@ func Validate(p *Project) []schema.Issue {
 	for _, n := range svcNames {
 		s := p.Services[n]
 		base := "/services/" + n
+		switch s.KindOf() {
+		case KindQuadlet:
+			if s.Image == "" {
+				add(base+"/image", "required", "для контейнера нужен image")
+			}
+			if s.ContainerPort == 0 {
+				add(base+"/container_port", "required", "для контейнера нужен container_port")
+			}
+			if len(s.Exec) > 0 {
+				add(base+"/exec", "not_applicable", "exec задаётся только для kind unit")
+			}
+			if len(s.Stop) > 0 {
+				add(base+"/stop", "not_applicable", "stop задаётся только для kind unit")
+			}
+			if s.Release != nil {
+				add(base+"/release", "not_applicable", "release задаётся только для kind unit")
+			}
+		case KindUnit:
+			if len(s.Exec) == 0 {
+				add(base+"/exec", "required", "для kind unit нужна команда запуска exec")
+			}
+			for i, a := range s.Exec {
+				if a == "" || strings.ContainsAny(a, "\r\n\x00") || len(a) > 512 {
+					add(base+"/exec/"+strconv.Itoa(i), "pattern", "аргумент не пустой, без переводов строки, до 512 знаков")
+				}
+			}
+			if s.Image != "" || s.ContainerPort != 0 {
+				add(base, "not_applicable", "image и container_port относятся к контейнерам, у kind unit их нет")
+			}
+			for i, a := range s.Stop {
+				if a == "" || strings.ContainsAny(a, "\r\n\x00") || len(a) > 512 {
+					add(base+"/stop/"+strconv.Itoa(i), "pattern", "аргумент не пустой, без переводов строки, до 512 знаков")
+				}
+			}
+			if s.Release == nil {
+				add(base+"/release", "required", "для kind unit нужен release (откуда брать архив)")
+			}
+			if len(s.Exec) > 0 {
+				for _, part := range strings.Split(s.Exec[0], "/") {
+					if part == ".." {
+						add(base+"/exec/0", "pattern", "путь к программе не должен содержать «..»")
+					}
+				}
+			}
+		}
+		seenData := map[string]bool{}
+		for i, d := range s.Data {
+			if !dataNameRe.MatchString(d) {
+				add(base+"/data/"+strconv.Itoa(i), "pattern", "имя каталога: строчные латинские буквы, цифры, «-», до 16 знаков")
+			}
+			if seenData[d] {
+				add(base+"/data/"+strconv.Itoa(i), "duplicate", "каталог %q повторяется", d)
+			}
+			seenData[d] = true
+		}
 		for i, hp := range s.HostPorts {
 			usePort(hp, base+"/host_ports/"+strconv.Itoa(i))
 		}

@@ -11,6 +11,8 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
+func init() { waitStep = func(time.Duration) {} }
+
 const pubKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFakeFakeFakeFake anna@laptop"
 
 // server притворяется сервером: файлы в памяти, а sshd -T отражает записанные файлы.
@@ -343,5 +345,19 @@ func TestSetINI(t *testing.T) {
 	got = setINI("", "commands", "apply_updates", "yes")
 	if !strings.Contains(got, "[commands]\napply_updates = yes") {
 		t.Fatal(got)
+	}
+}
+
+func TestSSHDEffectiveNormalizesWithoutPassword(t *testing.T) {
+	s := newServer()
+	sc := &sec{tools: tools{context.Background(), plugin.Env{FS: s.fs, Runner: fn(func(c host.Cmd) (host.Result, error) {
+		if c.Name == "sshd" && len(c.Args) > 0 && c.Args[0] == "-T" {
+			return host.Result{Stdout: []byte("permitrootlogin without-password\npasswordauthentication no\n")}, nil
+		}
+		return host.Result{}, nil
+	})}}}
+	m, err := sc.sshdEffective()
+	if err != nil || m["permitrootlogin"] != "prohibit-password" {
+		t.Fatalf("%v %v", m, err)
 	}
 }

@@ -41,6 +41,12 @@
   .warn { color:#9a6700; } @media (prefers-color-scheme: dark) { .warn { color:#e3b341; } }
   .cmd { margin:8px 0 0; }
   .cmd .help { color:var(--muted); font-size:13px; }
+  .np label { display:block; font-size:13px; color:var(--muted); margin:10px 0 2px; }
+  .np input[type=text], .np textarea, .np select { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); font:13px ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .np textarea { min-height:70px; resize:vertical; }
+  .np .box { border:1px solid var(--line); border-radius:6px; padding:8px 12px 12px; margin:10px 0; }
+  .np .row { display:flex; gap:8px; flex-wrap:wrap; } .np .row > div { flex:1 1 200px; }
+  .np .inline { display:flex; gap:8px; align-items:center; margin:10px 0 2px; font-size:14px; color:var(--fg); }
 </style>
 </head>
 <body>
@@ -48,6 +54,8 @@
   <header><h1>lite-deploy</h1><span class="srv" id="srv"></span></header>
   <div id="msg"></div>
   <div id="list"><p class="empty">Загрузка…</p></div>
+  <h3>Новый проект</h3>
+  <div id="np"></div>
   <h3>Файервол</h3>
   <div id="fw"><p class="empty">Загрузка…</p></div>
   <h3>Проверка сервера</h3>
@@ -260,6 +268,16 @@
       });
       box.appendChild(t);
       box.appendChild(el('div', 'meta', 'Итого: ок ' + r.data.ok + ', предупреждений ' + r.data.warnings + ', ошибок ' + r.data.failures));
+      if (r.data.warnings + r.data.failures > 0) {
+        var fx = el('button', null, 'Исправить то, что можно автоматически');
+        fx.addEventListener('click', function () {
+          if (!confirm('Выполнить безопасные исправления из lite fix (настройка SSH, обновлений, fail2ban, sysctl, таймеры копий, установка нужных плагинов)? Файервол, пользователи и ключи не затрагиваются.')) return;
+          run('Исправляю…', '/api/fix', {}, function (d) {
+            return d.applied.length ? 'Выполнено: ' + d.applied.join('; ') + (d.manual.length ? '\nВручную: ' + d.manual.join('; ') : '') : 'Автоматически исправлять нечего.' + (d.manual.length ? '\nВручную: ' + d.manual.join('; ') : '');
+          }, verify);
+        });
+        box.appendChild(fx);
+      }
     }).catch(function (e) { box.textContent = 'Нет связи: ' + e; }).then(function () { setBusy(false); });
   }
   document.getElementById('vfgo').addEventListener('click', verify);
@@ -280,6 +298,179 @@
     }).catch(function (e) { document.getElementById('list').textContent = 'Нет связи: ' + e; });
   }
 
+
+  // ---- Новый проект: форма собирает описание, секреты шифруются на этом компьютере перед отправкой ----
+  function newProject() {
+    var root = document.getElementById('np'), box = el('div', 'card np');
+    root.appendChild(box);
+    var services = [], sites = [], lastHash = '';
+
+    function field(parent, label, ph, val) {
+      var d = el('div'); d.appendChild(el('label', null, label));
+      var i = el('input'); i.type = 'text'; i.placeholder = ph || ''; i.autocomplete = 'off'; i.spellcheck = false; if (val) i.value = val;
+      d.appendChild(i); parent.appendChild(d); return i;
+    }
+    function area(parent, label, ph) {
+      var d = el('div'); d.appendChild(el('label', null, label));
+      var t = el('textarea'); t.placeholder = ph || ''; t.spellcheck = false; d.appendChild(t); parent.appendChild(d); return t;
+    }
+    function select(parent, label, opts) {
+      var d = el('div'); d.appendChild(el('label', null, label));
+      var s = el('select'); opts.forEach(function (o) { var x = el('option', null, o[1]); x.value = o[0]; s.appendChild(x); });
+      d.appendChild(s); parent.appendChild(d); return s;
+    }
+    function check(parent, label) {
+      var d = el('label', 'inline'), c = el('input'); c.type = 'checkbox'; d.appendChild(c); d.appendChild(document.createTextNode(label)); parent.appendChild(d); return c;
+    }
+    function row(parent) { var r = el('div', 'row'); parent.appendChild(r); return r; }
+    function sub(parent, title) { var b = el('div', 'box'); b.appendChild(el('div', 'meta', title)); parent.appendChild(b); return b; }
+
+    var top = row(box), name = field(top, 'Имя проекта (латиница, цифры, «-»)', 'shop'), desc = field(top, 'Описание (необязательно)', '');
+
+    var dbOn = check(box, 'База PostgreSQL'), dbBox = sub(box, 'База'), dbRow = row(dbBox);
+    var dbServer = field(dbRow, 'Сервер (пусто: этот; иначе имя из lite server add)', ''), dbPort = field(dbRow, 'Порт (для другого сервера)', '5432'),
+      dbFmt = select(dbRow, 'Формат строки подключения', [['url', 'url'], ['npgsql', 'npgsql (.NET)'], ['libpq', 'libpq']]),
+      dbPass = field(dbBox, 'Пароль роли (только для базы на другом сервере)', '');
+    dbPass.type = 'password'; dbBox.style.display = 'none';
+    dbOn.addEventListener('change', function () { dbBox.style.display = dbOn.checked ? '' : 'none'; });
+
+    var regOn = check(box, 'Приватный реестр образов'), regBox = sub(box, 'Реестр'), regRow = row(regBox);
+    var regHost = field(regRow, 'Хост реестра', 'ghcr.io'), regUser = field(regRow, 'Пользователь', ''), regTok = field(regBox, 'Токен на чтение', '');
+    regTok.type = 'password'; regBox.style.display = 'none';
+    regOn.addEventListener('change', function () { regBox.style.display = regOn.checked ? '' : 'none'; });
+
+    box.appendChild(el('h3', null, 'Компоненты'));
+    var svcBox = el('div'); box.appendChild(svcBox);
+    var addSvc = el('button', null, '+ Компонент'); addSvc.type = 'button'; box.appendChild(addSvc);
+    box.appendChild(el('h3', null, 'Сайты'));
+    var siteBox = el('div'); box.appendChild(siteBox);
+    var addSite = el('button', null, '+ Сайт'); addSite.type = 'button'; box.appendChild(addSite);
+    var keyArea = area(box, 'Ключ CI (ssh-ed25519, необязательно)', 'ssh-ed25519 AAAA… github-actions');
+
+    function addService() {
+      var b = sub(svcBox, 'Компонент'), s = {};
+      var r1 = row(b);
+      s.name = field(r1, 'Имя', 'api');
+      s.kind = select(r1, 'Как запускается', [['quadlet', 'контейнер (podman)'], ['unit', 'процесс на сервере (systemd)']]);
+      var cont = el('div'), unit = el('div'); b.appendChild(cont); b.appendChild(unit); unit.style.display = 'none';
+      var rc = row(cont); s.image = field(rc, 'Образ без тега', 'ghcr.io/owner/app'); s.cport = field(rc, 'Порт приложения в контейнере', '8080');
+      var ru = row(unit); s.exec = field(ru, 'Команда (аргументы через пробел; путь от каталога релиза)', './bin/app');
+      s.rurl = field(ru, 'Адрес архива tar.gz (https, {sha} подставляется)', 'https://example.com/app-{sha}.tar.gz');
+      s.rkey = field(unit, 'Открытый ключ minisign, которым CI подписывает архив (подпись: адрес архива + .minisig)', 'RWQ…');
+      s.rtok = field(unit, 'Токен для скачивания (необязательно)', ''); s.rtok.type = 'password';
+      var r2 = row(b); s.mem = field(r2, 'Память', '512m'); s.health = field(r2, 'Путь проверки готовности', '/health/ready');
+      s.env = area(b, 'Переменные (по строке: ИМЯ=значение)', 'ASPNETCORE_ENVIRONMENT=Production');
+      s.sec = area(b, 'Секреты (по строке: ИМЯ=значение; хранятся на сервере, в описание не попадают)', 'Auth__SessionSecret=…');
+      s.dbenv = field(b, 'Переменная со строкой подключения к базе (необязательно)', 'ConnectionStrings__Default');
+      var del = el('button', null, 'Убрать компонент'); del.type = 'button'; b.appendChild(del);
+      s.box = b;
+      s.kind.addEventListener('change', function () { var u = s.kind.value === 'unit'; cont.style.display = u ? 'none' : ''; unit.style.display = u ? '' : 'none'; });
+      del.addEventListener('click', function () { b.remove(); services = services.filter(function (x) { return x !== s; }); });
+      services.push(s);
+    }
+    function addSiteBox() {
+      var b = sub(siteBox, 'Сайт'), s = {}, r1 = row(b);
+      s.name = field(r1, 'Имя', 'main'); s.host = field(r1, 'Домен', 'shop.example.com'); s.svc = field(r1, 'Компонент', 'api');
+      var r2 = row(b);
+      s.proxy = select(r2, 'Доверенный прокси', [['none', 'нет'], ['cloudflare', 'Cloudflare']]); s.body = field(r2, 'Максимальное тело запроса', '5MB');
+      var del = el('button', null, 'Убрать сайт'); del.type = 'button'; b.appendChild(del);
+      del.addEventListener('click', function () { b.remove(); sites = sites.filter(function (x) { return x !== s; }); });
+      sites.push(s);
+    }
+    addSvc.addEventListener('click', addService); addSite.addEventListener('click', addSiteBox);
+    addService(); addSiteBox();
+
+    function lines(text) { return text.split('\n').map(function (l) { return l.trim(); }).filter(Boolean); }
+    function pair(l) { var i = l.indexOf('='); return i < 1 ? null : [l.slice(0, i).trim(), l.slice(i + 1)]; }
+    function secretName(parts) { var n = parts.join('_').toLowerCase().replace(/[^a-z0-9_]/g, '_'); return /^[a-z]/.test(n) ? n : 's_' + n; }
+    function opt(o, k, v) { if (v !== '' && v !== undefined && v !== null) o[k] = v; }
+
+    // Собирает описание проекта и значения секретов; при ошибке в форме возвращает строку.
+    function build() {
+      var p = { schema: 'lite-deploy/project/v2', name: name.value.trim() }, sec = {}, errs = [];
+      opt(p, 'description', desc.value.trim());
+      if (dbOn.checked) {
+        p.database = { engine: 'postgres', connection_format: dbFmt.value };
+        if (dbServer.value.trim()) {
+          p.database.server = dbServer.value.trim();
+          if (dbPort.value.trim()) p.database.port = parseInt(dbPort.value, 10);
+          p.database.password_secret = 'secret://db_password'; sec.db_password = dbPass.value;
+        }
+      }
+      if (regOn.checked) {
+        p.registry = { host: regHost.value.trim(), username: regUser.value.trim(), token_secret: 'secret://registry_token' }; sec.registry_token = regTok.value;
+      }
+      p.services = {};
+      services.forEach(function (s) {
+        var n = s.name.value.trim(), o = {};
+        if (s.kind.value === 'unit') {
+          o.kind = 'unit'; o.exec = s.exec.value.trim().split(/\s+/).filter(Boolean);
+          o.release = { url: s.rurl.value.trim(), minisign_key: s.rkey.value.trim() };
+          if (s.rtok.value) { var rn = secretName([n, 'release_token']); o.release.token_secret = 'secret://' + rn; sec[rn] = s.rtok.value; }
+        } else {
+          o.image = s.image.value.trim(); o.container_port = parseInt(s.cport.value, 10) || 0;
+        }
+        var lim = {}; opt(lim, 'memory', s.mem.value.trim()); if (Object.keys(lim).length) o.limits = lim;
+        if (s.health.value.trim()) o.health = { path: s.health.value.trim() };
+        var env = {}; lines(s.env.value).forEach(function (l) { var kv = pair(l); if (kv) env[kv[0]] = kv[1]; else errs.push('Переменная «' + l + '»: нужно ИМЯ=значение'); });
+        if (Object.keys(env).length) o.env = env;
+        var sc = {}; lines(s.sec.value).forEach(function (l) { var kv = pair(l); if (kv) { var sn = secretName([n, kv[0]]); sc[kv[0]] = 'secret://' + sn; sec[sn] = kv[1]; } else errs.push('Секрет «' + l.split('=')[0] + '»: нужно ИМЯ=значение'); });
+        if (Object.keys(sc).length) o.secrets = sc;
+        opt(o, 'database_env', s.dbenv.value.trim());
+        p.services[n] = o;
+      });
+      p.sites = sites.map(function (s) {
+        var o = { name: s.name.value.trim(), host: s.host.value.trim(), service: s.svc.value.trim(), publish: 'tunnel', trusted_proxy: s.proxy.value };
+        opt(o, 'max_body', s.body.value.trim()); return o;
+      });
+      if (keyArea.value.trim()) p.deploy_key = { public_key: keyArea.value.trim() };
+      return errs.length ? errs.join('\n') : { project: p, secrets: sec };
+    }
+
+    var go = el('button', 'primary', 'Проверить план'), create = el('button', null, 'Создать проект'), out = el('div');
+    go.type = 'button'; create.type = 'button'; create.disabled = true;
+    var btns = el('div', 'row'); btns.style.marginTop = '14px'; btns.appendChild(go); btns.appendChild(create); box.appendChild(btns); box.appendChild(out);
+
+    function show(r) {
+      out.textContent = '';
+      if (!r.ok) {
+        out.appendChild(el('p', 'down', r.error.message + (r.error.hint ? '\n' + r.error.hint : '')));
+        (r.error.details || []).forEach(function (d) { out.appendChild(el('div', 'warn', d.path + ': ' + d.message)); });
+        return false;
+      }
+      var t = el('table'), h = el('tr');
+      ['Шаг', 'Действие', 'Что будет'].forEach(function (x) { h.appendChild(el('th', null, x)); }); t.appendChild(h);
+      (r.data.steps || []).forEach(function (s) {
+        var tr = el('tr'); tr.appendChild(el('td', null, s.id)); tr.appendChild(el('td', null, s.action)); tr.appendChild(el('td', s.state === 'failed' ? 'down' : null, (s.state || '') + (s.detail ? '  ' + s.detail : '') + (s.error ? '  ' + s.error : ''))); t.appendChild(tr);
+      });
+      out.appendChild(t);
+      return true;
+    }
+    function send(path, wait, done) {
+      if (busy) return;
+      var b = build();
+      if (typeof b === 'string') { msg('err', b); return; }
+      var body = { project: b.project, secrets: b.secrets };
+      if (path.indexOf('create') >= 0 && lastHash) body.expect_project_hash = lastHash;
+      setBusy(true); msg('ok', wait);
+      api(path, body).then(function (r) { done(r, show(r)); }).catch(function (e) { msg('err', 'Нет связи: ' + e); }).then(function () { setBusy(false); create.disabled = !lastHash; });
+    }
+    go.addEventListener('click', function () {
+      lastHash = '';
+      send('/api/project/preview', 'Строю план…', function (r, ok) {
+        if (ok) { lastHash = r.data.project_hash; msg('ok', 'План построен, на сервере ничего не изменено. Проверьте шаги и создайте проект.'); } else { clearMsg(); }
+      });
+    });
+    create.addEventListener('click', function () {
+      if (!lastHash || !confirm('Создать проект ' + name.value.trim() + ' на сервере по показанному плану?')) return;
+      send('/api/project/create', 'Создаю проект, это может занять несколько минут…', function (r, ok) {
+        if (ok) { msg('ok', 'Проект создан. Выкатите версию кнопкой «Выкатить» в карточке проекта.'); lastHash = ''; load(); } else { clearMsg(); }
+      });
+    });
+    [name, desc, dbServer, dbPort, dbPass, regHost, regUser, regTok, keyArea].forEach(function (x) { x.addEventListener('input', function () { lastHash = ''; create.disabled = true; }); });
+  }
+
+  newProject();
   api('/api/info').then(function (i) { document.getElementById('srv').textContent = i.host ? 'сервер: ' + i.host : 'этот компьютер'; }).catch(function () {});
   load(); loadFw(); loadPlugins();
   setInterval(function () { if (!busy && document.activeElement.tagName !== 'INPUT') { load(); loadFw(); } }, 10000);

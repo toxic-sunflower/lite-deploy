@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -40,8 +41,11 @@ func TestFirewallStatusJSON(t *testing.T) {
 func TestFirewallNeedsRootAndConfirmation(t *testing.T) {
 	env, _ := fwEnv(t)
 	env.IsRoot = func() bool { return false }
-	if c := run(t, env, "firewall", "status"); c != 4 {
-		t.Fatalf("без root: код %d", c)
+	env.AgentCall = func(_ context.Context, _, _, _ string, _ []byte) ([]byte, error) {
+		return []byte(`{"ok":true,"api_version":"v1","command":"firewall.status","data":{"output":"ok"}}`), nil
+	}
+	if c := run(t, env, "firewall", "status"); c != 0 {
+		t.Fatalf("без root команда уходит агенту: код %d", c)
 	}
 	env, calls := fwEnv(t)
 	if c := run(t, env, "firewall", "allow", "8080/tcp"); c != 4 {

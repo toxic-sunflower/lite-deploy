@@ -3,6 +3,7 @@ package plan
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"os"
 	"strings"
 	"testing"
@@ -361,5 +362,82 @@ func TestInvalidCiphertextRejected(t *testing.T) {
 		if _, err := Build(example(t), st); err == nil || err.Code != CodeInvalidSecret {
 			t.Errorf("%q: ожидали invalid_secret: %v", bad, err)
 		}
+	}
+}
+
+func TestBuildUnitProject(t *testing.T) {
+	p := example(t)
+	p.Registry = nil
+	p.Database = nil
+	svc := map[string]project.Service{}
+	for n, s := range p.Services {
+		svc[n] = project.Service{
+			Kind: project.KindUnit, Exec: []string{"./bin/app"}, HostPorts: s.HostPorts, Env: s.Env,
+			Release: &project.Release{MinisignKey: "RWQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", URL: "https://dl.example.com/" + n + "-{sha}.tar.gz", TokenSecret: "secret://rel_token"},
+		}
+	}
+	p.Services = svc
+	st := baseState()
+	st.Ciphertexts = ct("rel_token")
+	pl := build(t, p, st)
+	got := strings.Join(actionsOf(pl), ",")
+	for _, want := range []string{"install_unit", "write_release_auth"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("нет шага %s: %s", want, got)
+		}
+	}
+	for _, bad := range []string{"install_quadlet", "registry_login", "provision_postgres"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("лишний шаг %s: %s", bad, got)
+		}
+	}
+	if !strings.Contains(string(pl.Steps[0].Params), `"no_podman":true`) {
+		t.Errorf("verify_host должен пропускать podman: %s", pl.Steps[0].Params)
+	}
+}
+
+func TestRemoteDatabasePlan(t *testing.T) {
+	p := example(t)
+	p.Database.Server = "db1"
+	p.Database.PasswordSecret = "secret://db_password"
+	st := baseState()
+	st.Ciphertexts = ct("ghcr_read_token", "auth_session_secret", "webhook_secret", "admin_username", "admin_password", "db_password")
+	if _, err := Build(p, st); err == nil || err.Code != CodePrecondition || !strings.Contains(err.Hint, "lite server add db1") {
+		t.Fatalf("без записи в реестре: %+v", err)
+	}
+	st.Servers = map[string]string{"db1": "10.0.0.2"}
+	pl := build(t, p, st)
+	got := strings.Join(actionsOf(pl), ",")
+	if strings.Contains(got, "provision_postgres") {
+		t.Errorf("удалённую базу не создаём: %s", got)
+	}
+	found := false
+	for _, s := range pl.Steps {
+		if s.Action == "write_service_env" && strings.Contains(string(s.Params), `"host":"10.0.0.2"`) && strings.Contains(string(s.Params), `"secret":"db_password"`) {
+			found = true
+		}
+		if s.Action == "install_quadlet" && strings.Contains(string(s.Params), `"database_socket":true`) {
+			t.Error("сокет PostgreSQL не нужен для удалённой базы")
+		}
+	}
+	if !found {
+		t.Error("в env нет адреса и секрета удалённой базы")
+	}
+}
+
+func TestInterruptedCreateCanBeRetried(t *testing.T) {
+	fs := host.NewMemFS()
+	fs.Files["/etc/machine-id"] = []byte("machine\n")
+	fs.Files["/etc/passwd"] = []byte("demo:x:1002:1002::/home/demo:/bin/bash\nother:x:1003:1003::/home/other:/bin/bash\n")
+	fs.Dirs["/home/demo/.config/lite-deploy"] = 0o700
+	st, err := LoadState(fs, DefaultPaths())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.ExistingUsers["demo"] {
+		t.Error("пользователь с каталогом lite-deploy от прерванного create не должен считаться чужим")
+	}
+	if !st.ExistingUsers["other"] {
+		t.Error("чужой пользователь без нашего каталога остаётся чужим")
 	}
 }

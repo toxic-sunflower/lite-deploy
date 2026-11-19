@@ -46,6 +46,9 @@ func cmdDeploy(args []string, env Env) result {
 }
 
 func doDeploy(name, sha string, env Env) result {
+	if env.viaAgent(name) {
+		return forwardProject(env, "deploy", "/v1/deploy", map[string]string{"project": name, "sha": sha})
+	}
 	m, r := openProject("deploy", name, env)
 	if r != nil {
 		return *r
@@ -68,6 +71,9 @@ func cmdRollback(args []string, env Env) result {
 }
 
 func doRollback(name string, env Env) result {
+	if env.viaAgent(name) {
+		return forwardProject(env, "rollback", "/v1/rollback", map[string]string{"project": name})
+	}
 	m, r := openProject("rollback", name, env)
 	if r != nil {
 		return *r
@@ -90,6 +96,10 @@ func cmdStatus(args []string, env Env) result {
 }
 
 func doStatus(pos []string, env Env) result {
+	// состояние слотов лежит в домашних каталогах проектов: администратору без root его показывает исполнитель
+	if !env.root() && (len(pos) == 0 || env.viaAgent(pos[0])) {
+		return forwardStatus(env, pos)
+	}
 	var names []string
 	if len(pos) == 1 {
 		names = pos

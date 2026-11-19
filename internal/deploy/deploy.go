@@ -343,6 +343,12 @@ func (m *Manager) Deploy(ctx context.Context, sha string) (*DeployResult, *Error
 		}
 	}
 	for _, s := range svcs {
+		if m.proj.Services[s].KindOf() == project.KindUnit {
+			if e := m.fetchRelease(ctx, s, sha, idle); e != nil {
+				return nil, e
+			}
+			continue
+		}
 		img := m.proj.Services[s].Image + ":" + sha
 		res, err := m.run(ctx, 10*time.Minute, "podman", append([]string{"pull"}, append(authArgs, img)...)...)
 		if err != nil {
@@ -411,7 +417,11 @@ func errText(r host.Result, err error) string {
 func (m *Manager) abort(ctx context.Context, idle, sha, active string, logsFor []string, msg string) *Error {
 	var logs []string
 	for _, s := range logsFor {
-		if res, err := m.run(ctx, 30*time.Second, "podman", "logs", "--tail", "40", render.UnitName(m.Name, s, idle)); err == nil {
+		logCmd := []string{"podman", "logs", "--tail", "40", render.UnitName(m.Name, s, idle)}
+		if m.proj.Services[s].KindOf() == project.KindUnit {
+			logCmd = []string{"journalctl", "--user", "-u", render.UnitName(m.Name, s, idle) + ".service", "-n", "40", "--no-pager"}
+		}
+		if res, err := m.run(ctx, 30*time.Second, logCmd[0], logCmd[1:]...); err == nil {
 			if t := strings.TrimSpace(string(res.Stdout) + string(res.Stderr)); t != "" {
 				logs = append(logs, s+":\n"+t)
 			}
@@ -583,4 +593,71 @@ func (m *Manager) Status(ctx context.Context) (*StatusResult, *Error) {
 		}
 	}
 	return res, nil
+}
+
+// fetchRelease скачивает архив релиза компонента kind unit и кладёт его в каталог свободного слота.
+// Слот не получает трафика, поэтому его старое содержимое можно заменить; при любой ошибке трафик не затрагивается.
+func (m *Manager) fetchRelease(ctx context.Context, service, sha, slot string) *Error {
+	svc := m.proj.Services[service]
+	if svc.Release == nil || svc.Release.URL == "" {
+		return fail(CodeFailed, "у компонента "+service+" не описан release")
+	}
+	url := strings.ReplaceAll(svc.Release.URL, "{sha}", sha)
+	dir := m.home() + "/" + render.AppDir(service, slot)
+	tmp := dir + ".new"
+	archive := m.userStateDir() + "/" + service + "-" + slot + ".tar.gz"
+	step := func(timeout time.Duration, what, name string, args ...string) *Error {
+		res, err := m.run(ctx, timeout, name, args...)
+		if err != nil || res.ExitCode != 0 {
+			_, _ = m.run(ctx, time.Minute, "rm", "-rf", tmp, archive)
+			return fail(CodeFailed, what+": "+errText(res, err))
+		}
+		return nil
+	}
+	if e := step(time.Minute, "подготовка каталога релиза", "mkdir", "-p", dir[:strings.LastIndex(dir, "/")]); e != nil {
+		return e
+	}
+	if e := step(time.Minute, "очистка каталога релиза", "rm", "-rf", tmp, archive); e != nil {
+		return e
+	}
+	if e := step(time.Minute, "создание каталога релиза", "mkdir", tmp); e != nil {
+		return e
+	}
+	curl := []string{"--fail", "--silent", "--show-error", "--location", "--proto", "=https", "--proto-redir", "=https", "--max-filesize", "2147483648", "--max-time", "900"}
+	if svc.Release.TokenSecret != "" {
+		curl = append(curl, "-H", "@"+m.home()+"/.config/lite-deploy/release-"+service+".hdr")
+	}
+	if e := step(16*time.Minute, "скачивание релиза "+url, "curl", append(curl, "-o", archive, url)...); e != nil {
+		return e
+	}
+	sig := m.userStateDir() + "/" + service + "-" + slot + ".minisig"
+	if e := step(5*time.Minute, "скачивание подписи "+url+".minisig", "curl", append(curl, "-o", sig, url+".minisig")...); e != nil {
+		return e
+	}
+	if res, err := m.run(ctx, time.Minute, "minisign", "-Vm", archive, "-P", svc.Release.MinisignKey, "-x", sig); err != nil || res.ExitCode != 0 {
+		_, _ = m.run(ctx, time.Minute, "rm", "-rf", tmp, archive, sig)
+		return fail(CodeFailed, "подпись архива не подтверждена, релиз отклонён: "+errText(res, err))
+	}
+	_, _ = m.run(ctx, time.Minute, "rm", "-f", sig)
+	if e := step(10*time.Minute, "распаковка релиза", "tar", "-xzf", archive, "-C", tmp, "--no-same-owner"); e != nil {
+		return e
+	}
+	if err := m.FS.WriteFile(tmp+"/.release", []byte(sha+"\n"), 0o644); err != nil {
+		return fail(CodeFailed, "запись метки релиза: "+err.Error())
+	}
+	if m.AsUser {
+		if err := m.FS.Chown(tmp+"/.release", m.Name, m.Name); err != nil {
+			return fail(CodeFailed, "владелец метки релиза: "+err.Error())
+		}
+	}
+	// слот свободен: останавливаем его, заменяем каталог
+	_, _ = m.run(ctx, 2*time.Minute, "systemctl", "--user", "stop", render.UnitName(m.Name, service, slot)+".service")
+	if e := step(time.Minute, "замена каталога слота", "rm", "-rf", dir); e != nil {
+		return e
+	}
+	if e := step(time.Minute, "перенос релиза в слот", "mv", tmp, dir); e != nil {
+		return e
+	}
+	_, _ = m.run(ctx, time.Minute, "rm", "-f", archive)
+	return nil
 }

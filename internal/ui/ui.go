@@ -141,6 +141,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/verify", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		return s.call(r.Context(), "GET", "/v1/verify", nil), 200
 	}))
+	mux.HandleFunc("/api/fix", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		var in struct{}
+		if code := readBody(r, &in); code != 0 {
+			return errBody("usage", "неверный запрос"), code
+		}
+		return s.call(r.Context(), "POST", "/v1/fix", map[string]string{}), 200
+	}))
 	mux.HandleFunc("/api/plugin", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		var in struct {
 			Plugin  string   `json:"plugin"`
@@ -185,6 +192,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		return s.call(r.Context(), "POST", "/v1/firewall/enable", struct{}{}), 200
 	}))
+	s.projectRoutes(mux)
 	return s.guard(mux)
 }
 

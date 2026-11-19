@@ -94,14 +94,15 @@ func cmdExec(env Env) result {
 	if !env.root() {
 		return fail("exec", "permission_denied", "исполнитель запускается systemd от root")
 	}
-	run := func(args []string) []byte {
+	run := func(args []string, stdin []byte) []byte {
 		var out bytes.Buffer
 		e := realEnv(&out, io.Discard)
+		e.Stdin = bytes.NewReader(stdin)
 		RunEnv(args, e)
 		return bytes.TrimSpace(out.Bytes())
 	}
 	var out bytes.Buffer
-	agent.Exec(env.Stdin, &out, run, env.Stderr)
+	agent.ExecBody(env.Stdin, &out, run, env.Stderr)
 	return result{command: "exec", raw: bytes.TrimSpace(out.Bytes())}
 }
 
@@ -114,7 +115,7 @@ func cmdCall(args []string, env Env) result {
 	}
 	var body []byte
 	if pos[0] == "POST" && env.Stdin != nil {
-		body, err = io.ReadAll(io.LimitReader(env.Stdin, agent.MaxRequest))
+		body, err = io.ReadAll(io.LimitReader(env.Stdin, agent.MaxRequest+agent.MaxBody))
 		if err != nil {
 			return fail("call", CodeIO, err.Error())
 		}
