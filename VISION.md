@@ -1,95 +1,94 @@
-# Замысел: отдельный проект «настройка сервера и лёгкий деплой»
+# Vision: a separate project, "server setup and light deploy"
 
-(записано 2026-10-23 со слов владельца)
+(written 2026-10-23 from the owner's words)
 
-Настройка сервера не относится к репозиторию приложения. Это отдельная работа и, позже, отдельный репозиторий.
+Server setup does not belong in the application repository. It is separate work and, later, a separate repository.
 
-Из пройденного вручную (WALKTHROUGH.md) нужно сделать три вещи:
+Three things are to be made out of what was walked through by hand (WALKTHROUGH.md):
 
-1. **Инструкция**: что и зачем ставится на пустой Ubuntu (с объяснением команд).
-2. **Скилл для агента**: копирует скрипт на сервер по SSH, запускает, разбирает ошибки. Только с явного разрешения владельца на каждое действие.
-3. **Маленькая система развёртывания на основе compose**: лёгкая альтернатива Kubernetes для одного сервера с несколькими проектами, где ничего не надо делать руками. Основа: схема из DEPLOY-PATTERN.md (отдельный пользователь на проект, ограниченный SSH-ключ с привратником, blue-green, Caddy на хосте, PostgreSQL на хосте, образы из CI).
+1. **Instructions**: what is installed on an empty Ubuntu and why (with the commands explained).
+2. **A skill for an agent**: copies a script to the server over SSH, runs it and sorts out errors. Only with the owner's explicit permission for every action.
+3. **A small deployment system based on compose**: a light alternative to Kubernetes for one server with several projects, where nothing has to be done by hand. The basis: the pattern from DEPLOY-PATTERN.md (a separate user per project, a restricted SSH key with a gatekeeper, blue-green, Caddy on the host, PostgreSQL on the host, images from CI).
 
-Открытый вопрос: сейчас контейнеры описаны как Quadlet (юниты systemd), а не compose-файл. Нужно решить, останется ли Quadlet внутри системы или проекты будут описываться compose-файлом, из которого система сама делает юниты.
+An open question: containers are currently described as Quadlet (systemd units), not as a compose file. It has to be decided whether Quadlet stays inside the system or projects are described by a compose file from which the system makes units itself.
 
-Первое, что нужно сделать после замысла: завести приватный git-репозиторий для этой папки.
+The first thing to do after the vision: create a private git repository for this folder.
 
-## Что утилита должна уметь (из решений по the example project, 2026-10-24)
+## What the tool must be able to do (from the example project decisions, 2026-10-24)
 
-- **Установка файлов деплоя на сервер вручную-автоматически:** скрипт деплоя проекта и юниты Quadlet ставятся утилитой по команде владельца (не присылаются пайплайном: иначе ключ деплоя выполняет любой код). Права: скрипты 700, юниты 600.
-- **Привратник и ограниченный ключ** на каждый проект: `deploy <хэш>`, `rollback`, `status`.
-- **Туннель `cloudflared`** как способ публикации: сайт слушает только localhost, имя → локальный порт в настройках туннеля, прямого входа по IP нет. Cloudflare Access для служебных имён (админки).
-- **Ручной запасной план** на случай сбоя Cloudflare: выключенный файл Caddy с публичным сертификатом, команды включения и возврата, DNS без прокси.
-- **Изоляция проектов** (чек-лист в DEPLOY-PATTERN.md): отдельный пользователь, роль и база на проект, свои пароли, `pg_hba.conf` без `all`, лимиты ресурсов, не выключать API Caddy (`admin off` ломает reload).
-- **Доступ админов:** туннельные SSH-ключи (`restrict,port-forwarding,permitopen=...`) или Cloudflare Access.
-- **Проверки после установки:** доступ контейнера к локальным службам хоста, подключение роли проекта к чужим базам, права на файлы с секретами, отсутствие секретов в `/etc/environment` и истории.
-- Секреты вводит владелец сам (`read -rs`), утилита их не печатает и не принимает в чат.
+- **Installing the deploy files on the server in a manual-automatic way:** the project deploy script and the Quadlet units are installed by the tool on the owner's command (not sent by the pipeline: otherwise the deploy key would run any code). Modes: scripts 700, units 600.
+- **A gatekeeper and a restricted key** for each project: `deploy <hash>`, `rollback`, `status`.
+- **The `cloudflared` tunnel** as the way of publishing: the site listens on localhost only, name → local port in the tunnel settings, no direct entry by IP. Cloudflare Access for service names (admin panels).
+- **A manual fallback plan** in case Cloudflare fails: a disabled Caddy file with a public certificate, the commands to turn it on and back, DNS without the proxy.
+- **Project isolation** (the checklist in DEPLOY-PATTERN.md): a separate user, role and database per project, their own passwords, `pg_hba.conf` without `all`, resource limits, not turning off the Caddy API (`admin off` breaks reload).
+- **Administrator access:** tunnel SSH keys (`restrict,port-forwarding,permitopen=...`) or Cloudflare Access.
+- **Checks after installation:** a container's access to the local host services, a project role connecting to other databases, permissions on secret files, no secrets in `/etc/environment` and in history.
+- The owner types secrets personally (`read -rs`); the tool does not print them and does not accept them in a chat.
 
-## Что утилита должна уметь (дополнение 2026-10-25, по ходу первой выкатки)
+## What the tool must be able to do (an addition of 2026-10-25, during the first deploy)
 
-- **Служба туннеля безопасно:** отдельный пользователь без прав, токен в закрытом файле (`EnvironmentFile`, root, 600), не использовать `cloudflared service install <токен>` на общем сервере. Перед созданием маршрута проверять, нет ли у имени старой DNS-записи, и сообщать, если есть.
-- **Проверка Caddy после правки файлов:** валидация от пользователя `caddy`, `reload`, затем запрос на локальный порт с нужным `Host` (ожидаемый ответ известен: заглушка `503 not deployed` до первого деплоя, потом JSON с версией). Пустой `200` с `Server: Caddy` означает, что имя не подхвачено.
-- **Ветки и окружения GitHub по `gh api`:** окружения с ограничением по веткам, секреты окружения (значения вводит владелец), переменные-выключатели на окружение (`DEPLOY_<ОКРУЖЕНИЕ>_ENABLED`), ветка по умолчанию. Учитывать, что защита веток недоступна на бесплатном тарифе для приватных репозиториев; предупредить владельца и записать решение.
-- **Проверка образов до выкатки:** публикация каждой части и проверка `/health/ready`; предупреждение `MSB3277` как признак конфликта версий пакетов.
-- **Лимиты и обслуживание:** учёт минут Actions и места в GHCR, очистка старых образов, напоминание об истечении токена GHCR.
-- **Миграции базы:** режим `migrate` у образа и отдельная роль БД; пока нет, действует правило «миграции обратно совместимы» и описание поведения при сбое (трафик остаётся на старой версии, применённые миграции не откатываются).
-- **Как общаться с владельцем (для скилла):** короткие шаги, одно действие за раз, каждая команда с объяснением, без аллегорий, секреты не просить в чат; не использовать формулировки отказа «не буду», допустимо «не могу, потому что …».
+- **The tunnel service, safely:** a separate user without rights, the token in a closed file (`EnvironmentFile`, root, 600); do not use `cloudflared service install <token>` on a shared server. Before creating a route, check whether the name has an old DNS record and report it if so.
+- **GitHub branches and environments through `gh api`:** environments restricted by branch, environment secrets (the owner types the values), per-environment switch variables (`DEPLOY_<ENVIRONMENT>_ENABLED`), the default branch. Keep in mind that branch protection is unavailable on the free plan for private repositories; warn the owner and record the decision.
+- **Checking images before a deploy:** publishing each part and checking `/health/ready`; the `MSB3277` warning as a sign of a package version conflict.
+- **Limits and maintenance:** tracking Actions minutes and GHCR space, cleaning up old images, a reminder that the GHCR token expires.
+- **Database migrations:** a `migrate` mode of the image and a separate database role; until then the rule "migrations are backwards compatible" applies, with a description of the failure behaviour (traffic stays on the old version, applied migrations are not rolled back).
+- **How to talk to the owner (for the skill):** short steps, one action at a time, every command explained, no allegories, do not ask for secrets in the chat; do not use the refusal wording "I won't", "I can't, because …" is acceptable.
 
-## Дополнение 2026-10-25 (вечер)
+## An addition of 2026-10-25 (evening)
 
-- **Проверка файлов настроек после записи:** набор ключей и длина паролей (по требованиям приложения), без вывода значений. Сбой админки the example project (пропала строка логина) обнаружился только по циклу перезапусков и `502` снаружи.
-- **Состояние слотов как часть проверки:** после выкатки и после смены настроек показывать `list-units` и последние строки журнала слота; при цикле перезапусков сразу выдавать причину из журнала.
-- **Смена секрета без утечек:** скрытый ввод, значение через stdin, замена одной строки с сохранением остальных, перезапуск только запущенных слотов, проверка ключей.
-- **Cloudflare Access:** создание приложения и политики по списку почт, добавление и удаление админов; учитывать, что интерфейс меняется, и проверять результат запросом снаружи (страница Access вместо формы приложения).
-- **Проверка на реальном стороннем API (shop) до выкатки:** мок прячет различия (формат вариантов, ответ на повторное создание); утилита и инструкция должны требовать ручной прогон каждого нового вызова на боевом адресе.
+- **Checking settings files after writing:** the set of keys and the length of passwords (per the application requirements), without printing values. A failure of the example project admin (the login line disappeared) was found only through the restart loop and a `502` from outside.
+- **Slot state as part of the check:** after a deploy and after a settings change show `list-units` and the last journal lines of the slot; on a restart loop give the cause from the journal at once.
+- **Changing a secret without leaks:** hidden input, the value through stdin, replacing one line while keeping the rest, restarting only the running slots, checking the keys.
+- **Cloudflare Access:** creating an application and a policy from a list of emails, adding and removing admins; keep in mind that the interface changes, and check the result with a request from outside (the Access page instead of the application form).
+- **Checking against the real third-party API (shop) before a deploy:** a mock hides differences (the format of variants, the answer to a repeated creation); the tool and the instructions must require a manual run of every new call at the live address.
 
-## Принципы и решения (обсуждение 2026-10-29)
+## Principles and decisions (the discussion of 2026-10-29)
 
-Проект пока «прикольный инструмент», ниша уточняется. Решения ниже не окончательные, но на них опирается дальнейшая работа.
+For now the project is a "fun tool", and the niche is being refined. The decisions below are not final, but further work rests on them.
 
-### Что строим
+### What we build
 
-- **Лёгкий агент на сервере** (Go или Rust, язык не выбран). Работает как хостинг-панель без панели: ставит и настраивает ПО, создаёт пользователя, роль и базу проекта, выдаёт строки подключения, пишет env-файлы и секреты, выкатывает и откатывает.
-- **Один управляющий API у агента, клиенты отдельно:** CLI, позже при желании веб-интерфейс, MCP-сервер для ИИ-агентов. Клиенты тонкие, в ядро не входят. Тяжёлую панель не делаем.
-- **Агент ничего не слушает наружу.** Канал управления: unix-сокет через SSH и/или локальный интерфейс, опубликованный через Cloudflare Tunnel под Cloudflare Access. CI ходит отдельным каналом и может только `deploy`, `rollback`, `status`.
-- **Состояние и секреты только на сервере, не в GitHub или GitLab.** Обязательны шифрованный экспорт (бэкап) и восстановление сервера одной командой.
+- **A light agent on the server** (Go or Rust, the language is not chosen). It works like a hosting panel without the panel: installs and configures software, creates a project user, role and database, hands out connection strings, writes env files and secrets, deploys and rolls back.
+- **One management API of the agent, separate clients:** a CLI, later a web interface if wanted, an MCP server for AI agents. The clients are thin and not part of the core. We do not build a heavy panel.
+- **The agent listens on nothing outward.** The management channel: a unix socket through SSH and/or a local interface published through a Cloudflare Tunnel under Cloudflare Access. CI uses a separate channel and can only `deploy`, `rollback`, `status`.
+- **State and secrets only on the server, not in GitHub or GitLab.** An encrypted export (a backup) and restoring a server with one command are mandatory.
 
-### Плагины
+### Plugins
 
-- Инфраструктура: Caddy, Postgres, контейнерный движок (Podman и Docker), Cloudflare Tunnel (провайдер публикации по умолчанию).
-- **Postgres в двух режимах:** на хосте (по умолчанию: экономнее по памяти, доступ по unix-сокету, роль и база на проект) и в контейнере.
-- **Описание проекта:** единая модель проекта (сервисы, порты, секреты, лимиты, healthcheck); из неё плагин движка генерирует compose или Quadlet. В одном проекте можно смешивать оба формата (поле «как запускать» у сервиса). Quadlet только для Podman и systemd.
-- **Абстракция балансировщика** по словарю Kubernetes, но без совместимости с ним: `Route`, `Backend`, `Listener`. По умолчанию Caddy. Абстракцию держим маленькой.
+- Infrastructure: Caddy, Postgres, a container engine (Podman and Docker), Cloudflare Tunnel (the default publishing provider).
+- **Postgres in two modes:** on the host (the default: more economical in memory, access over a unix socket, a role and database per project) and in a container.
+- **Project description:** a single project model (services, ports, secrets, limits, healthcheck); from it the engine plugin generates compose or Quadlet. Both formats can be mixed in one project (a "how to run" field on a service). Quadlet is for Podman and systemd only.
+- **A load balancer abstraction** using the Kubernetes vocabulary but without compatibility with it: `Route`, `Backend`, `Listener`. Caddy by default. We keep the abstraction small.
 
-### Безопасность агента (главное требование)
+### Agent security (the main requirement)
 
-- Никакого произвольного выполнения. Только фиксированный набор типизированных команд с проверкой входа (например, хэш `^[0-9a-f]{40}$`), строки в оболочку не передаются.
-- Права по минимуму: корневая часть узкая, проектные операции идут от пользователя проекта.
-- Права и подтверждения живут в API агента, а не в MCP: опасные действия (удалить базу, показать секрет) требуют подтверждения владельца вне канала ИИ, например через CLI на его машине. Журнал действий хранит агент.
-- Установка и обновление агента и плагинов только по команде владельца, с проверкой подписи.
-- Секреты вводит владелец сам, в чат они не попадают и не печатаются.
+- No arbitrary execution. Only a fixed set of typed commands with input validation (for example the hash `^[0-9a-f]{40}$`); strings are not passed to a shell.
+- Minimal rights: the root part is narrow, project operations run as the project user.
+- Rights and confirmations live in the agent API, not in MCP: dangerous actions (delete a database, show a secret) need the owner's confirmation outside the AI channel, for example through the CLI on their machine. The agent keeps the action journal.
+- Installing and updating the agent and plugins only on the owner's command, with a signature check.
+- The owner types secrets personally; they do not enter a chat and are not printed.
 
-### Шаблоны и каталог
+### Templates and a catalog
 
-- Каталог готовых приложений не делаем. Закладываем **формат шаблонов**, каталог пусть создаёт сообщество, если проект приживётся.
-- Шаблон строго декларативный (манифест: образ, порты, тома, переменные, нужна ли БД), без скриптов. Агент сам превращает манифест в юниты. Перед установкой владельцу показывается, что будет создано. Шаблоны желательно подписывать.
+- We do not build a catalog of ready applications. We provide a **template format**; the community can make a catalog if the project takes root.
+- A template is strictly declarative (a manifest: image, ports, volumes, variables, whether a database is needed), without scripts. The agent turns the manifest into units itself. Before installing, the owner is shown what will be created. Templates should preferably be signed.
 
-### Границы
+### Limits
 
-- Сейчас один сервер. Несколько серверов возможны позже. Если потребуется автоперенос нагрузки, правильный путь это k3s, а не наш агент.
-- Не повторять: большой каталог сервисов, тяжёлую панель, команды, роли, SSO.
+- One server for now. Several servers are possible later. If automatic load migration is ever needed, the right way is k3s, not our agent.
+- Not to repeat: a big catalog of services, a heavy panel, teams, roles, SSO.
 
-### Что показало сравнение с аналогами
+### What the comparison with alternatives showed
 
-Подробности в `COMPARISON-PLAN.md` (план) и в обсуждении: Coolify, Dokploy и Kamal. Коротко:
-- У Coolify уже есть официальный MCP, поэтому «управление сервером через ИИ» само по себе не отличие.
-- Центральный компонент у них заходит на хост как root и держит SSH-ключи (Coolify сам пишет, что взлом панели открывает все серверы). Наша линия: узкий агент без root, rootless-контейнеры, только туннель, Postgres и Caddy на хосте.
-- Не проверено: Dokploy AI Assistant и API, Dokku, CapRover, Podman в полном тексте документации, реальный расход памяти.
+Details are in `COMPARISON-PLAN.md` (the plan) and in the discussion: Coolify, Dokploy and Kamal. In short:
+- Coolify already has an official MCP, so "managing a server through AI" is not a difference by itself.
+- Their central component enters the host as root and holds SSH keys (Coolify itself writes that breaking into the panel opens all servers). Our line: a narrow agent without root, rootless containers, tunnel only, Postgres and Caddy on the host.
+- Not checked: the Dokploy AI Assistant and API, Dokku, CapRover, Podman in the full documentation text, real memory use.
 
-### Ближайший шаг
+### The next step
 
-Небольшой прототип агента с командой `project create` (пользователь, роль и база, env-файл со строкой подключения), затем `deploy <хэш>` с проверкой здоровья и откатом.
+A small prototype of the agent with the command `project create` (a user, a role and database, an env file with the connection string), then `deploy <hash>` with a health check and a rollback.
 
-## Название, лицензия, цель (решено 2026-11-03)
+## Name, license, goal (decided 2026-11-03)
 
-Рабочее название `lite-deploy` (можно менять), лицензия MIT. Открытый инструмент для себя и таких же владельцев VDS, без обязательств по срокам и поддержке. Приоритет: ИИ (MCP) и UI. Все решения с обоснованиями: `DECISIONS.md`, схема: `ARCHITECTURE.md`, очередь сессий: `PLAN.md`.
+The working name is `lite-deploy` (it can change), the license is MIT. An open tool for myself and for other VDS owners like me, with no obligations on deadlines or support. The priority: AI (MCP) and UI. All decisions with their reasons: `DECISIONS.md`, the scheme: `ARCHITECTURE.md`, the session queue: `PLAN.md`.
