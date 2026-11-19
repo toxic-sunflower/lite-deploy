@@ -1,193 +1,197 @@
 # lite-deploy
 
-Лёгкая система настройки сервера и деплоя для одного сервера с несколькими проектами (замена Kubernetes: Quadlet, Caddy и PostgreSQL на хосте, blue-green, ограниченный SSH-ключ).
+A light server setup and deploy system for one server with several projects (a Kubernetes replacement: Quadlet, Caddy and PostgreSQL on the host, blue-green deploys, a restricted SSH key).
 
-- `VISION.md`: замысел. `ARCHITECTURE.md`, `SPEC-v0.md`: как устроено. `DECISIONS.md`: журнал решений. `PLAN.md`: очередь сессий, начинать с него.
-- `DEPLOY-PATTERN.md`: общая схема деплоя и чек-лист изоляции проектов. `COMPARISON-PLAN.md`, `WSL-TEST.md`: сравнение и проверка в WSL.
-- `cmd/`, `internal/`, `schemas/`, `testdata/`: код на Go. Проверки: `go vet ./...`, `go test -race ./...`, `golangci-lint run ./...`.
+- `VISION.md`: the idea. `ARCHITECTURE.md`, `SPEC-v0.md`: how it works. `DECISIONS.md`: the decision log. `PLAN.md`: the work queue, start there.
+- `DEPLOY-PATTERN.md`: the general deploy pattern and the project isolation checklist. `COMPARISON-PLAN.md`, `WSL-TEST.md`: the comparison and testing in WSL.
+- `INSTALL-PROD.md`: installing on a brand new server, step by step.
+- `cmd/`, `internal/`, `schemas/`, `testdata/`: the Go code. Checks: `go vet ./...`, `go test -race ./...`, `golangci-lint run ./...`.
 
-Инструкция по настройке сервера the example project, скрипты установки ПО и журнал ручной настройки лежат в соседнем репозитории `../server-setup`. Эталонные файлы из него скопированы в `testdata/shop/legacy/` для сверки с генерацией.
+The the example project server instructions, the software install scripts and the manual setup journal live in the neighbouring repository `../server-setup`. Its reference files are copied into `testdata/shop/legacy/` to compare against generation.
 
-## Установка
+## Install
 
-Нужен Linux с systemd (amd64 или arm64). Одна команда, от root:
+You need Linux with systemd (amd64 or arm64). One command, as root:
 
 ```sh
-curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh
+curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh
 ```
 
-Она ставит минимум, без которого не обойтись:
+This installs `liteup`, the tool that installs and manages `lite-deploy` (the way `rustup` does for Rust), and with it:
 
-- `lite-deploy` в `/usr/local/bin` и короткое имя `lite` (бинарник из GitHub Releases, проверяются подпись и контрольная сумма);
-- `minisign` для проверки подписи;
-- агента: пользователя службы `lite-deploy` без прав и сокеты systemd (через него работает интерфейс).
+- `lite-deploy` in `/usr/local/bin` with the short name `lite` (the binary comes from GitHub Releases; the signature and the checksum are verified);
+- `minisign` to verify the signature;
+- the agent: an unprivileged `lite-deploy` service user and systemd sockets (the interface works through it).
 
-Пользователей, файервол, Caddy, `podman` и PostgreSQL установка не трогает: их настраивает `lite init` (ниже), а затем интерфейс.
+Users, the firewall, Caddy, `podman` and PostgreSQL are not touched: `lite init` sets them up (below), and then the interface.
 
-Команда каждый раз берёт **самую свежую выпущенную версию**. Повторный запуск обновляет `lite-deploy`. Проверено на Ubuntu; для Debian, Fedora, RHEL, openSUSE и Arch пакеты ставятся их менеджером, но там установка не проверялась.
-
-Нужна не последняя, а конкретная версия (например, чтобы на всех серверах стояла одна и та же)? Укажите её после `--version`, номера есть на странице [Releases](https://github.com/toxic-sunflower/lite-deploy/releases):
+Later, as root, `liteup` manages everything:
 
 ```sh
-curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh -s -- --version vX.Y.Z
+sudo liteup update                      # move to the latest release; the agent is restarted automatically
+sudo liteup install --version vX.Y.Z    # a specific version (the numbers are on the Releases page)
+sudo liteup reinstall                   # uninstall and install the same version again
+sudo liteup uninstall                   # remove lite and the agent; settings, secrets and backups stay
+sudo liteup uninstall --purge --yes     # also delete settings, secrets and backups (irreversible)
+liteup status                           # installed and latest versions
 ```
 
-Проверить, что встало:
+The installer takes the **latest release** by default. It has been tested on Ubuntu; on Debian, Fedora, RHEL, openSUSE and Arch packages are installed with their package manager, but the installation was not tested there. The script is short and can be read before running: [site/liteup](site/liteup). The old one-liner `curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh` still works: it just runs `liteup install`.
+
+## Prepare the server
+
+After installing, run `lite init` once on the server (as root; the only command that works when logged in as root):
 
 ```sh
-lite-deploy version
+sudo lite init --user YOUR_USER
 ```
 
-Скрипт короткий, перед запуском его можно прочитать: [site/install.sh](site/install.sh).
+The command first shows what it will do and asks for confirmation. Then it:
 
-## Подготовка сервера
+- creates the user if it does not exist (`--user` also accepts existing users; several names separated by commas; `--all-users` takes every regular user with a shell);
+- if the user has no password, runs the system `passwd`: the password is typed there, `lite` never sees it;
+- gives administrator rights (group `sudo` or `wheel`);
+- asks for a public SSH key and adds it; without a key the setup does not continue;
+- sets up the firewall: `--ufw max` (the default, only SSH is open), `--ufw http` (SSH and the web ports 80 and 443), `--ufw off` (no filtering), `--ufw keep` (leave an existing firewall alone). The previous `ufw` rules are reset with `max` and `http`;
+- installs plugins: `--plugins caddy,podman,pg,redis,backblaze,security` (the name `postgres` is accepted as `pg`). Caddy is needed for project sites: it is installed from the official repository, the main Caddyfile includes the sites from `/etc/caddy/conf.d`, and the old Caddyfile is saved as a copy. `security` turns on the whole server protection (see below);
+- disables SSH password login for these users (the key remains); the setting is checked with `sshd -t` and the previous one is restored on an error.
 
-После установки один раз выполните на сервере `lite init` (от root; это единственная команда, которая работает при входе под root):
+Root SSH login is not changed by the command: whether to disable it is up to you. After `init` log in as the regular user. Daily work needs **no root and no sudo**: if a command needs privileges, the CLI hands it to the agent (see "Working without root"). When logged in as root, the commands other than `lite init` and `lite --help` refuse to run.
+
+Without `--user`, the user who ran `sudo lite init` is configured. `lite` is the short name of `lite-deploy`; `lite --help` lists everything.
+
+## Deploy and the interface
+
+After `project create`, a project is deployed by commit hash (the image `<image>:<hash>` must be in the registry):
 
 ```sh
-lite init --user serafim
+lite deploy PROJECT FULL_40_CHARACTER_HASH
+lite status
+lite rollback PROJECT
 ```
 
-Команда сначала показывает, что сделает, и спрашивает подтверждение. Затем:
-
-- создаёт пользователя, если его нет (`--user` принимает и существующих; несколько имён через запятую; `--all-users` берёт всех обычных пользователей с оболочкой);
-- если у пользователя нет пароля, запускает системный `passwd`: пароль вводится там, `lite` его не видит;
-- даёт права администратора (группа `sudo` или `wheel`);
-- спрашивает открытый SSH-ключ и добавляет его; без ключа настройка не продолжается;
-- настраивает файервол: `--ufw max` (по умолчанию, открыт только SSH), `--ufw http` (SSH и веб-порты 80 и 443), `--ufw off` (без фильтрации). Прежние правила `ufw` при `max` и `http` сбрасываются;
-- ставит плагины: `--plugins caddy,podman,pg,redis,backblaze,security` (имя `postgres` принимается как `pg`). Caddy нужен для сайтов проектов: он ставится из официального репозитория, главный Caddyfile подключает сайты из `/etc/caddy/conf.d`, старый Caddyfile сохраняется копией. `security` включает всю защиту сервера (см. ниже);
-- отключает этим пользователям вход по SSH по паролю (остаётся ключ); настройка проверяется `sshd -t`, при ошибке возвращается прежняя.
-
-Вход под root по SSH команда не меняет: отключать его или нет, решаете вы. После `init` заходите обычным пользователем и запускайте `lite` через `sudo`: при входе под root остальные команды отказывают.
-
-Без `--user` настраивается тот, кто запустил `sudo lite init`. Команда `lite` это короткое имя `lite-deploy`.
-
-## Выкатка и интерфейс
-
-После `project create` проект выкатывается по хэшу коммита (образ `<image>:<хэш>` должен лежать в реестре):
+The web interface with the "Deploy" and "Roll back" buttons runs on your computer and reaches the server over SSH:
 
 ```sh
-sudo lite-deploy deploy <проект> <хэш из 40 символов>
-sudo lite-deploy status
-sudo lite-deploy rollback <проект>
+lite-deploy ui --host admin@YOUR_SERVER
 ```
 
-Веб-интерфейс с кнопками «Выкатить» и «Откатить» запускается на вашем компьютере и ходит на сервер по SSH:
+The command prints an address like `http://127.0.0.1:8787/?t=…`; open it in a browser. The interface listens on `127.0.0.1` only.
+
+The server must have the agent: `liteup` installs it. The agent runs unprivileged and listens only on the local socket `/run/lite-deploy/api.sock` (nothing is opened to the internet). It hands every action to the executor, which systemd starts as root for each request; the executor accepts only a fixed list of actions (`status`, `deploy`, `rollback`, `info`, `verify`, `fix`, plugin commands, project creation) and exits. System administrators (group `sudo` or `wheel`) can use it; no `sudo` password and no `sudoers` rule are needed for the interface. The caller is identified by the kernel (`SO_PEERCRED`), every request is written to the agent journal `/var/lib/lite-deploy-agent/audit.log`, and the executor writes to the systemd journal (`journalctl -u 'lite-deploy-exec@*'`).
+
+## Working without root
+
+Root and `sudo` are not needed for daily work. An administrator (group `sudo` or `wheel`) runs commands as a regular user: if a command needs privileges, the CLI hands it to the agent and the executor (started by systemd as root for one command) runs it. The executor accepts only a fixed list of actions and validates the parameters; an arbitrary root shell is never executed. Passwords and keys for such commands travel through stdin (`echo PASSWORD | lite pg password ROLE --password-stdin`) and never appear in arguments or the process list. `verify`, `deploy`, `rollback` and `status` also go through the agent when run by an administrator.
+
+Root is needed only for `lite init` (the first server setup) and for installing with `liteup`. Examples in this document written with `sudo` work without it too: `sudo` can be left out.
+
+## Plugins
+
+A plugin adds commands to `lite`, a section to the interface and checks for `lite verify`. Plugin commands look the same everywhere: `lite PLUGIN COMMAND [arguments]`. Commands that change the system ask for confirmation (`--yes` or an answer in the terminal). The same is available in the interface: the "Packages and plugins" section is built from the plugin list.
 
 ```sh
-lite-deploy ui --host admin@ваш-сервер
-```
-
-Команда печатает адрес вида `http://127.0.0.1:8787/?t=…`, его нужно открыть в браузере. Интерфейс слушает только `127.0.0.1`.
-
-На сервере должен быть агент: он ставится при установке (см. выше). Агент работает без прав и слушает только локальный сокет `/run/lite-deploy/api.sock` (в интернет ничего не открывается). Все действия он передаёт исполнителю: тот запускается systemd от root на каждый запрос, принимает только фиксированный список действий (`status`, `deploy`, `rollback`, `info`, `verify`, команды плагинов) и завершается. Управлять могут администраторы системы (группа `sudo` или `wheel`); пароль `sudo` и правило `sudoers` для интерфейса не нужны. Вызывающий определяется ядром (по `SO_PEERCRED`), каждый запрос пишется в журнал агента `/var/lib/lite-deploy-agent/audit.log`, а исполнитель пишет в журнал systemd (`journalctl -u 'lite-deploy-exec@*'`).
-
-## Плагины
-
-Плагин добавляет в `lite` команды, раздел в интерфейсе и проверки для `lite verify`. Команды плагинов выглядят одинаково: `lite ПЛАГИН КОМАНДА [аргументы]`, изменяющие систему требуют `sudo` и подтверждения (`--yes` или ответ в терминале). То же самое доступно в интерфейсе: раздел «Пакеты и плагины» строится сам из списка плагинов.
-
-```sh
-lite info                  # плагины, их команды (то же в интерфейсе)
+lite info                  # plugins and their commands (the same in the interface)
 lite plugin list
-sudo lite verify           # проверка сервера: только чтение, код выхода 8 при ошибках
+lite verify                # check the server: read-only, exit code 8 on errors
+lite fix --dry-run         # what can be fixed automatically
 ```
 
-Встроенные плагины: `package`, `security`, `firewall`, `caddy`, `podman`, `pg`. Свой плагин это каталог `/etc/lite-deploy/plugins/ИМЯ/` (принадлежит root, закрыт для записи другим) с файлом `plugin.json` и скриптами или программами, которые `lite` вызывает:
+Built-in plugins: `package`, `security`, `firewall`, `caddy`, `podman`, `pg`, `redis`, `server`, `backup`, `backblaze`, `s3`, `sftp`. Your own plugin is a directory `/etc/lite-deploy/plugins/NAME/` (owned by root, not writable by others) with a `plugin.json` file and scripts or programs that `lite` calls:
 
 ```json
 {
   "name": "logs",
-  "description": "просмотр журналов",
+  "description": "log viewer",
   "requires": ["jq"],
-  "commands": [{"name": "tail", "help": "последние строки", "args": "СЛУЖБА", "exec": "bin/tail.sh"}],
+  "commands": [{"name": "tail", "help": "last lines", "args": "SERVICE", "exec": "bin/tail.sh"}],
   "checks": [{"name": "size", "exec": "bin/size.sh", "fix": "lite logs clear"}]
 }
 ```
 
-Команда получает аргументы как есть, вывод попадает пользователю; код выхода не ноль считается ошибкой. Проверка завершается кодом 0 (ок), 1 (предупреждение) или другим (ошибка), первая строка вывода это сообщение. Пакеты из `requires` должны стоять в системе, иначе команда подскажет `lite package install`. Плагин выполняется с правами `lite` (под `sudo` это root), поэтому каталог плагинов должен принадлежать root: устанавливать плагины может только владелец сервера.
+A command receives its arguments as they are and its output goes to the user; a non-zero exit code is an error. A check exits with 0 (ok), 1 (warning) or anything else (error); the first output line is the message. The packages in `requires` must be installed, otherwise the command suggests `lite package install`. A plugin runs with `lite` rights (root, when privileged), so the plugin directory must belong to root: only the server owner can install plugins.
 
-### Пакеты
-
-```sh
-lite package list              # что поставлено через lite (журнал /var/lib/lite-deploy/packages.json)
-lite package check nginx       # установлен ли пакет и какой версии, через lite или нет
-sudo lite package install nginx redis-server
-sudo lite package update nginx
-sudo lite package remove nginx # ssh-сервер, sudo, systemd и оболочку удалить нельзя
-```
-
-Работает с `apt`, `dnf`, `zypper` и `pacman`.
-
-### Защита сервера (плагин security)
+### Packages
 
 ```sh
-sudo lite security enable            # всё сразу, SSH в самом конце
-sudo lite security status            # проверки защиты
+lite package list              # what was installed through lite (the journal /var/lib/lite-deploy/packages.json)
+lite package check nginx       # whether a package is installed, its version, through lite or not
+lite package install nginx redis-server
+lite package update nginx
+lite package remove nginx      # the ssh server, sudo, systemd and the shell cannot be removed
 ```
 
-Что делает `enable` (каждый шаг доступен и отдельно):
+Works with `apt`, `dnf`, `zypper` and `pacman`. Docker packages are never installed (see "What is not done").
 
-- `lite security ssh [no-root]`: вход по SSH только по ключу для всех пользователей, root только по ключу (`no-root`: root не входит совсем), ограничение числа попыток. Настройка кладётся в `/etc/ssh/sshd_config.d/01-lite-security.conf` (раньше `50-cloud-init.conf`: sshd берёт первое значение). Перед записью проверяется, что остался администратор с ключом и что у вас он есть; после записи проверяются `sshd -t` и действующие значения `sshd -T`; при любой неудаче прежнее состояние возвращается, чтобы не запереть сервер;
-- `lite security allow-users ИМЯ… | any`: пускать по SSH только перечисленных (пользователи проектов, под которыми заходит CI, добавляются сами; `any` снимает ограничение);
-- `lite security fail2ban`: ставит и настраивает `fail2ban` для SSH (5 попыток за 10 минут, блок на час); `lite security banned` и `lite security unban АДРЕС`;
-- `lite security updates`: автоматическая установка обновлений безопасности (`unattended-upgrades` на apt, `dnf-automatic` на dnf);
-- `lite security sysctl`: защитные параметры ядра;
-- `lite security logins [ЧИСЛО]`: последние входы и неудачные попытки.
+### Server protection (the security plugin)
 
-`lite verify` проверяет: root и пароли по SSH, пустые пароли, ограничение пользователей, `fail2ban`, автообновления и ожидающие обновления безопасности, параметры ядра, администраторов и их ключи, порты, которые слушают наружу (и закрыты ли они файерволом).
-
-### Файервол
-
-Плагин `firewall` (раздел «Файервол» в интерфейсе): `sudo lite firewall status`, `mode off|http|max`, `allow ПОРТ/tcp [--from АДРЕС]`, `remove ПОРТ/tcp`, `enable`. Показывает правила `ufw`, открывает и закрывает порты. Порты SSH, 80 и 443 закрыть нельзя, любое изменение подтверждается. `ufw` должен быть установлен на сервере (`lite init --ufw …` ставит его).
-
-## Лицензия
-
-MIT, см. [LICENSE](LICENSE).
-
-## Плагины данных и контейнеров
-
-- `lite pg create-db БАЗА [РОЛЬ]`: создаёт роль и базу; у проекта может быть несколько баз. Пароль роли пишется в `/etc/lite-deploy/secrets/pg-РОЛЬ` (читает только root) и при повторном вызове не меняется. `lite pg drop-db БАЗА` удаляет базу. `lite verify` предупреждает, если PostgreSQL слушает не только localhost.
-- `lite redis install|status`: Redis на хосте; `lite verify` отмечает ошибкой bind не на localhost.
-- `lite podman ps [ПРОЕКТ]`: контейнеры проектов (у каждого проекта свой rootless podman); `lite verify` проверяет linger у пользователей проектов.
-
-Доступ к PostgreSQL с других серверов (на сервере с базой):
-
-```bash
-sudo lite pg listen 10.0.0.2                       # слушать ещё и на внутреннем адресе сервера (перезапуск PostgreSQL)
-sudo lite pg allow shop shopapp 10.0.0.5           # пустить роль к базе с этого адреса: ssl, пароль, порт 5432 только для него
-lite pg access                                     # кому открыто
-sudo lite pg deny shop shopapp 10.0.0.5            # убрать
+```sh
+lite security enable            # everything at once, SSH last
+lite security status            # the protection checks
 ```
 
-Правила лежат в отдельном блоке `pg_hba.conf`; при ошибке в файле прежнее содержимое возвращается. Весь интернет (`0.0.0.0/0`) не принимается. Копии баз:
+What `enable` does (each step is also available on its own):
 
-```bash
-sudo lite pg backup [БАЗА]        # копия в /var/backups/lite-deploy/pg, хранится 7 последних на каждую базу
-sudo lite pg schedule on          # ежедневно около 03:30 (таймер systemd)
-lite pg backups                   # список
-sudo lite pg restore БАЗА ФАЙЛ    # вернуть данные (текущие заменяются; база должна существовать)
+- `lite security ssh [no-root]`: SSH login by key only for every user, root by key only (`no-root`: root cannot log in at all), a limit on attempts. The setting goes to `/etc/ssh/sshd_config.d/01-lite-security.conf` (before `50-cloud-init.conf`: sshd takes the first value). Before writing, it checks that an administrator with a key remains and that you have one; after writing, `sshd -t` and the effective `sshd -T` values are checked; on any failure the previous state is restored, so that the server is never locked out;
+- `lite security allow-users NAME… | any`: allow only the listed users over SSH (project users that CI logs in as are added automatically; `any` removes the restriction);
+- `lite security fail2ban`: installs and configures `fail2ban` for SSH (5 attempts in 10 minutes, a one-hour ban); `lite security banned` and `lite security unban ADDRESS`;
+- `lite security updates`: automatic security updates (`unattended-upgrades` on apt, `dnf-automatic` on dnf);
+- `lite security sysctl`: protective kernel parameters;
+- `lite security logins [COUNT]`: recent logins and failed attempts.
+
+`lite verify` checks: root and password login over SSH, empty passwords, the user restriction, `fail2ban`, automatic updates and pending security updates, kernel parameters, administrators and their keys, and ports that listen to the outside (and whether the firewall closes them).
+
+### Firewall
+
+The `firewall` plugin (the "Firewall" section of the interface): `lite firewall status`, `mode off|http|max`, `allow PORT/tcp [--from ADDRESS]`, `remove PORT/tcp`, `enable`. It shows the `ufw` rules and opens and closes ports. The SSH, 80 and 443 ports cannot be closed, and every change is confirmed. `ufw` must be installed on the server (`lite init --ufw …` installs it).
+
+## Databases, Redis and containers
+
+- `lite pg create-db DATABASE [ROLE]`: creates a role and a database; a project may have several databases. The role password is written to `/etc/lite-deploy/secrets/pg-ROLE` (readable by root only) and does not change on a repeated call. `lite pg drop-db DATABASE` deletes a database. `lite verify` warns if PostgreSQL listens on more than localhost.
+- `lite redis install|status`: Redis on the host; `lite verify` reports an error if bind is not localhost only.
+- `lite podman ps [PROJECT]`: project containers (each project has its own rootless podman); `lite verify` checks linger for project users.
+
+You can set a role password yourself: `echo PASSWORD | lite pg create-db DATABASE ROLE --password-stdin` or `... lite pg password ROLE --password-stdin` (16–128 characters `A-Za-z0-9_.~-`). The password goes through stdin and never appears in arguments or the process list.
+
+### PostgreSQL access from other servers (on the server with the database)
+
+```sh
+sudo lite pg listen 10.0.0.2                       # also listen on the server internal address (restarts PostgreSQL)
+sudo lite pg allow shop shopapp 10.0.0.5           # let the role reach the database from this address: ssl, password, port 5432 only for it
+lite pg access                                     # who has access
+sudo lite pg deny shop shopapp 10.0.0.5            # remove
 ```
 
-`lite verify` предупреждает, если у базы нет копий, и сообщает об ошибке, если последняя старше 36 часов.
+The rules live in a separate block of `pg_hba.conf`; on an error in the file the previous content is restored. The whole internet (`0.0.0.0/0`) is not accepted.
 
-Пароль роли можно задать самому: `echo ПАРОЛЬ | sudo lite pg create-db БАЗА РОЛЬ --password-stdin` или `... lite pg password РОЛЬ --password-stdin` (16–128 знаков `A-Za-z0-9_.~-`). Пароль идёт через stdin, в аргументы и список процессов не попадает.
+## Several servers
 
-### Копии вне сервера: Backblaze B2
+A project lives on one server and each server has its own `lite`. Foreign resources are connected by an address from the server registry (addresses on the internal network):
 
-```bash
-sudo lite backblaze install
-printf '%s\n%s\n' ID_КЛЮЧА КЛЮЧ | sudo lite backblaze setup БАКЕТ [ПРЕФИКС] --yes   # ключи только из stdin
-sudo lite backblaze upload        # отправить (copy: копии в бакете не удаляются)
-sudo lite backblaze schedule on   # ежедневно около 04:30
+```sh
+sudo lite server add db1 10.0.0.2       # on the project server: the name and address of the database server
+lite server list
 ```
 
-Ключ лежит в `/etc/lite-deploy/backblaze/rclone.conf` (0600, root). Хранение в бакете и срок жизни копий настраиваются правилами самого бакета. Копии в бакете не шифруются средствами `lite`: используйте шифрование бакета на стороне Backblaze или не отправляйте туда чувствительные данные.
+A database on another server is described in the project like this:
 
-Доставка пароля на сервер проекта и описание проекта из нескольких видов компонентов пока не сделаны.
+```json
+"database": { "engine": "postgres", "server": "db1", "port": 5432, "password_secret": "secret://db_password", "connection_format": "url" }
+```
 
-## Компоненты без контейнеров (`kind: unit`)
+The role and the database are named after the project (hyphens replaced by `_`). On the database server the owner creates and opens them:
 
-Компонент может быть процессом на хосте: бинарник, Node, .NET. В описании проекта:
+```sh
+echo PASSWORD | sudo lite pg create-db shop shop --password-stdin
+sudo lite pg listen 10.0.0.2
+sudo lite pg allow shop shop PROJECT_SERVER_ADDRESS
+```
+
+The same password is given to the project as the secret `db_password`. The connection string goes over the network only encrypted (`sslmode=require`).
+
+## Components without containers (`kind: unit`)
+
+A component can be a process on the host: a binary, Node, .NET. In the project description:
 
 ```json
 "services": {
@@ -201,79 +205,11 @@ sudo lite backblaze schedule on   # ежедневно около 04:30
 }
 ```
 
-`deploy ХЭШ` скачивает архив (только https, `{sha}` заменяется хэшем) в каталог свободного слота пользователя проекта, запускает юнит systemd этого слота, ждёт готовности и переключает Caddy; откат работает как для контейнеров. Порт слота передаётся в переменной `PORT`. `exec[0]` считается от каталога релиза, если не начинается с `/`; `$` и `%` в аргументах не раскрываются. Подпись обязательна: CI подписывает архив ключом minisign (`minisign -Sm app-ХЭШ.tar.gz`, рядом кладёт `app-ХЭШ.tar.gz.minisig`), а в описании проекта указан только открытый ключ. Перед распаковкой `deploy` проверяет подпись (`minisign -Vm`); при несовпадении релиз отклоняется, слот не запускается, трафик не переключается.
+`deploy HASH` downloads the archive (https only, `{sha}` is replaced with the hash) into the free slot directory of the project user, starts that slot's systemd unit, waits for readiness and switches Caddy; a rollback works as for containers. The slot port is passed in the `PORT` variable. `exec[0]` is relative to the release directory unless it starts with `/`; `$` and `%` in arguments are not expanded. The signature is mandatory: CI signs the archive with a minisign key (`minisign -Sm app-HASH.tar.gz`, putting `app-HASH.tar.gz.minisig` next to it), and the project description holds only the public key. Before unpacking, `deploy` verifies the signature (`minisign -Vm`); on a mismatch the release is rejected, the slot is not started and traffic is not switched.
 
-## Несколько серверов
+### compose and persistent data
 
-Проект живёт на одном сервере, у каждого сервера свой `lite`. Чужие ресурсы подключаются по адресу из реестра серверов (адреса во внутренней сети):
-
-```bash
-sudo lite server add db1 10.0.0.2       # на сервере проекта: имя и адрес сервера с базой
-lite server list
-```
-
-База на другом сервере описывается в проекте так:
-
-```json
-"database": { "engine": "postgres", "server": "db1", "port": 5432, "password_secret": "secret://db_password", "connection_format": "url" }
-```
-
-Роль и база называются как проект (дефисы заменены на `_`). На сервере с базой их создаёт и открывает владелец:
-
-```bash
-echo ПАРОЛЬ | sudo lite pg create-db shop shop --password-stdin
-sudo lite pg listen 10.0.0.2
-sudo lite pg allow shop shop АДРЕС_СЕРВЕРА_ПРОЕКТА
-```
-
-Тот же пароль передаётся проекту как секрет `db_password`. Строка подключения идёт по сети только с шифрованием (`sslmode=require`).
-
-## Копии настроек и секретов
-
-Секреты проектов лежат на сервере в открытом виде (файлы 600 под root), поэтому в копию они идут только зашифрованными ключом, закрытая часть которого есть только у вас. Потеря сервера не уносит ключ, а утечка бакета не раскрывает секреты.
-
-```bash
-age-keygen -o lite-backup.key                    # на вашем компьютере; файл храните вне сервера
-sudo lite backup setup age1...                   # публичная часть из вывода age-keygen
-sudo lite backup run                             # настройки + секреты (шифруются), базы pg, отправка в Backblaze, если настроен
-sudo lite backup schedule on                     # ежедневно около 03:00
-```
-
-Без ключа `lite backup run` отказывает, а `lite verify` сообщает об ошибке, если на сервере есть секреты, а копии не настроены. В копию не входят ключ исполнителя и ключи Backblaze: на новом сервере они выпускаются заново.
-
-**После потери сервера:**
-
-```bash
-sudo lite init ...                               # новый сервер, плагины
-sudo lite backblaze install                      # ключи Backblaze выпустите заново в консоли
-printf '%s\n%s\n' ID КЛЮЧ | sudo lite backblaze setup БАКЕТ ПРЕФИКС --yes
-sudo lite backblaze fetch config                 # скачать копии настроек
-cat lite-backup.key | sudo lite backup restore config-ДАТА.tar.gz.age --identity-stdin --yes
-sudo lite backblaze fetch pg
-sudo lite pg create-db БАЗА РОЛЬ                 # затем: sudo lite pg restore БАЗА ФАЙЛ
-```
-
-После этого `deploy` каждого проекта разворачивает его заново. Копии баз пока не шифруются (шифрование дампов отключаемое по замыслу, но не реализовано); не отправляйте их в бакет, которому не доверяете.
-
-## Создание проекта в интерфейсе
-
-В интерфейсе (`lite-deploy ui`) раздел «Новый проект»: имя, база (на этом или другом сервере), реестр образов, компоненты (контейнер или процесс на сервере), сайты, ключ CI. «Проверить план» строит план и показывает шаги без изменений на сервере; «Создать проект» применяет его. Значения секретов вводятся в форме и шифруются на вашем компьютере открытым ключом исполнителя: на сервер уходит только шифртекст, в описание проекта значения не попадают. Если описание изменилось после просмотра, создание отклоняется и просит построить план заново.
-
-Из командной строки то же делает `lite-deploy project create`.
-
-## Исправление найденного
-
-```bash
-lite verify                # только чтение
-sudo lite fix --dry-run    # что будет исправлено автоматически
-sudo lite fix              # то же, что verify --autofix; выполняет только безопасные исправления
-```
-
-Автоматически исправляются настройка SSH, автообновлений, sysctl и fail2ban, таймеры копий и установка нужных проектам плагинов. Файервол, пользователи, ключи, смена пакетов и всё, что требует вашего значения, только перечисляются как «вручную».
-
-## compose и постоянные данные
-
-Отдельного вида `compose` нет: его заменяет `kind: unit`. Архив релиза содержит `compose.yml`, а команды такие:
+There is no separate `compose` kind: `kind: unit` replaces it. The release archive contains `compose.yml`, and the commands are:
 
 ```json
 "api": {
@@ -286,32 +222,81 @@ sudo lite fix              # то же, что verify --autofix; выполня�
 }
 ```
 
-В `compose.yml` порт публикуется как `127.0.0.1:${PORT}:8080`. Поле `data` создаёт постоянные каталоги, общие для слотов blue и green и переживающие выкатки: процесс видит их в переменных `LITE_DATA_<ИМЯ>`, контейнер в `/data/<имя>`.
+In `compose.yml` the port is published as `127.0.0.1:${PORT}:8080`. The `data` field creates persistent directories shared by the blue and green slots that survive deploys: a process sees them in the `LITE_DATA_<NAME>` variables, a container at `/data/<name>`.
 
-## Что не делается
+## Creating a project in the interface
 
-- **Docker.** Запрещён: доступ к демону Docker равен root на сервере и ломает изоляцию проектных пользователей. Контейнеры только `podman` и Quadlet; `lite package` не ставит пакеты Docker, а `lite verify` предупреждает, если он установлен.
-- **Общие каталоги и сокеты между проектами (отложено).** У каждого проекта свой пользователь и свои идентификаторы пользователей в rootless podman; общий доступ потребовал бы групп и привязки идентификаторов, и без проверки на сервере это небезопасно. Данные одного проекта (`data`) работают.
+The interface (`lite-deploy ui`) has a "New project" section: the name, the database (on this or another server), the image registry, the components (a container or a process on the server), the sites and the CI key. "Preview plan" builds the plan and shows the steps with no changes on the server; "Create project" applies it. Secret values are typed in the form and encrypted on your computer with the executor public key: only ciphertext goes to the server, and the values never enter the project description. If the description changed after the preview, creation is rejected and asks for a new plan.
 
-## Без root
+From the command line the same is done by `lite project create FILE` (it shows a preview and asks for confirmation).
 
-Для повседневной работы root и `sudo` не нужны. Администратор (группа `sudo` или `wheel`) запускает команды обычным пользователем: если команде нужны права, CLI передаёт её агенту, а исполнитель (запускается systemd от root на одну команду) выполняет её. Исполнитель принимает только фиксированный список действий и проверяет параметры, произвольный shell от root не выполняется. Пароли и ключи для таких команд передаются через stdin (`echo ПАРОЛЬ | lite pg password РОЛЬ --password-stdin`), в аргументы и список процессов они не попадают.
+## Fixing what was found
 
-Root нужен только для `lite init` (первая настройка сервера) и установки. Все примеры выше с `sudo` работают и без него: `sudo` можно опустить.
-
-## Копии: шифрование дампов и места хранения
-
-```bash
-sudo lite backup setup age1... --encrypt-dumps   # дампы баз тоже шифруются; на сервере только публичная часть
-lite pg restore БАЗА БАЗА-ДАТА.dump.age --identity-stdin < lite-backup.key
+```sh
+lite verify                # read-only
+lite fix --dry-run         # what will be fixed automatically
+lite fix                   # the same as verify --autofix; runs only the safe fixes
 ```
 
-Места хранения вне сервера работают одинаково (команды `install`, `setup`, `status`, `upload`, `list`, `fetch`, `schedule`); `lite backup run` отправляет копии во все настроенные:
+Automatic fixes cover SSH, automatic updates, sysctl and fail2ban, the backup timers and installing the plugins projects need. The firewall, users, keys, package changes and anything that needs a value from you are only listed as "manual".
 
-| Плагин | Настройка (ключи только со stdin) |
+## Backups
+
+Project secrets lie on the server in clear text (files with mode 600 under root), so they enter a backup only encrypted with a key whose private part only you have. Losing the server does not lose the key, and a leaked bucket does not reveal the secrets.
+
+```sh
+age-keygen -o lite-backup.key                    # on your computer; keep the file off the server
+lite backup setup age1...                        # the public part from the age-keygen output
+lite backup run                                  # settings + secrets (encrypted), pg databases, upload to the configured locations
+lite backup schedule on                          # daily around 03:00
+```
+
+Without a key `lite backup run` refuses, and `lite verify` reports an error if the server has secrets but backups are not configured. The executor key and the storage keys are not part of a backup: they are issued again on a new server.
+
+Database dumps can be encrypted too, and `lite pg backup` / `lite pg restore` work on their own:
+
+```sh
+lite backup setup age1... --encrypt-dumps        # dumps are encrypted as well; the server keeps only the public part
+lite pg backup [DATABASE]                        # a backup in /var/backups/lite-deploy/pg, the latest 7 per database are kept
+lite pg schedule on                              # daily around 03:30 (a systemd timer)
+lite pg backups                                  # the list
+lite pg restore DATABASE FILE                    # restore (the current data is replaced; the database must exist)
+lite pg restore DATABASE FILE.age --identity-stdin < lite-backup.key
+```
+
+`lite verify` warns if a database has no backups and reports an error if the latest is older than 36 hours. Only the databases of `lite` projects (and those created with `lite pg create-db`) are checked; the others are counted in one line.
+
+### Storage locations outside the server
+
+The locations work the same way (commands `install`, `setup`, `status`, `upload`, `list`, `fetch`, `schedule`); `lite backup run` uploads to all configured ones. Uploads use `copy`, never `sync`, so rotating local backups does not erase them at the storage. Retention in the bucket is set by the bucket own rules.
+
+| Plugin | Setup (keys only on stdin) |
 |---|---|
-| `backblaze` | `printf '%s\n%s\n' ID КЛЮЧ \| lite backblaze setup БАКЕТ [ПРЕФИКС] --yes` |
-| `s3` (AWS, Wasabi, MinIO, R2…) | `printf '%s\n%s\n' КЛЮЧ СЕКРЕТ \| lite s3 setup https://АДРЕС БАКЕТ [ПРЕФИКС] --yes` |
-| `sftp` | `{ cat id_ed25519; echo ---; ssh-keyscan -t ed25519 ХОСТ; } \| lite sftp setup ХОСТ ПОЛЬЗОВАТЕЛЬ КАТАЛОГ --yes` |
+| `backblaze` | `printf '%s\n%s\n' KEY_ID KEY \| lite backblaze setup BUCKET [PREFIX] --yes` |
+| `s3` (AWS, Wasabi, MinIO, R2…) | `printf '%s\n%s\n' KEY SECRET \| lite s3 setup https://ADDRESS BUCKET [PREFIX] --yes` |
+| `sftp` | `{ cat id_ed25519; echo ---; ssh-keyscan -t ed25519 HOST; } \| lite sftp setup HOST USER DIRECTORY --yes` |
 
-Для SFTP ключ хоста обязателен: без `known_hosts` соединение не открывается.
+For SFTP the host key is mandatory: without `known_hosts` the connection is not opened. The storage key sits in `/etc/lite-deploy/<plugin>/rclone.conf` (0600, root). Database dumps that are not encrypted travel to the bucket as they are: turn on `--encrypt-dumps` or do not send them to a bucket you do not trust.
+
+### After losing the server
+
+```sh
+sudo lite init ...                               # a new server, plugins
+sudo lite backblaze install                      # issue new Backblaze keys in the console
+printf '%s\n%s\n' ID KEY | lite backblaze setup BUCKET PREFIX --yes
+lite backblaze fetch config                      # download the settings backups
+cat lite-backup.key | lite backup restore config-DATE.tar.gz.age --identity-stdin --yes
+lite backblaze fetch pg
+lite pg create-db DATABASE ROLE                  # then: lite pg restore DATABASE FILE
+```
+
+After this, `deploy` of each project brings it back.
+
+## What is not done
+
+- **Docker.** Forbidden: access to the Docker daemon is root on the server and breaks the isolation of project users. Containers are `podman` and Quadlet only; `lite package` does not install Docker packages, and `lite verify` warns if it is installed.
+- **Shared directories and sockets between projects (postponed).** Every project has its own user and its own user ids in rootless podman; shared access would need groups and id mapping, and without checking on a real server it is not safe. The data of one project (`data`) works.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
