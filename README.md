@@ -1,13 +1,8 @@
 # lite-deploy
 
-A light server setup and deploy system for one server with several projects (a Kubernetes replacement: Quadlet, Caddy and PostgreSQL on the host, blue-green deploys, a restricted SSH key).
+**lite-deploy** sets up a Linux server and deploys your projects to it, with no root needed for daily work. Quadlet containers or plain systemd services, Caddy and PostgreSQL on the host, blue-green deploys without downtime, encrypted backups, and a restricted SSH key for CI.
 
-- `VISION.md`: the idea. `ARCHITECTURE.md`, `SPEC-v0.md`: how it works. `DECISIONS.md`: the decision log. `PLAN.md`: the work queue, start there.
-- `DEPLOY-PATTERN.md`: the general deploy pattern and the project isolation checklist. `COMPARISON-PLAN.md`, `WSL-TEST.md`: the comparison and testing in WSL.
-- `INSTALL-PROD.md`: installing on a brand new server, step by step.
-- `cmd/`, `internal/`, `schemas/`, `testdata/`: the Go code. Checks: `go vet ./...`, `go test -race ./...`, `golangci-lint run ./...`.
-
-The the example project server instructions, the software install scripts and the manual setup journal live in the neighbouring repository `../server-setup`. Its reference files are copied into `testdata/shop/legacy/` to compare against generation.
+Start with [Install](#install), then [Prepare the server](#prepare-the-server). To set up a brand new server end to end, follow [INSTALL-PROD.md](INSTALL-PROD.md). Maintainers: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Install
 

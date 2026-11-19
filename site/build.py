@@ -20,19 +20,8 @@ GROUPS = [
     ("Start", [
         ("README.md", "index", "Install", "What it is and how to install it."),
     ]),
-    ("How it works", [
-        ("VISION.md", "vision", "Vision", "Why the project exists, its principles and limits."),
-        ("ARCHITECTURE.md", "architecture", "Architecture", "The parts of the system, security, the threat model."),
-        ("DEPLOY-PATTERN.md", "deploy-pattern", "Deploy pattern", "The restricted key, the gatekeeper, blue-green, the project isolation checklist."),
-        ("SPEC-v0.md", "spec-v0", "Specification v0", "Schemas, the plan, executor actions, CLI commands."),
-    ]),
-    ("Project", [
-        ("DECISIONS.md", "decisions", "Decisions", "A log of the decisions taken, with reasons."),
-        ("REQUIREMENTS.md", "requirements", "Requirements", "What the product must do and the limits of the first version (a draft)."),
-        ("PLAN.md", "plan", "Plan", "The work queue and its state."),
-        ("COMPARISON-PLAN.md", "comparison", "Comparison", "Coolify, Dokploy, Kamal and others."),
-        ("WSL-TEST.md", "wsl-test", "Testing in WSL", "How to test the system on a test server."),
-        ("RELEASING.md", "releasing", "Releasing", "How releases are made and signed."),
+    ("Guides", [
+        ("INSTALL-PROD.md", "install-server", "A new server", "From a bare server to a deployed project, step by step."),
     ]),
 ]
 PAGES = {f: (slug, title) for _, items in GROUPS for f, slug, title, _ in items}
@@ -47,7 +36,16 @@ def link_md(body: str) -> str:
             slug = PAGES[name][0]
             return f'<a href="{"./" if slug == "index" else slug + ".html"}"><code>{name}</code></a>'
         return m.group(0)
-    return CODE_MD.sub(sub, body)
+    body = CODE_MD.sub(sub, body)
+
+    def href(m):
+        name = m.group(1)
+        if name in PAGES:
+            slug = PAGES[name][0]
+            return f'href="{"./" if slug == "index" else slug + ".html"}"'
+        return f'href="{REPO}/blob/main/{name}"'
+    # plain links to repository documents: a site page if there is one, otherwise the file on GitHub
+    return re.sub(r'href="([A-Za-z0-9_.-]+\.md)"', href, body)
 
 
 def wrap_tables(body: str) -> str:
@@ -84,7 +82,7 @@ def page(slug: str, title: str, body: str, src: str | None) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(full_title)}</title>
-<meta name="description" content="A light server setup and deploy system for one VDS with several projects.">
+<meta name="description" content="Set up a Linux server and deploy projects to it, with no root needed for daily work.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
