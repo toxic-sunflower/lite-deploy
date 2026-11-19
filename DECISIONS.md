@@ -207,3 +207,5 @@ Taken from the documentation of the projects themselves, 2026-10-29:
 
 **D-73. High-level commands and a UI-first path.** The path for the target user is: install `lite`, run `lite init`, hand over the key, then use only the UI; the server is protected by `init` itself. The terminal stays supported but is never required. `lite` commands express goals, not system tools: low-level steps such as fail2ban, sysctl, automatic updates or SSH settings are internal parts of one goal and are not part of the everyday commands. Status: accepted by the owner (2026-11-20).
 
+**D-74. A separate UI-only client.** The person's computer gets a small program with only the interface, started by a double click, not the whole product. It reaches the server over SSH and opens nothing to the internet. Status: accepted by the owner (2026-11-20).
+
