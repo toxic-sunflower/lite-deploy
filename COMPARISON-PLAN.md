@@ -1,47 +1,47 @@
-# План сравнения с аналогами (по первичным источникам)
+# Plan for comparing with alternatives (from primary sources)
 
-(записано 2026-10-29; сравнение откладывалось: из облачной сессии были закрыты сайты документации)
+(written 2026-10-29; the comparison was postponed: the documentation sites were blocked from the cloud session)
 
-## Зачем
+## Why
 
-Понять по документации и коду самих проектов, делать ли из этого инструмента продукт или хватит набора скриптов. Обзоры сторонних авторов и вендоров как основу выводов не используем.
+To understand, from the documentation and the code of the projects themselves, whether to turn this tool into a product or whether a set of scripts is enough. Reviews by third-party authors and vendors are not used as the basis of conclusions.
 
-## Контекст ниши (из обсуждения)
+## Context of the niche (from the discussion)
 
-- Целевой пользователь: купил VDS, написал или навайбкодил код, хочет задеплоиться без терминала.
-- Возможный интерфейс: ИИ-агент пользователя (скилл или MCP) управляет сервером через API агента; панель вторична.
-- Состояние и секреты хранятся только на сервере, не в GitHub или GitLab; управляем в том числе БД и строками подключения.
-- Cloudflare Tunnel как основа публикации; агент сам ничего не слушает наружу.
-- Плагины: Caddy, Postgres, Podman и Docker. Мультисерверность позже.
+- The target user: bought a VDS, wrote or vibe-coded some code, wants to deploy without a terminal.
+- A possible interface: the user's AI agent (a skill or MCP) manages the server through the agent API; a panel is secondary.
+- State and secrets are kept only on the server, not in GitHub or GitLab; databases and connection strings are managed too.
+- Cloudflare Tunnel as the basis of publishing; the agent itself listens on nothing outward.
+- Plugins: Caddy, Postgres, Podman and Docker. Multi-server later.
 
-## Кого сравниваем и где смотреть
+## Whom we compare and where to look
 
-| Проект | Документация | Репозиторий |
+| Project | Documentation | Repository |
 |---|---|---|
 | Coolify | https://coolify.io/docs | coollabsio/coolify |
 | Dokploy | https://docs.dokploy.com | Dokploy/dokploy |
 | Kamal | https://kamal-deploy.org | basecamp/kamal |
-| Dokku (если останется бюджет) | https://dokku.com/docs | dokku/dokku |
-| CapRover (если останется бюджет) | https://caprover.com/docs | caprover/caprover |
+| Dokku (if the budget allows) | https://dokku.com/docs | dokku/dokku |
+| CapRover (if the budget allows) | https://caprover.com/docs | caprover/caprover |
 
-## Критерии
+## Criteria
 
-1. Под каким пользователем работает панель или агент на хосте и что может сделать с хостом (root, группа docker, доступ к сокету).
-2. Поддержка Podman и rootless-режима.
-3. Секреты: где лежат, шифруются ли, попадают ли в логи и в сборку.
-4. Управление БД и строками подключения или только контейнерами.
-5. Что слушает наружу; работа с Cloudflare Tunnel.
-6. Есть ли API или MCP для ИИ-агента и какие там ограничения прав.
-7. Расход ресурсов на пустом сервере.
-8. Где хранится состояние, есть ли бэкап и восстановление.
+1. Which user the panel or agent runs as on the host and what it can do to the host (root, the docker group, access to the socket).
+2. Support for Podman and rootless mode.
+3. Secrets: where they live, whether they are encrypted, whether they reach logs and builds.
+4. Management of databases and connection strings, or containers only.
+5. What listens outward; working with Cloudflare Tunnel.
+6. Whether there is an API or MCP for an AI agent and what its permission limits are.
+7. Resource use on an empty server.
+8. Where the state is kept, whether there is backup and restore.
 
-## Порядок работы (чтобы не тратить лишнего)
+## Order of work (so as not to waste effort)
 
-1. Сначала Coolify, Dokploy, Kamal, только документация по восьми критериям.
-2. Код читать точечно, только где документация не отвечает (прежде всего критерий 1).
-3. После первой пары проектов показать промежуточный итог и решить, продолжать ли.
-4. Итог: таблица «что есть, чего нет, где ниша» и вывод: скрипты или продукт.
+1. First Coolify, Dokploy, Kamal, documentation only, against the eight criteria.
+2. Read code selectively, only where the documentation does not answer (above all criterion 1).
+3. After the first pair of projects show an interim result and decide whether to continue.
+4. The result: a table "what exists, what does not, where the niche is" and a conclusion: scripts or a product.
 
-## Что мешало
+## What got in the way
 
-Сетевая политика облачной среды блокировала `coolify.io`, `docs.dokploy.com`, `caprover.com`, `dokku.com`, `kamal-deploy.org`. Чтобы продолжить, в настройках среды (Network access) добавить эти домены в Allowed domains или поднять уровень доступа, затем начать новую сессию, потому что изменения, судя по всему, не применяются к запущенной.
+The network policy of the cloud environment blocked `coolify.io`, `docs.dokploy.com`, `caprover.com`, `dokku.com`, `kamal-deploy.org`. To continue, add these domains to Allowed domains in the environment settings (Network access) or raise the access level, then start a new session, because the changes apparently do not apply to a running one.

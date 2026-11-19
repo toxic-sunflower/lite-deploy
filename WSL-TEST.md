@@ -1,41 +1,44 @@
-# Проверка S4 в WSL (тестовый сервер)
+# Testing S4 in WSL (a test server)
 
-Цель: убедиться, что `lite-deploy project create` создаёт проект с нуля, повторный `apply` даёт `unchanged`, и найти расхождения между подменами в тестах и настоящей системой. Проект `demo-app` (`testdata/wsl-test/project.json`) без реестра и ключа CI: образа у него нет, юниты только записываются и перечитываются, не запускаются.
+Goal: make sure `lite-deploy project create` creates a project from scratch, that a repeated `apply` gives `unchanged`, and find differences between the doubles in the tests and the real system. The project `demo-app` (`testdata/wsl-test/project.json`) has no registry and no CI key: it has no image, the units are only written and re-read, not started.
 
-**Только тестовая машина.** Боевой сервер (`187.7.72.122`) не трогать.
+**A test machine only.** Never touch the production server.
 
-## 0. Что должно быть в WSL
+Note: since v0.6 the commands below can also be run as a regular administrator without `sudo` (the CLI hands privileged commands to the agent); `lite project create FILE --ciphertext name=file` does a preview, asks for confirmation and applies in one go. The step-by-step `plan` and `apply` flow below is kept because it shows every step.
 
-| Что | Проверка | Если нет |
+## 0. What WSL must have
+
+| What | Check | If missing |
 |---|---|---|
-| systemd включён | `cat /etc/wsl.conf` содержит `[boot]` и `systemd=true`; `systemctl is-system-running` отвечает `running` или `degraded` | добавить в `/etc/wsl.conf`, затем в PowerShell `wsl --shutdown` |
+| systemd enabled | `cat /etc/wsl.conf` contains `[boot]` and `systemd=true`; `systemctl is-system-running` answers `running` or `degraded` | add it to `/etc/wsl.conf`, then run `wsl --shutdown` in PowerShell |
 | Ubuntu 24.04+ | `lsb_release -rs` | |
-| podman 4.4 или новее | `podman --version` | 4.9 из репозитория Ubuntu 24.04 подходит: будет только предупреждение «проверено только на 5.x». Если юнит Quadlet окажется несовместим, это проявится на шаге `reload_user_units`: пришлите вывод |
-| Caddy с API на `localhost:2019` | `curl -s localhost:2019/config/ \| head -c 50` | `sudo bash install.sh --only caddy` |
-| `Caddyfile` с импортом | `grep conf.d /etc/caddy/Caddyfile` показывает `import /etc/caddy/conf.d/*.caddy` | то же |
-| PostgreSQL | `sudo -u postgres psql -c 'select 1'` | `sudo bash install.sh --only postgres` |
-| ufw (необязательно) | `sudo ufw status` | только предупреждение |
-| Go 1.24 | `go version` | для сборки |
+| podman 4.4 or newer | `podman --version` | 4.9 from the Ubuntu 24.04 repository is fine: there will only be the warning "only tested on 5.x". If a Quadlet unit turns out to be incompatible, it shows up at the `reload_user_units` step: send the output |
+| Caddy with the API on `localhost:2019` | `curl -s localhost:2019/config/ \| head -c 50` | `sudo lite init --user YOU --plugins caddy` |
+| A `Caddyfile` with the import | `grep conf.d /etc/caddy/Caddyfile` shows `import /etc/caddy/conf.d/*.caddy` | the same |
+| PostgreSQL | `sudo -u postgres psql -c 'select 1'` | `sudo lite init --user YOU --plugins pg` |
+| ufw (optional) | `sudo ufw status` | only a warning |
+| Go 1.24 | `go version` | for building |
 
-## 1. Сборка и установка
+## 1. Build and install
 
 ```bash
-git fetch origin claude/determined-bardeen-w8wa3y && git checkout claude/determined-bardeen-w8wa3y
+git fetch origin && git checkout main
 go build -o lite-deploy ./cmd/lite-deploy
 sudo install -m 755 lite-deploy /usr/local/bin/lite-deploy
-sudo lite-deploy init
+sudo lite-deploy agent install
+sudo lite init --user YOU --ufw keep
 ```
 
-## 2. Секрет и план
+## 2. A secret and a plan
 
-Значение секрета читается со стандартного ввода (в аргументы и историю не попадает):
+The secret value is read from standard input (it does not get into arguments or history):
 
 ```bash
-printf 'любое-тестовое-значение' | sudo lite-deploy secret encrypt demo-app app_secret > /tmp/ct_app_secret
-sudo lite-deploy project plan testdata/wsl-test/project.json --ciphertext app_secret=/tmp/ct_app_secret --out /tmp/plan.json
+printf 'any-test-value' | lite-deploy secret encrypt demo-app app_secret > /tmp/ct_app_secret
+lite-deploy project plan testdata/wsl-test/project.json --ciphertext app_secret=/tmp/ct_app_secret --out /tmp/plan.json
 ```
 
-Ожидается 13 шагов (`s01 verify_host` … `s13 record_project`). Изменений на сервере нет.
+13 steps are expected (`s01 verify_host` … `s13 record_project`). Nothing on the server changes.
 
 ## 3. Dry-run
 
@@ -43,17 +46,17 @@ sudo lite-deploy project plan testdata/wsl-test/project.json --ciphertext app_se
 sudo lite-deploy apply /tmp/plan.json --dry-run --project-file testdata/wsl-test/project.json
 ```
 
-Ожидается: почти все шаги `would_change`, ни одного `would_fail`. Если `verify_host` пишет `would_fail`, в тексте ошибки перечислено, чего не хватает (пункт 0). Проверьте, что dry-run ничего не создал: `id demo-app` должен сказать «нет такого пользователя».
+Expected: almost all steps `would_change`, not a single `would_fail`. If `verify_host` says `would_fail`, the error text lists what is missing (item 0). Check that the dry-run created nothing: `id demo-app` must say "no such user".
 
-## 4. Применение
+## 4. Applying
 
 ```bash
 sudo lite-deploy apply /tmp/plan.json --project-file testdata/wsl-test/project.json
 ```
 
-Введите `yes`. Ожидается: все шаги `changed`. При ошибке `apply` остановится на первом упавшем шаге (остальные `skipped`); исправьте причину и запустите ту же команду снова (план живёт 24 часа).
+Type `yes`. Expected: all steps `changed`. On an error `apply` stops at the first failed step (the rest are `skipped`); fix the cause and run the same command again (a plan lives for 24 hours).
 
-Проверки результата:
+Checking the result:
 
 ```bash
 id demo-app && ls -la /home/demo-app/.config/lite-deploy/env /home/demo-app/.config/containers/systemd
@@ -65,22 +68,22 @@ sudo tail -5 /var/lib/lite-deploy/journal.jsonl
 sudo grep -B1 -A3 'lite-deploy:begin' /etc/postgresql/*/main/pg_hba.conf
 ```
 
-Номера портов смотрите в плане (`s09`), 18002 это пример.
+Take the port numbers from the plan (`s09`); 18002 is an example.
 
-## 5. Повтор (главная проверка)
+## 5. Repeat (the main check)
 
 ```bash
 sudo lite-deploy apply /tmp/plan.json --yes --project-file testdata/wsl-test/project.json
 sudo lite-deploy apply /tmp/plan.json --dry-run
 ```
 
-Ожидается: везде `unchanged`. Любой `changed` или `would_change` это ошибка идемпотентности: пришлите вывод.
+Expected: `unchanged` everywhere. Any `changed` or `would_change` is an idempotency error: send the output.
 
-## 6. Что прислать
+## 6. What to send
 
-Выводы шагов 3, 4 и 5 целиком (секретов в них нет; значения не печатаются) и результат команд проверки из шага 4. Особенно интересны: `systemd-run --machine` (шаг `reload_user_units`), `list-unit-files` для Quadlet, `runuser -u postgres psql`, `visudo -cf`.
+The complete output of steps 3, 4 and 5 (there are no secrets in them; values are not printed) and the result of the check commands from step 4. Of particular interest: `systemd-run --machine` (the `reload_user_units` step), `list-unit-files` for Quadlet, `runuser -u postgres psql`, `visudo -cf`.
 
-## 7. Очистка
+## 7. Cleanup
 
 ```bash
 sudo rm -f /etc/caddy/conf.d/demo-app-*.caddy /etc/caddy/upstreams/demo-app-*.caddy /etc/sudoers.d/lite-deploy-demo-app
