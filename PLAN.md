@@ -1,137 +1,131 @@
-# План работы и сессий
+# Work and session plan
 
-Проект: **lite-deploy** (рабочее название). Каждая сессия короткая и решает одну задачу. В конце сессия обновляет `DECISIONS.md` и этот файл, делает коммит и пуш в ветку. Pull request без просьбы владельца не создаётся.
+Project: **lite-deploy** (a working name). Every session is short and solves one task. At the end a session updates `DECISIONS.md` and this file, commits and pushes to the branch. A pull request is not created without the owner's request.
 
-## Карта документов
+## Status on 2026-11-20
 
-| Файл | О чём |
+The code of S1–S6 and S9 is done, the plugin mechanism and the plugins `package`, `security`, `firewall`, `caddy`, `podman`, `pg`, `redis`, `server`, `backup`, `backblaze`, `s3`, `sftp` are done, and so are `liteup`, `lite fix`, `kind: unit` components and creating a project from the interface (see `REQUIREMENTS.md`, section 2, for the exact state and what is checked on a server). Release `v0.6.1` is published. What remains is running it all on a real server (`INSTALL-PROD.md`), the MCP server (S10) and the skill (S11). The queue below is the original plan and is kept for the history of decisions.
+
+## The map of documents
+
+| File | What it is about |
 |---|---|
-| `VISION.md` | Замысел, принципы, границы |
-| `ARCHITECTURE.md` | Как устроено (схема, части, безопасность, модель угроз) |
-| `SPEC-v0.md` | Точная спецификация v0: схемы, план, действия исполнителя, CLI |
-| `cmd/`, `internal/` | Код (Go): `project`, `plan`, `actions`, `render`, `host`, `deploy` (пока разбор привратника), `cli`, `schema`, `secrets` (age, хранилище), `config`, `lint` (проверки правил репозитория) |
-| `schemas/` | JSON Schema, генерируются из Go-типов (`go test ./internal/cli -update`) |
-| `testdata/shop/` | `project.json` и golden-файлы юнитов, сайтов, sudoers (`go test ./internal/render -update`) |
-| `DECISIONS.md` | Что решили, почему, статус (D-01…D-56) |
-| `PLAN.md` | Этот файл: очередь сессий |
-| `COMPARISON-PLAN.md` | План сравнения с аналогами (выполнен частично) |
-| `WALKTHROUGH.md`, `DEPLOY-PATTERN.md` | Ручной проход и схема деплоя, эталон поведения |
-| `projects/shop/` | Реальный проект, эталон для сценариев |
+| `VISION.md` | The idea, principles, limits |
+| `ARCHITECTURE.md` | How it is built (the scheme, parts, security, the threat model) |
+| `SPEC-v0.md` | The exact v0 specification: schemas, the plan, executor actions, the CLI |
+| `REQUIREMENTS.md` | What the product must do, the current state |
+| `INSTALL-PROD.md` | Installing on a new server, step by step |
+| `cmd/`, `internal/` | The code (Go): `project`, `plan`, `actions`, `render`, `host`, `deploy`, `cli`, `schema`, `secrets` (age, the store), `config`, `lint` (checks of repository rules), `builtin` (plugins), `agent`, `executor`, `ui` |
+| `schemas/` | JSON Schema, generated from the Go types (`go test ./internal/cli -update`) |
+| `testdata/shop/` | `project.json` and golden files of units, sites, sudoers (`go test ./internal/render -update`) |
+| `DECISIONS.md` | What was decided, why, the status (D-01…D-63) |
+| `PLAN.md` | This file: the session queue |
+| `COMPARISON-PLAN.md` | The plan for comparing with alternatives (partly done) |
+| `DEPLOY-PATTERN.md` | The deploy scheme, the reference behaviour |
+| `RELEASING.md`, `WSL-TEST.md` | Making releases; testing in WSL |
 
-## Как начинать любую сессию
+## How to start any session
 
-1. Прочитать `VISION.md`, `ARCHITECTURE.md`, `DECISIONS.md`, `PLAN.md`, `SPEC-v0.md`.
-2. Взять первую невыполненную сессию из списка ниже, если владелец не назвал другую.
-3. Работать короткими шагами, одно действие за раз, каждую команду с объяснением, без аллегорий. Не использовать «не буду», допустимо «не могу, потому что …». Не объяснять то, что владелец знает (например, что такое `sudo`).
-4. Секреты не просить в чат и не печатать.
-5. Любое действие на реальном сервере только с явного разрешения владельца. Реальный сервер (`187.7.72.122`) трогать нельзя, пока не сказано иначе: там работает the example project. Тесты идут на отдельных серверах и в WSL владельца.
-6. Решения не пересматривать без причины: они в `DECISIONS.md`. Если что-то нужно изменить, предложить изменение и записать новое решение.
-7. В конце: обновить файлы, закоммитить, запушить, написать итог в три-пять строк.
+1. Read `VISION.md`, `ARCHITECTURE.md`, `DECISIONS.md`, `PLAN.md`, `SPEC-v0.md`.
+2. Take the first unfinished session from the list below, unless the owner names another.
+3. Work in short steps, one action at a time, every command with an explanation, no allegories. Do not use "I won't"; "I can't, because …" is acceptable. Do not explain what the owner knows (for example, what `sudo` is).
+4. Do not ask for secrets in the chat and do not print them.
+5. Any action on a real server only with the owner's explicit permission. Do not touch the production server unless told otherwise. Tests go to separate servers and the owner's WSL.
+6. Do not revisit decisions without a reason: they are in `DECISIONS.md`. If something has to change, propose the change and record a new decision.
+7. At the end: update the files, commit, push, write a summary in three to five lines.
 
-Проверки перед пушем: `go vet ./...`, `go test -race ./...`, `golangci-lint run ./...`.
+Checks before pushing: `go vet ./...`, `go test -race ./...`, `golangci-lint run ./...`.
 
-Заготовка первого сообщения для новой сессии:
+A template of the first message for a new session:
 
-> Прочитай VISION.md, ARCHITECTURE.md, DECISIONS.md, PLAN.md и SPEC-v0.md. Делаем сессию S<номер>. Идём короткими шагами.
+> Read VISION.md, ARCHITECTURE.md, DECISIONS.md, PLAN.md and SPEC-v0.md. We are doing session S<number>. Let's go in short steps.
 
-## Заметки об окружении
+## Notes on the environment
 
-- В облачной среде есть Go 1.24 и systemd, нет Podman. Логику (разбор конфига, построение плана, проверку ввода, генерацию схем) можно писать и тестировать здесь. Применение с rootless-контейнерами нужно проверять на отдельном сервере или в WSL владельца.
-- Инструмент `WebFetch` не видит домены, разрешённые в настройках сети. Работает `curl` через прокси. Для чтения документации нужно разрешить домены в настройках среды (Network access).
-- Тестовый сервер нужен не позже сессии S4.
-- Модули Go ставятся, если в Allowed domains среды есть `proxy.golang.org` и `sum.golang.org` (с галкой «Allow package managers»). Внутри сессии нужно сбросить `NO_PROXY`: `export NO_PROXY=localhost no_proxy=localhost`, иначе `go` идёт напрямую и не находит DNS. Проверку сумм (`GOSUMDB`) не отключать. Зависимости: `filippo.io/age`, `golang.org/x/term`. Схемы генерирует собственный небольшой рефлектор в `internal/schema` (без внешних библиотек).
-- `golangci-lint` установлен (v2.5), конфигурация `.golangci.yml`.
-- Ветка разработки после слияния PR перезапускается от `main` (то же имя).
+- The cloud environment has Go 1.24 and systemd and no Podman. The logic (config parsing, plan building, input validation, schema generation) can be written and tested there. Applying with rootless containers has to be checked on a separate server or in the owner's WSL.
+- The `WebFetch` tool does not see domains allowed in the network settings. `curl` works through a proxy. To read documentation, domains must be allowed in the environment settings (Network access).
+- A test server is needed no later than session S4.
+- Go modules install if the environment's Allowed domains include `proxy.golang.org` and `sum.golang.org` (with "Allow package managers" ticked). Inside a session `NO_PROXY` must be reset: `export NO_PROXY=localhost no_proxy=localhost`, otherwise `go` goes directly and finds no DNS. Do not disable checksum verification (`GOSUMDB`). Dependencies: `filippo.io/age`, `golang.org/x/term`. The schemas are generated by our own small reflector in `internal/schema` (no external libraries).
+- `golangci-lint` is installed (v2.5), configured in `.golangci.yml`.
+- After a PR is merged, the development branch is restarted from `main` (the same name).
 
-## Цель: продукт (v1)
+## The goal: the product (v1)
 
-Продукт это v1 (D-47): агент-демон с исполнителем по запросу (режимы А и Б), UI, MCP для ИИ, секреты только на запись с подтверждением подписью, установка на пустой сервер одной командой. Первая версия (v0, S3–S5) это ступень внутри пути: проверить ядро на живом проекте, прежде чем строить на нём демон. Отдельным релизом v0 не выпускается.
+The product is v1 (D-47): an agent daemon with an on-request executor (modes A and B), a UI, an MCP for AI, secrets write-only with confirmation by a signature, installation on an empty server with one command. The first version (v0, S3–S5) is a step on the way: to check the core on a live project before building a daemon on it. v0 is not released separately.
 
-Приоритет проекта: ИИ (MCP) и UI.
+The project priority: AI (MCP) and the UI.
 
-## Очередь сессий
+## The session queue
 
-### S1. Закрыть оставшиеся решения (выполнена 2026-11-03)
-Принятые решения: D-25…D-38 в `DECISIONS.md`.
+### S1. Close the remaining decisions (done 2026-11-03)
+Decisions taken: D-25…D-38 in `DECISIONS.md`.
 
-### S2. Спецификация v0 (выполнена 2026-11-03)
-- Результат: `SPEC-v0.md`; решения D-39…D-46 приняты владельцем.
+### S2. The v0 specification (done 2026-11-03)
+- Result: `SPEC-v0.md`; decisions D-39…D-46 accepted by the owner.
 
-### S3. Каркас репозитория и чистая логика (выполнена 2026-11-03)
-- Сделано: модуль `github.com/toxic-sunflower/lite-deploy`, структура по `SPEC-v0.md`, JSON Schema из Go-типов (`schemas/`), разбор и проверка описания проекта, список из 14 действий с проверкой параметров, построение плана с выбором портов и секретов, канонический JSON (RFC 8785) и хэш, проверка плана (`Verify`), `host.Runner` и `FS` с подменами, шаблоны Quadlet, Caddy, sudoers, `authorized_keys` с golden-файлами, разбор команд привратника, CLI (`version`, `schema`, `project validate|plan|list`, `apply --dry-run`) с конвертом `--json` и кодами выхода, CI и линтер. Остаётся для S4: применение шагов, сравнение с системой в dry-run (`would_change`/`unchanged`).
-- Секреты (раздел 7 SPEC): шифрование `age` с привязкой к проекту и имени, хранилище значений (файлы 600, каталоги 700), `lite-deploy init` (ключ исполнителя, не перезаписывается), `secret pubkey|encrypt|set|list`, чтение `config.json`. Значение секрета берётся только со стандартного ввода или скрыто с терминала.
-- За рамками S3 по этому же плану (не пропущено): применение шагов и `project create` (S4), `deploy`/`rollback`/`status` и привратник как команда `gate` (S5; разбор команд готов и протестирован). Команды этих сессий возвращают `not_implemented`.
-- Было целью: Go-модуль `lite-deploy`, структура каталогов (по `SPEC-v0.md`), линтер, CI, JSON Schema, разбор описания проекта, проверка ввода, построение плана, режим dry-run. Всё проверяется тестами здесь, без сервера.
-- Результат: код и тесты; `go test -race` зелёный.
-- Не делаем: применение плана.
+### S3. The repository skeleton and pure logic (done 2026-11-03)
+- Done: the module `github.com/toxic-sunflower/lite-deploy`, the structure from `SPEC-v0.md`, JSON Schema from the Go types (`schemas/`), parsing and validating a project description, a list of 14 actions with parameter validation, plan building with port and secret selection, canonical JSON (RFC 8785) and the hash, plan verification (`Verify`), `host.Runner` and `FS` with doubles, templates of Quadlet, Caddy, sudoers, `authorized_keys` with golden files, parsing of gatekeeper commands, the CLI (`version`, `schema`, `project validate|plan|list`, `apply --dry-run`) with the `--json` envelope and exit codes, CI and the linter.
+- Secrets (SPEC section 7): `age` encryption bound to the project and name, the value store (files 600, directories 700), `lite-deploy init` (the executor key, never overwritten), `secret pubkey|encrypt|set|list`, reading `config.json`. A secret value is taken only from standard input or hidden from the terminal.
 
-### S4. Применение плана (режим А), команда `project create`
-- Сделано (2026-11-04): пакет `internal/executor` с обработчиками всех 14 действий, `apply` и `apply --dry-run` (`would_change`/`unchanged`/`would_fail`), `project create`, журнал, `adopt`, откат файлов Caddy при неудачной проверке; 5 сценариев на подменах (с нуля, повтор без изменений, остановка на ошибке, adopt, утечки секретов). Решения D-53…D-56.
-- Осталось: прогнать на тестовом сервере (с нуля, повторный `apply` = `unchanged`, `adopt` на копии боевой настройки the example project) и поправить расхождения. Особенно проверить: `systemd-run --machine`, формат `list-unit-files` для Quadlet, `runuser -u postgres psql`, `visudo -cf`. Не сделано: предупреждение о правилах `pg_hba` с `all` выше общего (4.3, `provision_postgres`), квота `apply_per_hour`.
-- Старт: S3 даёт `plan.Build/Verify`, `actions.Decode`, `render.*`, `host.Runner`/`FS` (+`FakeRunner`, `MemFS` для тестов). В S4 добавить `Apply`/`DryRun` на каждое действие (`config.json`, `init`, `secret *` и `secrets.Store` уже готовы в S3; `set_secret` расшифровывает ключом `/etc/lite-deploy/exec.age` и пишет в `Store`), заменить `pending` в `apply --dry-run` на `would_change`/`unchanged`.
-- Цель: исполнитель и плагины `base` (проверки), `postgres` (роль и база через unix-сокет), `caddy` (файлы сайта, проверка от пользователя `caddy`, reload), движок `podman` (пользователь, linger, юниты), `lite-deploy apply plan.json`, режим `adopt`.
-- Вход: S3, готовые скрипты `01..04`, `verify.sh`.
-- Результат: работающая команда на тестовом сервере (отдельный сервер или WSL, не боевой).
-- Не делаем: демон, подтверждения.
+### S4. Applying a plan (mode A), the `project create` command
+- Done (2026-11-04): the package `internal/executor` with handlers of all 14 actions, `apply` and `apply --dry-run` (`would_change`/`unchanged`/`would_fail`), `project create`, the journal, `adopt`, rolling back the Caddy files on a failed check; 5 scenarios on doubles (from scratch, a repeat without changes, stopping on an error, adopt, secret leaks). Decisions D-53…D-56. Run on a container and a test WSL on 2026-11-19: from scratch and a repeat `unchanged` confirmed.
+- Not done: the warning about `pg_hba` rules with `all` above the general one (4.3, `provision_postgres`), the `apply_per_hour` quota.
 
-### S5. `deploy`, `rollback`, `status` и привратник (код выполнен 2026-11-13, на тестовом сервере не проверено)
-- Сделано: `internal/deploy` (blue-green, проверка здоровья, откат, flock), команды `deploy`, `rollback`, `status`, `gate`, код `deploy_failed`; 8 сценариев на подменах. Осталось: прогнать на тестовом сервере и поправить расхождения.
-- Цель: привратник как подкоманда `lite-deploy gate`, blue-green из `projects/shop/` в общем виде, блокировка `flock`, проверка `/health/ready`.
-- Результат: выкатка тестового проекта с откатом. Критерий готовности ядра (D-28): the example project ставится и выкатывается через lite-deploy.
+### S5. `deploy`, `rollback`, `status` and the gatekeeper (done 2026-11-13)
+- Done: `internal/deploy` (blue-green, health check, rollback, flock), the commands `deploy`, `rollback`, `status`, `gate`, the `deploy_failed` code; 8 scenarios on doubles. Checked on 2026-11-19 in a container for `kind unit`.
+- The criterion of readiness of the core (D-28): the example project is installed and deployed through lite-deploy.
 
-### S6. Агент-демон и исполнитель по запросу (режим Б; первая версия выполнена 2026-11-13, на сервере не проверено)
-- Сделано: агент (`lite-deploy agent serve`, HTTP/JSON `/v1` поверх unix-сокета, доступ по группе администраторов системы (`sudo` или `wheel`), `SO_PEERCRED`, журнал запросов), исполнитель по запросу (`lite-deploy exec`, socket activation, фиксированный список действий, журнал systemd), клиент `lite-deploy call`, установка агента входит в `install.sh` (вместе с Caddy). UI ходит через агента, `sudo` и `sudoers` для него не нужны. Решение D-63.
-- Осталось: подтверждение опасных действий подписью ключа, квоты, OpenAPI, перевод переключения Caddy при выкатке на сокет исполнителя и удаление правила `sudoers` (D-46), проверка на живом сервере и ужесточение unit исполнителя.
-- Исходная цель:
-- Цель: служба на сокете `/run/lite-deploy/api.sock`, исполнитель через socket activation, журнал, подтверждение подписью ключом, квоты, API `/v1`. Переключение Caddy переходит на сокет исполнителя, правило `sudoers` исчезает (D-46).
-- Результат: те же команды работают через демон; опасные действия требуют подписи.
+### S6. The agent daemon and the on-request executor (mode B; the first version done 2026-11-13)
+- Done: the agent (`lite-deploy agent serve`, HTTP/JSON `/v1` over a unix socket, access by the system administrators group (`sudo` or `wheel`), `SO_PEERCRED`, a request journal), the on-request executor (`lite-deploy exec`, socket activation, a fixed list of actions, the systemd journal), the client `lite-deploy call`, installing the agent is part of the installer. The UI goes through the agent, and neither `sudo` nor `sudoers` is needed for it. Decision D-63. Since v0.6 the CLI also hands privileged commands to the agent (no sudo).
+- Not done: confirming dangerous actions with a key signature, quotas, OpenAPI, moving the Caddy switch on a deploy to the executor socket and removing the `sudoers` rule (D-46), hardening the executor unit.
 
-### S7. Туннель Cloudflare
-- Цель: плагин `tunnel-cloudflare` по правилам из `DEPLOY-PATTERN.md` (отдельный пользователь, токен 600, проверка старых DNS-записей, запасной план на случай сбоя).
+### S7. The Cloudflare tunnel
+- Goal: a plugin `tunnel-cloudflare` following the rules of `DEPLOY-PATTERN.md` (a separate user, a 600 token, checking old DNS records, a fallback plan for a failure).
 
-### S8. Секреты и бэкап
-- Уже сделано в S3: шифрование `age`, хранилище, `secret encrypt|set|list|pubkey`, `init`. Осталось: шифрованный экспорт и восстановление сервера одной командой, ссылки `secret://` в API демона, журнал чтений секрета под root (после S6).
+### S8. Secrets and backup
+- Done: `age` encryption, the store, `secret encrypt|set|list|pubkey`, `init`; the `backup` plugin (settings and secrets encrypted with the owner key, dumps optionally, storage locations); restoring a server (`INSTALL-PROD.md`, README). Not done: `secret://` references in the daemon API, a journal of secret reads as root.
 
-### S9. UI (первая версия выполнена 2026-11-13)
-- Сделано: `lite-deploy ui [--host пользователь@сервер]`: локальная страница на `127.0.0.1` с токеном в адресе, состояние проектов, «Выкатить» (по хэшу коммита) и «Откатить». Работает поверх CLI (на этом компьютере или по SSH), демон S6 для неё не нужен. Осталось: формы из JSON Schema, показ плана, создание проекта в интерфейсе.
-- Цель: `lite-deploy ui` на компьютере владельца, на `127.0.0.1`, формы из JSON Schema, показ плана, работа через API демона (и по SSH в режиме А).
+### S9. The UI (the first version done 2026-11-13)
+- Done: `lite-deploy ui [--host user@server]`: a local page on `127.0.0.1` with a token in the address, the state of projects, "Deploy" (by commit hash) and "Roll back", the firewall section, the plugins and `verify`, and a "New project" form with a plan preview. Not done: forms generated from JSON Schema, checking the page in a real browser.
 
-### Плагин файервола (код выполнен 2026-11-13, на сервере не проверено)
-- Сделано: пакет `internal/firewall` (`ufw status`, `allow`, `remove`, `enable`), команды `lite-deploy firewall …`, раздел «Файервол» в UI (таблица правил, открыть и закрыть порт, включить). Порты SSH (читается из `sshd -T`), 80 и 443 защищены. Изменения требуют `--yes` в CLI и подтверждения в браузере. Решение D-62.
-- Осталось: проверить на живом `ufw` (формат вывода `ufw status` у разных версий), правила по умолчанию в `server-setup` убрать после проверки, плагины `podman` и `postgres` (D-57).
+### The firewall plugin (done 2026-11-13)
+- Done: the package `internal/firewall` (`ufw status`, `allow`, `remove`, `enable`, modes), the `lite firewall …` commands, the "Firewall" section in the UI. The SSH (read from `sshd -T`), 80 and 443 ports are protected. Changes need `--yes` in the CLI and a confirmation in the browser. Decision D-62.
+- Not done: checking on a live `ufw` (the format of `ufw status` in different versions).
 
-### S10. MCP-сервер
-- Цель: тонкий MCP-сервер над API; инструменты из схем; dry-run по умолчанию; опасные действия не выполняются без подтверждения владельца.
+### S10. The MCP server
+- Goal: a thin MCP server over the API; tools from the schemas; dry-run by default; dangerous actions are not executed without the owner's confirmation.
 
-### S11. Установка с нуля, инструкция и скилл
-- Цель: установка на пустую Ubuntu одной проверяемой командой; инструкция «что и зачем ставится» и скилл для ИИ-агента.
-- Вход: `skill/server-setup`, `WALKTHROUGH.md`.
-- Итог: v1.
+### S11. Installing from scratch, instructions and a skill
+- Goal: installing on an empty Ubuntu with one checkable command; instructions "what is installed and why" and a skill for an AI agent.
+- Input: `skill/server-setup`, `WALKTHROUGH.md`.
+- Outcome: v1.
 
-### Позже
-- Пользовательские хуки деплоя и выкатка по расписанию или по новому образу (см. «Пожелания» в `DECISIONS.md`).
-- Docker и Postgres в контейнере как второй вариант плагинов.
-- Песочница для плагинов сообщества (WASM, манифест прав, подписи).
-- Шаблоны приложений.
-- Оркестратор и SaaS-UI (после v1).
-- Несколько серверов.
+### Later
+- User deploy hooks and deploys on a schedule or on a new image (see "Wishes" in `DECISIONS.md`).
+- Docker is forbidden (R-11); Postgres in a container as a second variant of the plugins.
+- A sandbox for community plugins (WASM, a permission manifest, signatures).
+- Application templates.
+- An orchestrator and a SaaS UI (after v1).
+- Several servers (the registry exists, R-26; no scheduling).
 
-## Параллельные задачи (отдельные короткие сессии)
+## Parallel tasks (separate short sessions)
 
-- **C1. Докончить сравнение с аналогами:** Dokploy AI Assistant и API, Dokku, CapRover, поддержка Podman в полном тексте документации, реальный расход памяти. Нужны разрешённые домены.
-- **C2. Закрыть хвосты the example project** из `projects/shop/TODO.md` и `WALKTHROUGH.md`: отключение входа по паролю, Cloudflare Access для админки, запасной план, проверки изоляции и секретов.
-- **C3. Привести старые документы в порядок:** решить, что остаётся внутренними заметками, а что станет публичной документацией.
-- **C4. Переименовать репозиторий в `lite-deploy`** (делает владелец в настройках GitHub).
+- **C1. Finish the comparison with alternatives:** the Dokploy AI Assistant and API, Dokku, CapRover, Podman support in the full text of the documentation, real memory use. Allowed domains are needed.
+- **C2. Close the example project tails** from `projects/shop/TODO.md` and `WALKTHROUGH.md`: disabling password login, Cloudflare Access for the admin panel, the fallback plan, isolation and secret checks.
+- **C3. Tidy up the old documents:** decide what stays as internal notes and what becomes public documentation.
+- **C4. Rename the repository to `lite-deploy`** (the owner does it in the GitHub settings).
 
-## Статус
+## Status
 
-| Сессия | Статус |
+| Session | Status |
 |---|---|
-| Фиксация решений и плана | выполнена (2026-10-30) |
-| S1 | выполнена (2026-11-03) |
-| S2 | выполнена (2026-11-03), `SPEC-v0.md`, D-39…D-46 приняты |
-| S3 | выполнена (2026-11-03) |
-| S4 | код и тесты на подменах готовы (2026-11-04); **осталась проверка на тестовом сервере** (D-53) |
-| S5 – S11 | не начаты, следующая S5 |
-| C1 | частично (Coolify, Dokploy, Kamal: основное) |
-| C4 | не сделана |
+| Fixing decisions and the plan | done (2026-10-30) |
+| S1 | done (2026-11-03) |
+| S2 | done (2026-11-03), `SPEC-v0.md`, D-39…D-46 accepted |
+| S3 | done (2026-11-03) |
+| S4 | done in code and tests (2026-11-04); checked in a container and on a test WSL (2026-11-19) |
+| S5, S6, S9 | done in code; partly checked (2026-11-19) |
+| S7, S10, S11 | not started |
+| S8 | the backup and secret parts done; the daemon API parts not done |
+| C1 | partly (Coolify, Dokploy, Kamal: the main parts) |
+| C4 | not done |
