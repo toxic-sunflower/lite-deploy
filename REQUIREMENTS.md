@@ -1,154 +1,150 @@
-# Требования и границы (обновлено 2026-11-17)
+# Requirements and limits (updated 2026-11-20)
 
-Этот файл фиксирует, что должен делать продукт, что входит в первую рабочую версию и что нет. Он главнее `PLAN.md`: план перестраивается под него. Раздел 0 это короткая сводка согласованного, чтобы не терять нить.
+This file records what the product must do, what is in the first working version and what is not. It outranks `PLAN.md`: the plan is rebuilt around it. Section 0 is a short summary of what has been agreed, so the thread is not lost.
 
-## 0. Сводка: как это должно работать
+## 0. Summary: how it should work
 
-1. **Установка** одной командой ставит минимум: `lite` (и `lite-deploy`), `minisign`, агента. Больше ничего на сервере не меняется.
-2. **`lite init`**, единственная команда, которую можно запускать под root, готовит сервер: создаёт администраторов (пароль через системный `passwd`, SSH-ключ обязателен, `sudo`), оставляет им вход по SSH только по ключу, настраивает файервол (`--ufw off|http|max`, по умолчанию `max`), ставит плагины (`--plugins caddy,podman,postgres`). Вход root по SSH не отключает: это решение владельца сервера.
-3. **Все остальные команды `lite` под root не работают**: нужно зайти обычным пользователем и запускать через `sudo`.
-4. **Дальше всё в интерфейсе** (и в командной строке): плагины, режим файервола, порты, пакеты, проекты, выкатка, проверка сервера (`verify`, `info`, `fix`).
-5. **Интерфейс** запускается на компьютере владельца, ходит на сервер по SSH. На сервере работает агент без прав, исполнитель запускается systemd от root на одно действие из фиксированного списка. Произвольный shell от root не выполняется.
-6. **Проекты**: контейнеры `podman` (Docker запасной) или службы systemd; выкатка blue-green без простоя; CI выкатывает через ограниченный SSH-ключ.
+1. **Installation** with one command installs the minimum: `liteup` (the installer and manager), `lite` (and `lite-deploy`), `minisign` and the agent. Nothing else on the server changes.
+2. **`lite init`**, the only command that may be run as root, prepares the server: it creates administrators (the password through the system `passwd`, an SSH key is mandatory, `sudo`), leaves them SSH login by key only, sets up the firewall (`--ufw keep|off|http|max`, `max` by default), installs plugins (`--plugins caddy,podman,pg`). It does not disable root SSH login: that is the server owner's decision.
+3. **All other `lite` commands refuse to run when logged in as root**: log in as a regular user. They need no `sudo` either: commands that need privileges are handed to the agent.
+4. **After that everything is in the interface** (and on the command line): plugins, the firewall mode, ports, packages, projects, deploys, the server check (`verify`, `info`, `fix`).
+5. **The interface** runs on the owner's computer and reaches the server over SSH. On the server an unprivileged agent runs, and the executor is started by systemd as root for one action from a fixed list. An arbitrary shell as root is never executed.
+6. **Projects**: `podman` containers (Quadlet) or systemd services; blue-green deploys without downtime; CI deploys through a restricted SSH key.
 
-## 1. Что это
+## 1. What it is
 
-`lite`: один бинарник, который ставится на голый Linux-сервер, готовит его к работе и выкатывает на него проекты. Управление из командной строки и из веб-интерфейса. Сервер один, проектов несколько.
+`lite`: one binary that is installed on a bare Linux server, prepares it for work and deploys projects to it. Management from the command line and from a web interface. One server, several projects; other servers are connected by address (R-26).
 
-## 2. Состояние на 2026-11-18
+## 2. State on 2026-11-20
 
-Последний релиз `v0.5.1`; плагины, пакеты и `security` (R-18…R-25) сделаны в коде, релиз `v0.6.0` готовится. Сайт и установщик работают. **На боевом сервере ничего не запускалось.** 2026-11-19 `lite` дополнительно прогнан на тестовом WSL (Ubuntu 26.04, podman 5.7, PostgreSQL 18, Caddy): агент, `verify` без sudo, `project create demo-app` (13 шагов, повтор `unchanged`), копия и восстановление базы; тестовые данные удалены. Кроме тестов на подменах, 2026-11-19 сделан прогон в контейнере Ubuntu 24.04 с systemd (rootless podman, podman 4.9): `lite init` (пользователь, SSH только по ключу, security, caddy, podman, pg, redis), агент, команды без sudo, копии с шифрованием и восстановление, `project create` (контейнерный и `kind: unit`, повтор даёт `unchanged`), выкатка `unit` с проверкой подписи minisign, переключение Caddy, откат. Прогон нашёл и исправил 12 ошибок, которых тесты не видели. Не проверено в контейнере: файервол (ufw), реальный вход по SSH, запуск контейнера Quadlet (образа не было), Backblaze, S3, SFTP, форма в браузере.
+Latest release `v0.6.1`. The site and the installer work. **Nothing has been run on a production server yet.** Besides unit tests with doubles, `lite` was run on 2026-11-19 in an Ubuntu 24.04 container with systemd (rootless podman 4.9) and on a test WSL (Ubuntu 26.04, podman 5.7, PostgreSQL 18, Caddy): `lite init` (user, SSH by key only, security, caddy, podman, pg, redis), the agent, commands without sudo, encrypted backups and restore, `project create` (a container project and `kind: unit`, a repeat gives `unchanged`), a `unit` deploy with a minisign signature check, the Caddy switch, a rollback, and `liteup` update, reinstall and uninstall. That run found and fixed 12 errors the tests had not seen. **Not checked yet:** ufw, a real SSH login, starting a Quadlet container (there was no image), Backblaze, S3, SFTP, the form in a browser.
 
-| Часть | Код | Проверено на сервере |
+| Part | Code | Checked on a server |
 |---|---|---|
-| Установщик `install.sh` (бинарник, `minisign`, агент) | есть | нет |
-| Описание проекта, план, `apply`, `project create` | есть | нет |
-| `deploy`, `rollback`, `status`, привратник `gate` | есть | нет |
-| Агент без прав и исполнитель по запросу | есть | нет |
-| Веб-интерфейс: проекты (выкатка, откат), файервол | есть | нет, в браузере не открывался |
-| Плагин `firewall` (`status`, `mode`, `allow`, `remove`, `enable`) | есть | нет; `allow/remove` по R-9 позже заменятся портами проектов |
-| Релизы с подписью, сайт с документацией | есть | да |
-| `lite init` (пользователи, ключи, вход по ключу, режим файервола, плагины `caddy`, `podman`, `pg`, `security`) | есть | нет |
-| `lite verify`, `lite info` (R-6) | есть | нет |
-| `lite fix` (`verify --autofix`, кнопка в интерфейсе): исправляет только перечень безопасных исправлений (SSH, обновления, sysctl, fail2ban, таймеры копий, установка нужных плагинов); остальное выводит как «вручную» | есть | нет |
-| Запрет работы при входе под root | есть | нет |
-| Работа без root (R-16): команды, которым нужны права, администратор (группа sudo или wheel) выполняет без sudo: CLI передаёт их агенту, исполнитель (root, запускает systemd) делает только действия из фиксированного списка; root нужен только для `lite init` и установки | есть | нет |
-| Управление пакетами `lite package` (R-18, R-21, R-22) | есть | нет |
-| Механизм плагинов: манифест, внешние плагины, раздел в интерфейсе (R-19, R-24, R-25) | есть | нет |
-| Плагин `security` (R-23): SSH, fail2ban, автообновления, sysctl, журнал входов, проверки | есть | нет |
-| Зависимости проекта от плагинов хоста (R-20): `lite verify` проверяет podman, pg, caddy по описанию | есть | нет |
-| Имя `lite` | ссылка на `lite-deploy` (тексты справки ещё со старым именем) | нет |
-| Компонент `unit` (R-12, R-27): процесс на хосте под systemd пользователя проекта, релиз архивом tar.gz по https с обязательной подписью minisign, blue-green, откат; поля `kind`, `exec`, `release` (`url` с `{sha}`, `minisign_key`, `token_secret`) | есть (описание, план, юниты, выкатка) | нет |
-| Реестр серверов (R-26): `lite server add|list|remove`; база проекта на другом сервере (`database.server`, `port`, `password_secret`): строка подключения по сети с `sslmode=require`, пароль из секретов проекта | есть | нет |
-| Плагины `redis`, `pg` (базы, роли, удалённый доступ, копии), `podman ps`, `backblaze` | есть | нет |
-| Плагин `backup` (R-28): настройки и секреты проектов шифруются ключом владельца (age, на сервере только публичная часть); дампы баз шифруются по желанию (`backup setup … --encrypt-dumps`); места хранения Backblaze B2, S3-совместимое и SFTP (rclone), отправка во все настроенные; `fetch`, `restore`, таймеры, проверки | есть | нет |
-| Хранилище секретов (R-29): локальное (файлы 600 под root) | есть; подключаемые бэкенды (git, Vault) по решению отложены | |
-| Создание проекта из интерфейса (R-17): форма, предпросмотр плана, создание; секреты шифруются на компьютере владельца открытым ключом исполнителя; агент принимает `/v1/project/preview` и `/v1/project/create` с телом до 128 КиБ | есть (форму в браузере не открывали, проверена только сборка запроса) | нет |
-| `compose` (R-27) | через `kind: unit` с `exec` и `stop` (`podman compose up/down`) и каталогом релиза с `compose.yml`; отдельного вида нет | нет |
-| Постоянные каталоги компонента `data` (R-13, в пределах проекта) | есть | нет |
-| Docker (R-11) | запрещён решением владельца | |
-| Общие каталоги и сокеты между проектами (R-13) | отложено владельцем (2026-11-19), нужна проверка rootless-идентификаторов на сервере | |
+| `liteup` installer and manager: install, update, reinstall, uninstall, status; the agent restarts on install | done | partly (test WSL) |
+| Project description (schema v2), plan, `apply`, `project create` | done | partly |
+| `deploy`, `rollback`, `status`, the `gate` gatekeeper | done | partly |
+| Unprivileged agent and the on-request executor | done | partly |
+| Web interface: projects (deploy, rollback), firewall, new project form | done | no, not opened in a browser |
+| `firewall` plugin (`status`, `mode`, `allow`, `remove`, `enable`) | done | no |
+| Signed releases, the documentation site | done | yes |
+| `lite init` (users, keys, key login, firewall mode, plugins `caddy`, `podman`, `pg`, `redis`, `security`) | done | partly |
+| `lite verify`, `lite info`, `lite --help` (R-6) | done | partly |
+| `lite fix` (`verify --autofix`, a button in the interface): only the list of safe fixes; the rest is printed as "manual" | done | partly |
+| Refusing to work when logged in as root (R-5) | done | partly |
+| Working without root (R-16): administrators run commands without sudo; the CLI hands them to the agent; the executor does only actions from a fixed list; root is needed only for `lite init` and `liteup` | done | yes |
+| `lite package` (R-18, R-21, R-22); Docker packages are refused (R-11) | done | partly |
+| The plugin mechanism: manifest, external plugins, an interface section (R-19, R-24, R-25) | done | partly |
+| `security` plugin (R-23): SSH, fail2ban, automatic updates, sysctl, login journal, checks | done | partly (no real sshd login) |
+| Project dependencies on host plugins (R-20): `lite verify` checks podman, pg, caddy from the description | done | yes |
+| `unit` component (R-12, R-27): a process on the host under the project user's systemd, a tar.gz release over https with a mandatory minisign signature, blue-green, rollback; fields `kind`, `exec`, `stop`, `data`, `release` | done | yes (container) |
+| Server registry (R-26): `lite server add|list|remove`; a project database on another server (`database.server`, `port`, `password_secret`): a network connection string with `sslmode=require` | done | no |
+| Plugins `redis`, `pg` (databases, roles, remote access, backups), `podman ps` | done | yes |
+| `backup` plugin (R-28): project settings and secrets are encrypted with the owner key (age, the server keeps only the public part); database dumps optionally; storage locations Backblaze B2, S3-compatible and SFTP (rclone), upload to all configured; `fetch`, `restore`, timers, checks | done | partly (backup and restore yes; the storages no) |
+| Secret store (R-29): local (files with mode 600 under root) | done; pluggable backends (git, Vault) postponed by decision | |
+| Creating a project from the interface (R-17): a form, a plan preview, creation; secrets are encrypted on the owner's computer with the executor public key | done (the form was tested with a DOM double only) | no |
+| `compose` (R-27) | through `kind: unit` with `exec` and `stop` (`podman compose up/down`) and a release directory with `compose.yml`; there is no separate kind | no |
+| Persistent component directories `data` (R-13, inside one project) | done | yes |
+| Docker (R-11) | forbidden by the owner's decision | |
+| Shared directories and sockets between projects (R-13) | postponed by the owner (2026-11-19); needs rootless id checks on a server | |
 
+## 3. What was added without agreement
 
+These are the implementer's decisions, not the owner's. Each needs to be confirmed or removed.
 
-## 3. Что было добавлено без согласования
+- The commands `firewall status|allow|remove|enable` and the ban on closing ports 80 and 443.
+- The internal commands `agent install`, `agent uninstall`, `agent serve`, `exec`, `call`.
+- The `--token-file` flag of `ui` and running the interface as a systemd service.
 
-Это решения исполнителя, а не владельца. Каждое нужно подтвердить или убрать.
+## 4. Requirements (in the owner's words)
 
-- Команды `firewall status|allow|remove|enable` и запрет закрывать порты 80 и 443.
-- Служебные команды `agent install`, `agent serve`, `exec`, `call`.
-- Флаг `--server` у установщика (убран 2026-11-16: установщик ставит всё одной командой).
-- Флаг `--token-file` у `ui` и запуск интерфейса службой systemd.
+**Installation**
+- R-1. Installed with one command from the site. The installer installs the minimum: the binary, `minisign`, the agent. There are no separate agent install commands for a person. The installer is `liteup`: `install`, `update`, `reinstall`, `uninstall`, `status` (decided 2026-11-20; the old `install.sh` stays as a wrapper). The agent is restarted automatically on install and update.
+- R-2. Works on more than Debian and Ubuntu.
+- R-3. The command is called `lite`.
 
-## 4. Требования (со слов владельца)
+**Preparing the server**
+- R-4. `lite init` brings the server to a state in which `lite` works. It is the only command that may run as root.
+  - `--user names`: existing or new users. New ones are created in a dialog. Entering a public SSH key is mandatory, without it `init` does not complete. `lite` neither sees nor stores the password (it is set by the system `passwd`). The user gets `sudo`.
+  - Without `--user` the current user is configured; as root without `--user` the command refuses.
+  - `--all-users`: all users with a shell, except system users and project users.
+  - SSH password login is disabled for the configured users (the key remains).
+  - `--ufw keep|off|http|max`: leave the firewall alone; no filtering; web ports; SSH only. `max` by default.
+  - `--plugins list`: turn plugins on.
+- R-5. Everything except `init` (and `--help`, `version`) refuses to run as root; only a regular user works (checked by `loginuid`). `lite` does not disable root SSH login: that is the owner's decision.
+- R-6. `lite verify`: read-only, a server check and warnings. `lite info`: components, plugins and their state. `lite fix` (and `verify --autofix`): fixes obvious configuration mistakes, only from a list of safe fixes.
 
-**Установка**
-- R-1. Ставится одной командой с сайта. `install.sh` ставит минимум: бинарник, `minisign`, агента. Отдельных команд установки агента для человека нет.
-- R-2. Работает не только на Debian и Ubuntu.
-- R-3. Команда называется `lite`.
+**System management**
+- R-7. From the interface and from the command line you can install, remove and update system packages and change the firewall settings. These are typed operations; arbitrary scripts are not run. Details are in "Packages and plugins" below (R-18…R-24).
+- R-8. An arbitrary shell as root is never run. Steps may be shell commands, but only from a described set.
+- R-9. `lite` commands do not duplicate system ones one to one; they work a level higher (a firewall mode, "open a port for a project"), otherwise running a system command over SSH would be simpler.
 
-**Подготовка сервера**
-- R-4. `lite init` приводит сервер к состоянию, в котором `lite` работает. Это единственная команда, которую можно запускать от root.
-  - `--user имена`: существующие или новые пользователи. Новые создаются в диалоге. Ввод открытого SSH-ключа обязателен, без него `init` не выполняется. Пароль `lite` не видит и не хранит (ставится системным `passwd`). Пользователь получает `sudo`.
-  - Без `--user` настраивается текущий пользователь; от root без `--user` команда отказывает.
-  - `--all-users`: все пользователи с оболочкой, кроме системных и пользователей проектов.
-  - Вход по паролю по SSH для настроенных пользователей отключается (остаётся ключ).
-  - `--ufw off|http|max`: без фильтрации; веб-порты; только SSH. По умолчанию `max`.
-  - `--plugins список`: включить плагины.
-- R-5. Всё, кроме `init`, от root не работает: только обычный пользователь через `sudo` (проверка по `loginuid`). Вход root по SSH `lite` не отключает, это решение владельца сервера.
-- R-6. `lite verify`: только чтение, проверка сервера и предупреждения. `lite info`: компоненты, плагины, их состояние. `lite fix` (и `verify --autofix`): исправление очевидных ошибок настройки.
+**Composition**
+- R-10. The core: `lite`, `minisign`, the agent. Plugins (installed by `lite init --plugins` or from the interface): `caddy` (incoming traffic, needed for sites), `podman`, `pg` (PostgreSQL), `redis`, `firewall`, `security`, `server`, `backup` and the storages `backblaze`, `s3`, `sftp`.
+- R-11. Containers are `podman` and Quadlet only (decided 2026-11-19; Docker is forbidden because access to its daemon is root). `lite package` refuses to install or update Docker packages, `lite verify` warns if Docker is installed. A project may use no containers at all.
+- R-12. A project component is a container under systemd or a plain systemd service; both kinds are allowed in one project.
+- R-13. Projects may have shared resources: files, directories, sockets. Postponed by the owner (2026-11-19); persistent directories inside one project (`data`) exist.
+- R-14. A project may require system dependencies: a service on the host (for example Redis), a package, a library. See R-20.
 
-**Управление системой**
-- R-7. Из интерфейса и из командной строки можно: поставить, удалить и обновить системные пакеты; поменять настройки файервола. Это типизированные операции, произвольные скрипты не выполняются. Подробности в разделе «Пакеты и плагины» ниже (R-18…R-24).
-- R-8. Произвольный shell от root не запускается. Шаги могут быть shell-командами, но только из заранее описанного набора.
-- R-9. Команды `lite` не дублируют системные один в один, а работают уровнем выше (режим файервола, «открыть порт проекту»), иначе проще выполнить системную команду по SSH.
+**Deploys and the interface**
+- R-15. A project is deployed and rolled back without downtime (blue-green), and its state is visible. CI deploys through a restricted key.
+- R-16. The interface runs on the owner's computer and reaches the server over SSH. An unprivileged agent runs on the server; `sudo` without a password and `sudoers` rules for the interface are not needed. The same holds for the command line: administrators work without `sudo`.
+- R-17. Everything from R-4, R-6 and R-7 is available from the interface too.
 
-**Состав**
-- R-10. Ядро: `lite`, `minisign`, агент. Плагины (ставятся `lite init --plugins` или из интерфейса): `caddy` (входящий трафик, нужен для сайтов), `podman`, `postgres`, `firewall`.
-- R-11. Контейнеры только `podman` и Quadlet (решено 2026-11-19, Docker запрещён: доступ к демону равен root). `lite package` отказывается ставить и обновлять пакеты Docker, `lite verify` предупреждает, если Docker установлен. Проект может не использовать контейнеры совсем.
-- R-12. Компонент проекта это контейнер под systemd или обычная служба systemd; в одном проекте допустимы оба вида.
-- R-13. Проекты могут иметь общие ресурсы: файлы, каталоги, сокеты.
-- R-14. Проект может требовать системные зависимости: служба на хосте (например Redis), пакет, библиотека. Подтверждено 2026-11-18, см. R-20.
+**Packages and plugins (clarified by the owner on 2026-11-18)**
+- R-18. A server can be prepared: install system packages through `lite` (from the CLI and from the interface).
+- R-19. A plugin is what adds commands to `lite` (`lite package`, `lite ingress`, `lite pg`, `lite logs` …), a section to the interface and, optionally, checks for `verify`. Any implementation: built-in code, scripts, a separate program. A plugin does not have to be tied to an OS package (for example a log viewer plugin); if it needs packages, it asks `lite package` for them (see R-20). A package and a plugin are different things.
+- R-20. A project may require host dependencies (packages and plugins, for example Redis, postgres) and describes them in its description; the check and the deploy take them into account.
+- R-21. All packages installed through `lite` are listed by a command (`lite package list`) and in the interface (a journal is kept to tell them from those installed by hand).
+- R-22. In the CLI and in the interface you can check whether a package is installed and its version (`lite package check NAME`). The rest: `lite package install|remove|update NAME`.
+- R-23. Server protection is the `security` plugin; the whole list is in the first version (decided by the owner on 2026-11-18, the server is production):
+  1. SSH: no root login by password; no password login for any user; a list of allowed users (`AllowUsers`).
+  2. `fail2ban` against password guessing.
+  3. Automatic security updates (`unattended-upgrades`, `dnf-automatic`).
+  4. Kernel parameters (sysctl network protection).
+  5. A login journal: who logged in and from where, failed attempts.
+  6. Checks for `verify`: SSH password login is on, extra ports are open, security updates are available, who has `sudo`, whether `fail2ban` works.
 
-**Выкатка и интерфейс**
-- R-15. Проект выкатывается и откатывается без простоя (blue-green), состояние видно. CI выкатывает через ограниченный ключ.
-- R-16. Интерфейс запускается на компьютере владельца и ходит на сервер по SSH. На сервере работает агент без прав; `sudo` без пароля и правила `sudoers` для интерфейса не нужны.
-- R-17. Всё из R-4, R-6, R-7 доступно и из интерфейса.
+  The firewall stays a separate plugin `firewall`. The plugin is turned on by `lite init --plugins security` or the interface; disabling the password for the configured users moved from `init` into this plugin.
+- R-24. All plugins are connected, turned on and shown in `lite info` and `verify` in the same way. `lite package` itself is a plugin too (built-in).
+- R-25. How a plugin is described (decided 2026-11-18): a directory with a manifest file (name, commands, needed packages, checks for `verify`) and an executable or scripts that `lite` calls. Built-in plugins ship inside the binary and are described the same way. Plugin scripts run without root, and privileged actions go through the executor from a fixed list (R-8).
+- R-26. Servers (decided 2026-11-19): a project lives on one server, foreign resources (a database) are connected by an address from the server registry (`/etc/lite-deploy/servers.json`, name → address on the internal network); every server has its own `lite`. The list of servers to switch between in the interface (name → user@host for SSH) is kept on the owner's computer. There is no scheduling, no moving between servers and no balancing: ingress is a separate server, and the owner assigns servers by hand.
+- R-27. A project component is described by how it runs (`quadlet`, `unit` for binaries and everything else; `compose` through `unit`) and how it arrives (an image or a release directory); blue-green, the readiness check and rollback are the same for all kinds. A `unit` release is a tar.gz archive over https with a mandatory minisign signature.
+- R-28. Backups (decided 2026-11-19): the `backup` plugin is not tied to Backblaze; storage locations are pluggable (a local directory always; Backblaze B2, S3-compatible and SFTP are locations), and encryption is set per location. Project secrets enter a backup, and encryption is mandatory for them; the owner keeps the key off the server. Dumps of databases are encrypted optionally (`backup setup … --encrypt-dumps`).
+- R-29. Secret stores (decided 2026-11-19): the secret layer is pluggable (local files, later an encrypted git, HashiCorp Vault as one more backend). Only the local store exists now.
 
-**Пакеты и плагины (уточнено владельцем 2026-11-18)**
-- R-18. Сервер можно подготовить: поставить на него системные пакеты через `lite` (из CLI и из интерфейса).
-- R-19. Плагин это то, что добавляет команды в `lite` (`lite package`, `lite ingress`, `lite pg`, `lite logs` …), раздел в интерфейсе и, по желанию, проверки для `verify`. Реализация любая: встроенный код, скрипты, отдельная программа. Плагин не обязан быть связан с пакетом ОС (например, плагин просмотра логов); если ему нужны пакеты, он их заказывает у `lite package` (см. R-20). Пакет и плагин это разные вещи.
-- R-20. Проект может требовать зависимости на хосте (пакеты и плагины, например Redis, postgres) и описывает их в своём описании; проверка и выкатка учитывают их.
-- R-21. Все пакеты, установленные через `lite`, перечисляются командой (`lite package list`) и в интерфейсе (ведётся журнал, чтобы отличать их от установленных вручную).
-- R-22. В CLI и в интерфейсе можно проверить, установлен ли пакет, и его версию (`lite package check ИМЯ`). Остальное: `lite package install|remove|update ИМЯ`.
-- R-23. Защита сервера это плагин `security`, весь перечень входит в первую версию (решено владельцем 2026-11-18, сервер боевой):
-  1. SSH: запрет входа root по паролю; запрет входа по паролю всем пользователям; ограничение списка пользователей (`AllowUsers`).
-  2. `fail2ban` против перебора паролей.
-  3. Автоматические обновления безопасности (`unattended-upgrades`, `dnf-automatic`).
-  4. Параметры ядра (sysctl-защита сети).
-  5. Журнал входов: кто и откуда заходил, неудачные попытки.
-  6. Проверки для `verify`: пароль по SSH включён, открыты лишние порты, есть обновления безопасности, у кого `sudo`, работает ли `fail2ban`.
-  Файервол остаётся отдельным плагином `firewall`. Плагин включают `lite init --plugins security` или интерфейс; отключение пароля за настроенными пользователями переезжает из `init` в этот плагин.
-- R-25. Как плагин описывается (решено 2026-11-18): каталог с файлом-манифестом (имя, команды, нужные пакеты, проверки для `verify`) и исполняемым файлом или скриптами, которые `lite` вызывает. Встроенные плагины (`package`, `firewall`, `caddy`, `postgres`, `podman`, `security`) идут в самом бинарнике и описываются так же. Скрипты плагина запускаются без root, а действия с правами идут через исполнитель из фиксированного списка (R-8).
-- R-24. Все плагины подключаются, включаются и показываются в `lite info` и `verify` одинаково. Сам `lite package` тоже плагин (встроенный). Список плагинов, что именно входит в `security` и как плагин описывается (манифест, интерфейс для скриптов) нужно согласовать до реализации.
-- R-26. Серверы (решено 2026-11-19): проект живёт на одном сервере, чужие ресурсы (база) подключаются по адресу из реестра серверов (`/etc/lite-deploy/servers.json`, имя → адрес во внутренней сети); у каждого сервера свой `lite`. Список серверов для переключения в интерфейсе (имя → user@host для SSH) хранится на компьютере владельца. Планирования, переноса между серверами и балансировки нет: ingress будет отдельным сервером, серверы назначает владелец вручную.
-- R-27. Компонент проекта описывается тем, как он запускается (`quadlet`, `compose`, `unit` для бинарников и всего остального) и как приезжает (образ или каталог релиза); blue-green, проверка готовности и откат общие для всех видов.
-- R-28. Резервные копии (решено 2026-11-19): плагин `backup` не привязан к Backblaze; места хранения подключаемые (локальный каталог всегда, Backblaze B2 одно из мест), шифрование включается отдельно для каждого места. Секреты проектов входят в копию, шифрование для них обязательно, ключ владелец хранит вне сервера. Реализованы плагины `backup` (настройки и секреты шифруются обязательно, дампы по желанию), места хранения `backblaze`, `s3`, `sftp` и `lite pg backup|restore`.
-- R-29. Хранилища секретов (решено 2026-11-19): слой секретов подключаемый (локальные файлы, позже зашифрованный git, HashiCorp Vault как ещё один бэкенд). Сейчас делается только локальное хранилище.
+## 5. Limits of the first working version (v1)
 
-## 5. Границы первой рабочей версии (v1)
+The goal of v1: a bare Ubuntu server → install → `lite init` → a project is created and deployed from the interface. Everything checked on a real server.
 
-Цель v1: голый сервер Ubuntu → установка → `lite init` → проект создан и выкачен из интерфейса. Всё проверено на настоящем сервере.
+**In**
+1. Installation (R-1) on Ubuntu and Debian; other distributions without a guarantee.
+2. The name `lite` (R-3); `lite-deploy` stays as a link for compatibility.
+3. `lite init` with `--user`, `--all-users`, `--ufw` (R-4) and the root ban (R-5).
+4. `lite verify` and `lite info` (R-6).
+5. Projects on `podman` containers and `unit` components: creation, deploy, rollback, state (R-15).
+6. The interface through the agent (R-16): projects, the firewall mode, the result of `verify` and `info`.
 
-**Входит**
-1. Установка (R-1) на Ubuntu и Debian; остальные дистрибутивы без гарантии.
-2. Имя `lite` (R-3), `lite-deploy` остаётся ссылкой для совместимости.
-3. `lite init` с `--user`, `--all-users`, `--ufw` (R-4) и запрет root (R-5).
-4. `lite verify` и `lite info` (R-6, без `fix`).
-5. Проекты только на контейнерах `podman`: создание, выкатка, откат, состояние (R-15).
-6. Интерфейс через агента (R-16): проекты, режим файервола, результат `verify` и `info`.
+**Second line (right after v1)**
+- Packages from the interface (R-7), "open a port for a project" (R-9).
 
-**Вторая очередь (сразу после v1)**
-- Пакеты из интерфейса (R-7), `lite fix` (R-6), «открыть порт проекту» (R-9).
+**Not in v1**
+- A guarantee on RHEL, Fedora, Arch, openSUSE (R-2).
+- Docker (R-11, forbidden), shared resources between projects (R-13).
+- Confirming dangerous actions with a signature, MCP for AI, a Cloudflare tunnel, phone access, scheduling across servers.
 
-**Не входит в v1**
-- Гарантия работы на RHEL, Fedora, Arch, openSUSE (R-2).
-- Плагины как подключаемый механизм: в v1 `podman`, `postgres` и файервол встроены (R-10).
-- Docker (R-11), компоненты без контейнеров (R-12), общие ресурсы (R-13), системные зависимости проекта (R-14).
-- Подтверждение опасных действий подписью ключа, MCP для ИИ, туннель Cloudflare, доступ с телефона, несколько серверов.
+## 6. Decided
 
-## 6. Решено
+- Checking is done on the owner's Ubuntu server.
+- The installer installs only the minimum without flags: the binary, `minisign`, the agent (R-1). Caddy is a plugin (decided 2026-11-17).
+- There is no `--setup` flag in `lite init`.
+- The default firewall mode is `max` (SSH only); the owner switches it to `http` when sites are needed, or uses `keep` on an already configured server.
+- The commands `firewall allow/remove/enable` are replaced by the mode and project ports (R-9).
+- The installer is `liteup` (2026-11-20), the way `rustup` is for Rust; the agent restarts on install.
+- All user-visible text, code comments and documentation are in English (2026-11-20).
 
-- Проверка идёт на сервере Ubuntu владельца.
-- `install.sh` ставит одной командой без флагов только минимум: бинарник, `minisign`, агента (R-1). Caddy это плагин (решено 2026-11-17).
-- Флага `--setup` у `lite init` нет.
-- Режим файервола по умолчанию `max` (только SSH); владелец меняет его на `http`, когда нужны сайты.
-- Команды `firewall allow/remove/enable` заменяются режимом и портами проектов (R-9).
+## 7. Order of work up to v1
 
-## 7. Порядок работ до v1
-
-1. Прогон на сервере того, что уже написано: `install.sh`, `project create`, `deploy`, интерфейс. Исправление найденного. Починка CI.
-2. Переименование в `lite`, запрет root.
-3. `lite init`.
-4. `lite verify`, `lite info`, их показ в интерфейсе, режим файервола в интерфейсе.
-5. Сквозная проверка на чистом сервере по шагам из README.
+1. A run on a server of what is written: `liteup`, `project create`, `deploy`, the interface. Fix what is found. Repair CI.
+2. Check the pieces that only doubles have seen: ufw, a real SSH login, a Quadlet container start, the storages, the form in a browser.
+3. A full end-to-end check on a clean server following `INSTALL-PROD.md`.
