@@ -31,10 +31,6 @@ GROUPS = [
         ("docs/protect-the-server.md", "protect-the-server", "Protect the server", "SSH, fail2ban, updates, the firewall and `lite verify`."),
         ("docs/maintenance.md", "maintenance", "Update and troubleshoot", "Updating, uninstalling and what to do when something fails."),
     ]),
-    ("Reference", [
-        ("INSTALL-PROD.md", "install-server", "A new server (the example project)", "The full walk-through used for a real production server."),
-    ]),
-]
 PAGES = {f: (slug, title) for _, items in GROUPS for f, slug, title, _ in items}
 
 CODE_MD = re.compile(r"<code>([A-Za-z0-9_.-]+\.md)</code>")

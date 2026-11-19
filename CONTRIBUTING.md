@@ -4,6 +4,7 @@ This page is for people who work on lite-deploy itself. Users: see [README.md](R
 
 ## Project documents
 
+- [INSTALL-PROD.md](INSTALL-PROD.md): the step-by-step walk-through used to set up a real production server (the example project project).
 - [VISION.md](VISION.md): the idea, principles and limits.
 - [ARCHITECTURE.md](ARCHITECTURE.md) and [SPEC-v0.md](SPEC-v0.md): how it works (the parts, security, the plan, executor actions, the CLI envelope).
 - [DECISIONS.md](DECISIONS.md): the decision log, with reasons.

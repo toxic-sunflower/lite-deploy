@@ -2,7 +2,7 @@
 
 **lite-deploy** sets up a Linux server and deploys your projects to it, with no root needed for daily work. Quadlet containers or plain systemd services, Caddy and PostgreSQL on the host, blue-green deploys without downtime, encrypted backups, and a restricted SSH key for CI.
 
-**New here?** Follow the [Quickstart](docs/quickstart.md), then pick a tutorial: [your first project](docs/first-project.md), [publishing a site](docs/publish-a-site.md), [deploying from CI](docs/ci.md), [backups](docs/backups.md), [protecting the server](docs/protect-the-server.md). This page is the reference for installing and for every plugin. A full walk-through for a real server is [INSTALL-PROD.md](INSTALL-PROD.md). Maintainers: see [CONTRIBUTING.md](CONTRIBUTING.md).
+**New here?** Follow the [Quickstart](docs/quickstart.md), then pick a tutorial: [your first project](docs/first-project.md), [publishing a site](docs/publish-a-site.md), [deploying from CI](docs/ci.md), [backups](docs/backups.md), [protecting the server](docs/protect-the-server.md). This page is the reference for installing and for every plugin. Maintainers: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Install
 
