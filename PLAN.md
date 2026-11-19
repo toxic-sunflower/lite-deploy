@@ -112,6 +112,11 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 - **C3. Tidy up the old documents:** decide what stays as internal notes and what becomes public documentation.
 - **C4. Rename the repository to `lite-deploy`** (the owner does it in the GitHub settings).
 
+## TODO
+
+- **T1. Change the SSH key of a user with a command** (for example `lite ssh-key replace`). Today it is manual (append the new key to `~/.ssh/authorized_keys`, check login with it, then remove the old line). The command must keep the old key until the new one is verified, so access is never lost.
+- **T2. Hints about what to do next.** After every setup step (`lite init`, `lite security …`, `lite backup …`, `lite project create`, `lite deploy`) and in `liteup`, print the next step to take, with the exact command, for example after `init`: "check key login in a second window, then `lite verify`". `lite verify` should end with the same kind of hint.
+
 ## Status
 
 | Session | Status |
