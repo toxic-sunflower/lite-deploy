@@ -20,13 +20,27 @@ GROUPS = [
     ("Start", [
         ("README.md", "index", "Install", "What it is and how to install it."),
     ]),
-    ("Guides", [
-        ("INSTALL-PROD.md", "install-server", "A new server", "From a bare server to a deployed project, step by step."),
+    ("Tutorials", [
+        ("docs/quickstart.md", "quickstart", "Quickstart", "From a bare server to a running site in one sitting."),
+        ("docs/first-project.md", "first-project", "Your first project", "A container project: description, secrets, create, deploy, roll back."),
+        ("docs/publish-a-site.md", "publish-a-site", "Publish a site", "Make the site reachable from the internet with a Cloudflare Tunnel."),
+        ("docs/process-project.md", "process-project", "A project without containers", "Deploy a binary, Node or compose app from a signed archive."),
+        ("docs/ci.md", "ci", "Deploy from CI", "A restricted key, the gatekeeper and a GitHub Actions workflow."),
+        ("docs/remote-database.md", "remote-database", "A database on another server", "Connect a project to PostgreSQL on a second server."),
+        ("docs/backups.md", "backups", "Backups and restore", "Encrypted backups, storage outside the server and restoring a lost server."),
+        ("docs/protect-the-server.md", "protect-the-server", "Protect the server", "SSH, fail2ban, updates, the firewall and `lite verify`."),
+        ("docs/maintenance.md", "maintenance", "Update and troubleshoot", "Updating, uninstalling and what to do when something fails."),
+    ]),
+    ("Reference", [
+        ("INSTALL-PROD.md", "install-server", "A new server (the example project)", "The full walk-through used for a real production server."),
     ]),
 ]
 PAGES = {f: (slug, title) for _, items in GROUPS for f, slug, title, _ in items}
 
 CODE_MD = re.compile(r"<code>([A-Za-z0-9_.-]+\.md)</code>")
+
+
+BASENAMES = {Path(f).name: f for f in PAGES}
 
 
 def link_md(body: str) -> str:
@@ -40,12 +54,13 @@ def link_md(body: str) -> str:
 
     def href(m):
         name = m.group(1)
+        name = BASENAMES.get(name, name)
         if name in PAGES:
             slug = PAGES[name][0]
             return f'href="{"./" if slug == "index" else slug + ".html"}"'
         return f'href="{REPO}/blob/main/{name}"'
     # plain links to repository documents: a site page if there is one, otherwise the file on GitHub
-    return re.sub(r'href="([A-Za-z0-9_.-]+\.md)"', href, body)
+    return re.sub(r'href="([A-Za-z0-9_./-]+\.md)"', href, body)
 
 
 def wrap_tables(body: str) -> str:
