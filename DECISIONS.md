@@ -1,183 +1,200 @@
-# Журнал решений
+# Decision log
 
-Кратко: что решили, почему, статус. Подробности и схемы: `ARCHITECTURE.md`, принципы: `VISION.md`. Даты: 2026-10-23 .. 2026-11-04. Статус: **принято** (владелец согласился) или **предварительно** (принято в принципе, детали не решены).
+In brief: what was decided, why, the status. Details and schemes: `ARCHITECTURE.md`, principles: `VISION.md`. Dates: 2026-10-23 .. 2026-11-20. Status: **accepted** (the owner agreed) or **tentative** (accepted in principle, details not decided).
 
-## Замысел и ниша
+## The idea and the niche
 
-**D-01. Проект отдельный от приложения.** Настройка сервера и деплой живут в своём репозитории. Статус: принято (2026-10-23).
+**D-01. The project is separate from the application.** Server setup and deploy live in their own repository. Status: accepted (2026-10-23).
 
-**D-02. Проект пока «прикольный инструмент», ниша уточняется.** Не стартап, не нужно доказывать спрос заранее. Статус: принято.
+**D-02. For now the project is a "fun tool", the niche is being refined.** Not a startup, no need to prove demand in advance. Status: accepted.
 
-**D-03. Не конкурируем с Coolify и Dokploy по каталогу сервисов и тяжёлой панели.** Основание: у них 2 ГБ и больше на панель, root-доступ по SSH, большой каталог. Наше место: безопасность по устройству, лёгкость, секреты и описание инфраструктуры только на сервере, управление БД и строками подключения, ИИ как клиент. Статус: принято.
+**D-03. We do not compete with Coolify and Dokploy on a service catalog and a heavy panel.** The reason: they need 2 GB or more for the panel, root access over SSH, a big catalog. Our place: security by design, lightness, secrets and infrastructure description only on the server, management of databases and connection strings, AI as a client. Status: accepted.
 
-**D-04. Нацелены на одного владельца с одним сервером.** Несколько серверов позже. Если потребуется автоперенос нагрузки, правильный путь k3s, а не наш агент. Совместимость с Kubernetes не нужна. Статус: принято.
+**D-04. We aim at one owner with one server.** Several servers later. If automatic load migration is ever needed, the right way is k3s, not our agent. Kubernetes compatibility is not needed. Status: accepted.
 
-## Агент и безопасность
+## The agent and security
 
-**D-05. Центральная часть: лёгкий агент на сервере (служба), без встроенного интерфейса.** Все интерфейсы это отдельные клиенты одного API. Статус: принято.
+**D-05. The central part: a light agent on the server (a service), without a built-in interface.** All interfaces are separate clients of one API. Status: accepted.
 
-**D-06. Агент ничего не слушает наружу.** Только локальный сокет. CI ходит отдельным каналом (ограниченный SSH-ключ + привратник) и может только `deploy <хэш>`, `rollback`, `status` одного проекта. Статус: принято.
+**D-06. The agent listens on nothing outward.** Only a local socket. CI uses a separate channel (a restricted SSH key + the gatekeeper) and can only `deploy <hash>`, `rollback`, `status` of one project. Status: accepted.
 
-**D-07. Два равноправных режима.** Режим А: план собирается клиентом, владелец применяет его сам по SSH одной командой от root (постоянной программы с root нет). Режим Б: агент работает постоянно и применяет изменения сам. Выбор для каждого сервера. Статус: принято.
+**D-07. Two equal modes.** Mode A: the plan is built by the client and the owner applies it over SSH with one command as root (there is no permanent program with root). Mode B: the agent works all the time and applies changes itself. The choice is per server. Status: accepted.
 
-**D-08. В режиме Б агент без прав + маленький привилегированный исполнитель.** Исполнитель умеет только фиксированный список действий, произвольные команды не выполняет. Отличие от конкурентов: у них взлом панели даёт любую команду от root. Схема и устройство: D-31. Статус: принято.
+**D-08. In mode B an unprivileged agent + a small privileged executor.** The executor can do only a fixed list of actions and does not run arbitrary commands. The difference from competitors: for them a break into the panel gives any command as root. The scheme and the design: D-31. Status: accepted.
 
-**D-09. Состояние и секреты только на сервере, не в GitHub и GitLab.** Обязательны шифрованный бэкап и восстановление одной командой. Статус: принято.
+**D-09. State and secrets only on the server, not in GitHub and GitLab.** An encrypted backup and a restore with one command are mandatory. Status: accepted.
 
-**D-10. Секреты.** В конфиге ссылки (`secret://...`), не значения. Секреты только на запись, как в GitHub: нет команды «показать». По умолчанию локальные файлы 600 у пользователя проекта (достаточно для одного сервера). Плагины внешних хранилищ (Vault и OpenBao, Infisical, Doppler, облачные менеджеры). Передача в контейнер через файл, не через аргументы. Статус: принято.
+**D-10. Secrets.** The config has references (`secret://...`), not values. Secrets are write-only, as in GitHub: there is no "show" command. By default local files with mode 600 owned by the project user (enough for one server). Plugins for external stores (Vault and OpenBao, Infisical, Doppler, cloud managers). Passing into a container through a file, not through arguments. Status: accepted.
 
-**D-11. Подтверждение опасных действий.** Подпись ключом владельца (SSH, YubiKey, passkey) по умолчанию. Остальные способы настраиваются: интерактивная SSH-сессия, Cloudflare Access, OTP, мессенджер. Строгость для каждого типа действий. Какие действия опасные: D-29. Статус: принято.
+**D-11. Confirming dangerous actions.** A signature with the owner's key (SSH, YubiKey, passkey) by default. Other methods are configurable: an interactive SSH session, Cloudflare Access, OTP, a messenger. The strictness per action type. Which actions are dangerous: D-29. Status: accepted.
 
-**D-12. Изоляция проектов.** Отдельный пользователь без пароля и sudo на проект, rootless-контейнеры, роль и база Postgres на проект, `pg_hba.conf` без `all`, лимиты ресурсов, секреты не пересекаются. Чек-лист в `DEPLOY-PATTERN.md`. Статус: принято.
+**D-12. Project isolation.** A separate user without a password and sudo per project, rootless containers, a Postgres role and database per project, `pg_hba.conf` without `all`, resource limits, secrets that do not intersect. The checklist is in `DEPLOY-PATTERN.md`. Status: accepted.
 
-## Плагины и инфраструктура
+## Plugins and infrastructure
 
-**D-13. Архитектура плагинов.** Плагин не меняет систему сам, а возвращает план; исполняет только исполнитель. Категории: шаблоны (данные), провайдеры (секреты, подтверждения, уведомления; песочница без root), инфраструктурные (Caddy, Postgres, движки; план). Статус: принято.
+**D-13. The plugin architecture.** A plugin does not change the system itself but returns a plan; only the executor executes. The categories: templates (data), providers (secrets, confirmations, notifications; a sandbox without root), infrastructure (Caddy, Postgres, engines; a plan). Status: accepted. (Since v0.6 built-in plugins run their own commands through `host.Runner`, and external ones are directories with a manifest, R-19 and R-25 in `REQUIREMENTS.md`.)
 
-**D-14. Порядок внедрения плагинов.** Версия 1: все плагины встроены в бинарник. Версия 2: песочница для плагинов сообщества (предварительно WASM, манифест прав, подпись, уровни доверия). Статус: принято.
+**D-14. The order of introducing plugins.** Version 1: all plugins are built into the binary. Version 2: a sandbox for community plugins (tentatively WASM, a permission manifest, a signature, trust levels). Status: accepted.
 
-**D-15. Набор плагинов по умолчанию.** Caddy, Postgres, Podman и Docker, Cloudflare Tunnel (провайдер публикации по умолчанию), `base` (защита сервера). Статус: принято.
+**D-15. The default set of plugins.** Caddy, Postgres, Podman, Cloudflare Tunnel (the default publishing provider), `base` (server protection). Status: accepted. (Docker was dropped from the set by R-11, 2026-11-19.)
 
-**D-16. Описание контейнеров: compose и Quadlet, можно смешивать в одном проекте.** Quadlet только для Podman и systemd. Единая модель проекта, из неё плагин движка генерирует нужный формат. Статус: принято.
+**D-16. Describing containers: compose and Quadlet, can be mixed in one project.** Quadlet is for Podman and systemd only. A single project model; the engine plugin generates the needed format from it. Status: accepted.
 
-**D-17. Балансировщик: абстракция `Route`, `Backend`, `Listener` по словарю Kubernetes, без совместимости с ним.** По умолчанию Caddy. Абстракцию держать маленькой. Статус: принято.
+**D-17. The load balancer: the abstraction `Route`, `Backend`, `Listener` using the Kubernetes vocabulary, without compatibility with it.** Caddy by default. Keep the abstraction small. Status: accepted.
 
-**D-18. Postgres в двух режимах.** На хосте (по умолчанию: экономнее по памяти, доступ по unix-сокету, роль и база на проект) и в контейнере. Контейнерные БД не считаем плохой практикой. Статус: принято.
+**D-18. Postgres in two modes.** On the host (the default: more economical in memory, access over a unix socket, a role and database per project) and in a container. We do not consider containerized databases bad practice. Status: accepted.
 
-**D-19. Шаблоны приложений: декларативный манифест без скриптов.** Каталог не делаем, формат закладываем, каталог пусть создаёт сообщество. Статус: принято.
+**D-19. Application templates: a declarative manifest without scripts.** No catalog; the format is provided for and the community may make a catalog. Status: accepted.
 
-## Интерфейсы
+## Interfaces
 
-**D-20. Клиенты: CLI, UI, MCP для ИИ.** UI и MCP главный приоритет проекта (D-37). UI обязателен. Первый UI локальный (`ctl ui` на компьютере владельца, на `127.0.0.1`, ходит по SSH к агентам). Второй: UI на сервере через туннель под Cloudflare Access. Статус: принято.
+**D-20. Clients: the CLI, the UI, MCP for AI.** The UI and MCP are the main priority of the project (D-37). The UI is mandatory. The first UI is local (`ctl ui` on the owner's computer, on `127.0.0.1`, reaching the agents over SSH). The second: a UI on the server through a tunnel under Cloudflare Access. Status: accepted.
 
-**D-21. Оркестратор (необязательный, позже) со своим UI.** Может быть SaaS или развёрнут самостоятельно. Агенты подключаются к нему наружу, опасные действия он подтвердить не может, значения секретов через него не читаются (шифруются в браузере ключом агента). Статус: предварительно.
+**D-21. The orchestrator (optional, later) with its own UI.** It can be a SaaS or deployed by yourself. The agents connect to it outward, it cannot confirm dangerous actions, and secret values cannot be read through it (they are encrypted in the browser with the agent's key). Status: tentative.
 
-**D-22. Режим «агент сам забирает конфиг из внешнего хранилища» входит в оркестратор.** Конфиг это данные: известные поля, проверка каждого, подпись. Секреты в него не кладём. Статус: предварительно.
+**D-22. The mode "the agent fetches its config from an external store" is part of the orchestrator.** The config is data: known fields, every one checked, a signature. Secrets are not put into it. Status: tentative.
 
-## Реализация
+## Implementation
 
-**D-23. Язык: Go.** Без `unsafe` и `cgo`, тесты с `-race`, автоперезапуск службы. Исполнитель при желании позже можно переписать на Rust. Статус: принято.
+**D-23. The language: Go.** No `unsafe` and no `cgo`, tests with `-race`, automatic service restart. The executor can be rewritten in Rust later if wanted. Status: accepted.
 
-**D-24. Первая цель: режим А, команда `project create`.** Делает то, что вручную сделано в шагах 11, 12 и 18 `WALKTHROUGH.md`. Потом `deploy`, `rollback`, `status`. Состав первой версии: D-28. Статус: принято.
+**D-24. The first goal: mode A, the `project create` command.** It does what was done by hand in steps 11, 12 and 18 of `WALKTHROUGH.md`. Then `deploy`, `rollback`, `status`. The composition of the first version: D-28. Status: accepted.
 
-## Итоговые решения сессии S1 (2026-11-03)
+## The final decisions of session S1 (2026-11-03)
 
-**D-25. Название: `lite-deploy`.** Рабочее, сменить можно в любой момент. Статус: принято.
+**D-25. The name: `lite-deploy`.** A working one, it can change at any moment. Status: accepted.
 
-**D-26. Лицензия: MIT** для всего кода. Apache-2.0 отличается явной патентной защитой, на практике для небольшого инструмента разница мала. AGPL отложена: позже возможно для оркестратора и SaaS (агент остаётся MIT), чтобы нельзя было запустить закрытую копию как сервис. Статус: принято.
+**D-26. License: MIT** for all code. Apache-2.0 differs by explicit patent protection; in practice for a small tool the difference is small. AGPL is postponed: possibly later for the orchestrator and SaaS (the agent stays MIT), so that a closed copy cannot be run as a service. Status: accepted.
 
-**D-27. Цель проекта.** Открытый инструмент для себя и таких же владельцев VDS, без обязательств по срокам и поддержке, монетизация не планируется. Статус: принято.
+**D-27. The goal of the project.** An open tool for myself and for other VDS owners like me, with no obligations on deadlines and support, no monetization planned. Status: accepted.
 
-**D-28. Первая версия (v0).** Режим А. Команды `project create`, `deploy`, `rollback`, `status`. CLI с выводом в JSON служит базовым API; тонкие UI и MCP работают поверх тех же команд по SSH, без демона. Критерий готовности: the example project ставится и выкатывается через lite-deploy вместо ручных скриптов. В v0 нет: демона, подтверждений, Docker, оркестратора, плагинов сообщества. Статус: принято.
+**D-28. The first version (v0).** Mode A. The commands `project create`, `deploy`, `rollback`, `status`. The CLI with JSON output is the base API; thin UI and MCP work over the same commands through SSH, without a daemon. The readiness criterion: the example project is installed and deployed through lite-deploy instead of manual scripts. v0 has no: daemon, confirmations, Docker, orchestrator, community plugins. Status: accepted.
 
-**D-29. Классы действий.**
-- Безопасные (читать может любой клиент): `status`, логи, список проектов.
-- Обычные (может CI и ИИ-клиент): `deploy`, `rollback`, смена значения секрета, создание проекта.
-- Опасные (подтверждение подписью ключом): удаление проекта, базы или маршрута; смена списка доверенных ключей или способа подтверждения; установка, обновление или удаление агента и плагинов; чтение секрета на сервере под root (кроме этого значения нет в API вообще).
+**D-29. Action classes.**
+- Safe (any client may read): `status`, logs, the list of projects.
+- Ordinary (CI and an AI client may): `deploy`, `rollback`, changing a secret value, creating a project.
+- Dangerous (confirmation with a key signature): deleting a project, a database or a route; changing the list of trusted keys or the confirmation method; installing, updating or removing the agent and plugins; reading a secret on the server as root (apart from this the value is not in the API at all).
 
-Статус: принято.
+Status: accepted.
 
-**D-30. Модель угроз.** Защищаем от: взломанного проекта (контейнера), украденного ключа CI, вредного или взломанного плагина, ИИ-клиента, которого обманули (prompt injection), взломанного оркестратора или SaaS, взломанного агента, взломанного исполнителя (ущерб ограничен фиксированным списком действий и песочницей systemd), утечки репозитория. Не защищаем от: взлома самого хоста с root, злонамеренного хостера, физического доступа, уязвимости ядра. Статус: принято.
+**D-30. The threat model.** We protect against: a hacked project (container), a stolen CI key, a harmful or hacked plugin, a deceived AI client (prompt injection), a hacked orchestrator or SaaS, a hacked agent, a hacked executor (the damage is limited by the fixed list of actions and the systemd sandbox), a leaked repository. We do not protect against: a break-in to the host itself with root, a malicious hoster, physical access, a kernel vulnerability. Status: accepted.
 
-**D-31. Агент и исполнитель.** Агент: постоянная служба под отдельным пользователем без прав. Слушает `/run/lite-deploy/api.sock`, определяет вызывающего по `SO_PEERCRED`, проверяет права, строит план, ведёт состояние, ждёт подтверждений. Систему менять не может. Исполнитель: root, но не висит в фоне; второй сокет `/run/lite-deploy/exec.sock`, доступный только пользователю агента, владеет им systemd (socket activation): запрос приходит, systemd запускает исполнитель, тот выполняет шаг и завершается. Принимает только типизированные запросы из фиксированного списка, параметры проверяет сам (например, имя проекта по шаблону `^[a-z][a-z0-9-]{1,30}$`), команды выполняет без оболочки, ограничен systemd (набор возможностей и каталогов). В режиме А тот же исполнитель запускается вручную: `sudo lite-deploy apply plan.json`. Статус: принято.
+**D-31. The agent and the executor.** The agent: a permanent service under a separate user without rights. It listens on `/run/lite-deploy/api.sock`, identifies the caller by `SO_PEERCRED`, checks rights, builds a plan, keeps state, waits for confirmations. It cannot change the system. The executor: root, but not hanging in the background; a second socket `/run/lite-deploy/exec.sock`, available only to the agent user and owned by systemd (socket activation): a request arrives, systemd starts the executor, which performs the step and exits. It accepts only typed requests from a fixed list, validates the parameters itself (for example the project name by the pattern `^[a-z][a-z0-9-]{1,30}$`), runs commands without a shell, and is restricted by systemd (a set of capabilities and directories). In mode A the same executor is started by hand: `sudo lite-deploy apply plan.json`. Status: accepted.
 
-**D-32. API агента.** HTTP с JSON поверх unix-сокета, версия в пути (`/v1/...`), описание в OpenAPI. Статус: принято.
+**D-32. The agent API.** HTTP with JSON over a unix socket, the version in the path (`/v1/...`), described in OpenAPI. Status: accepted.
 
-**D-33. Формат описания проекта: JSON + JSON Schema.** Из схемы получаются формы UI, описания инструментов MCP и строгая проверка (неизвестные поля отклоняются). YAML на входе можно разрешить позже для ручного редактирования. Статус: принято.
+**D-33. The project description format: JSON + JSON Schema.** The schema gives UI forms, MCP tool descriptions and strict validation (unknown fields are rejected). YAML input can be allowed later for hand editing. Status: accepted.
 
-**D-34. Формат плана.** JSON-файл со списком шагов; шаг это одно действие из списка исполнителя с параметрами. У плана есть версия и хэш, который виден при применении. Статус: принято.
+**D-34. The plan format.** A JSON file with a list of steps; a step is one action from the executor list with parameters. A plan has a version and a hash that is visible when applying. Status: accepted.
 
-**D-35. Оркестратор и SaaS отложены до v1.** API агента проектируется так, чтобы он мог стать клиентом оркестратора. До v1 не обсуждаем. Статус: принято.
+**D-35. The orchestrator and SaaS are postponed until v1.** The agent API is designed so that it can become a client of the orchestrator. Not discussed before v1. Status: accepted.
 
-**D-36. Репозиторий.** Система деплоя живёт в отдельном приватном репозитории `toxic-sunflower/lite-deploy` (создан 2026-11-12, история взята из `server-setup`), приватным остаётся до готовности v0. `toxic-sunflower/server-setup` не переименовывается: там остаётся только инструкция по настройке сервера the example project. Статус: выполнено (заменило первоначальный план переименования).
+**D-36. The repository.** The deployment system lives in a separate private repository `toxic-sunflower/lite-deploy` (created 2026-11-12, the history was taken from `server-setup`), which stayed private until v0 was ready (it is public now, see `RELEASING.md`). `toxic-sunflower/server-setup` is not renamed: only the example project server setup instructions remain there. Status: done (it replaced the original plan to rename).
 
-**D-37. Приоритет: ИИ (MCP) и UI.** Следствия: JSON Schema и OpenAPI источник истины для форм и инструментов; любое действие сначала в режиме «показать план» (dry-run) в читаемом виде; подтверждения живут в агенте (защита от обманутого ИИ); операции идемпотентны. Статус: принято.
+**D-37. The priority: AI (MCP) and the UI.** The consequences: JSON Schema and OpenAPI are the source of truth for forms and tools; any action first in the "show the plan" (dry-run) mode in a readable form; confirmations live in the agent (protection from a deceived AI); operations are idempotent. Status: accepted.
 
-**D-38. Секреты и журнал при взломе агента.** Значения секретов шифруются на стороне клиента ключом исполнителя, агент передаёт шифртекст и значения не хранит. Журнал пишет исполнитель в файл, который агент не может менять. Квоты на число действий, чтобы агент не мог завалить исполнитель запросами. Статус: принято.
+**D-38. Secrets and the journal if the agent is hacked.** Secret values are encrypted on the client side with the executor key; the agent passes ciphertext and does not store values. The journal is written by the executor to a file the agent cannot change. Quotas on the number of actions, so that the agent cannot flood the executor with requests. Status: accepted.
 
-## Решения сессии S2 (2026-11-03, `SPEC-v0.md`)
+## Decisions of session S2 (2026-11-03, `SPEC-v0.md`)
 
-Вытекают из D-25…D-38; приняты владельцем 2026-11-03.
+They follow from D-25…D-38; accepted by the owner on 2026-11-03.
 
-**D-39. Привратник это подкоманда `lite-deploy gate`, а не скрипт в домашнем каталоге проекта.** Бинарник в `/usr/local/bin` принадлежит root; прежние скрипты (700, владелец проектный пользователь) мог переписать взломанный проект. Привратник вызывает код выкатки в том же процессе, без оболочки. Статус: принято.
+**D-39. The gatekeeper is the subcommand `lite-deploy gate`, not a script in the project home directory.** The binary in `/usr/local/bin` belongs to root; the earlier scripts (700, owned by the project user) could be overwritten by a hacked project. The gatekeeper calls the deploy code in the same process, without a shell. Status: accepted.
 
-**D-40. Режим `adopt`.** Проект, настроенный вручную (the example project), берётся под управление без пересоздания: существующие пользователь, роль, база не ломаются, различающиеся файлы сохраняются как `.bak`. Пароль существующей роли: задать служебный секрет `_db_password` или `rotate_password`. Статус: принято.
+**D-40. The `adopt` mode.** A project set up by hand (the example project) is taken under management without recreating it: the existing user, role and database are not broken, files that differ are saved as `.bak`. The password of an existing role: set the internal secret `_db_password` or `rotate_password`. Status: accepted.
 
-**D-41. Шифрование секретов: `age` (X25519 + ChaCha20-Poly1305), открытый ключ исполнителя `/etc/lite-deploy/exec.pub`.** Значение оборачивается в JSON с `project` и `name` (привязка, в age нет связанных данных). Свой формат не изобретаем. Статус: принято.
+**D-41. Secret encryption: `age` (X25519 + ChaCha20-Poly1305), the executor public key `/etc/lite-deploy/exec.pub`.** The value is wrapped in JSON with `project` and `name` (a binding, age has no associated data). We do not invent our own format. Status: accepted.
 
-**D-42. Исполнитель получает типизированные параметры, а не содержимое файлов.** Юниты, сайты Caddy, sudoers, `authorized_keys` он строит сам из встроенных шаблонов; пути вычисляет из проверенных имён. Клиент не может заставить записать произвольный файл. Статус: принято.
+**D-42. The executor receives typed parameters, not the content of files.** It builds the units, Caddy sites, sudoers and `authorized_keys` itself from built-in templates; it computes paths from validated names. A client cannot make it write an arbitrary file. Status: accepted.
 
-**D-43. План строится на сервере (`project plan`), хэш по каноническому JSON (RFC 8785); у плана срок жизни (24 ч) и `server_id`.** Применение: `sudo lite-deploy apply plan.json` с dry-run по умолчанию. Шаги идемпотентны, откат при ошибке не делается, повтор продолжает. Статус: принято.
+**D-43. The plan is built on the server (`project plan`), the hash is over canonical JSON (RFC 8785); a plan has a lifetime (24 h) and a `server_id`.** Applying: `sudo lite-deploy apply plan.json` with dry-run by default. Steps are idempotent, there is no rollback on an error, a repeat continues. Status: accepted.
 
-**D-44. Ответы CLI `--json`: конверт `{ok, api_version, command, data|error}` и таблица кодов выхода.** Те же данные станут телом `/v1`. Клиентский режим `--host` выполняет команды по SSH. Статус: принято.
+**D-44. The CLI `--json` answers: the envelope `{ok, api_version, command, data|error}` and the exit code table.** The same data will become the body of `/v1`. The client mode `--host` runs commands over SSH. Status: accepted.
 
-**D-45. Квоты и лимиты по умолчанию** (раздел 8 `SPEC-v0.md`): план до 256 КиБ и 200 шагов, 10 выкаток за 10 минут на проект, 50 проектов, порты 18000–18999. Статус: принято.
+**D-45. Default quotas and limits** (section 8 of `SPEC-v0.md`): a plan of up to 256 KiB and 200 steps, 10 deploys in 10 minutes per project, 50 projects, ports 18000–18999. Status: accepted.
 
-**D-46. В v0 `deploy`, `rollback`, `status` работают от проектного пользователя через привратник с правилом sudoers на `systemctl reload caddy`; блокировка `flock` на проект.** В S6 (демон) переключение Caddy переходит на сокет исполнителя, sudoers исчезает. Все сервисы проекта выкатываются вместе (один хэш). Статус: принято.
+**D-46. In v0 `deploy`, `rollback`, `status` run as the project user through the gatekeeper with a sudoers rule for `systemctl reload caddy`; a `flock` lock per project.** In S6 (the daemon) the Caddy switch moves to the executor socket and sudoers disappears. All services of a project are deployed together (one hash). Status: accepted.
 
-## Продукт и порядок работ (2026-11-03)
+## The product and the order of work (2026-11-03)
 
-**D-47. Продукт это v1, а не v0.** v1: агент-демон (режим Б) с исполнителем по запросу, UI, MCP, секреты только на запись с подтверждением подписью, установка на пустой сервер одной командой. v0 (команды `project create`, `deploy`, `rollback`, `status` в режиме А) это первая ступень для проверки ядра на живом проекте, а не релиз. Порядок: ядро (S3–S5), затем сразу демон (S6), затем туннель, секреты, UI, MCP, установка. UI и MCP строятся уже на API демона. Статус: принято.
+**D-47. The product is v1, not v0.** v1: an agent daemon (mode B) with an on-request executor, a UI, MCP, write-only secrets with confirmation by a signature, installation on an empty server with one command. v0 (the commands `project create`, `deploy`, `rollback`, `status` in mode A) is the first step for checking the core on a live project, not a release. The order: the core (S3–S5), then at once the daemon (S6), then the tunnel, secrets, the UI, MCP, installation. The UI and MCP are built on the daemon API already. Status: accepted.
 
-## Решения сессии S4 (2026-11-04)
+## Decisions of session S4 (2026-11-04)
 
-**D-53. Команды в сессии проектного пользователя запускаются через `systemd-run --machine=<U>@.host --user --pipe --wait --quiet --collect -- <команда>`** (закрывает вопрос 1 раздела 13 `SPEC-v0.md`). Так работают `daemon-reload`, проверка юнитов и `podman login`; токен идёт на стандартный ввод (`--pipe`). Файлы в домашнем каталоге проекта пишет root и тут же отдаёт `chown` проектному пользователю. Статус: принято владельцем как рабочая гипотеза (2026-11-04), **не проверено на настоящем сервере**: проверить на тестовом сервере (нужен `systemd-run`, `loginctl enable-linger`, rootless podman).
+**D-53. Commands in a project user's session are run through `systemd-run --machine=<U>@.host --user --pipe --wait --quiet --collect -- <command>`** (it closes question 1 of section 13 of `SPEC-v0.md`). This is how `daemon-reload`, the unit check and `podman login` work; the token goes to standard input (`--pipe`). Files in the project home directory are written by root, which at once hands them over with `chown` to the project user. Status: accepted by the owner as a working hypothesis (2026-11-04); **confirmed on 2026-11-19** in an Ubuntu 24.04 container and on a test WSL (it needs `systemd-run`, `loginctl enable-linger`, rootless podman and the packages `dbus-user-session` and `libpam-systemd`).
 
-**D-54. Исполнитель живёт в `internal/executor`; доступ к системе только через `host.Runner`, `host.FS`, `host.HTTPClient`.** В `host.FS` добавлены `Stat`, `Chown`, `Chmod`, `Remove`, `Append`; запись файла через `WriteFile` создаёт файл root-владельца, поэтому после неё всегда `Chown`. Статус: принято владельцем (2026-11-04).
+**D-54. The executor lives in `internal/executor`; access to the system only through `host.Runner`, `host.FS`, `host.HTTPClient`.** `Stat`, `Chown`, `Chmod`, `Remove`, `Append` were added to `host.FS`; writing a file through `WriteFile` creates a root-owned file, so `Chown` always follows. Status: accepted by the owner (2026-11-04).
 
-**D-55. Поведение применения.** Журнал `/var/lib/lite-deploy/journal.jsonl` пишется до и после каждого шага; если журнал недоступен, применение не начинается. Первая ошибка останавливает `apply`, остальные шаги `skipped`; `dry-run` не останавливается и показывает все `would_fail`. Старый файл заменяется с копией `.bak-<id плана>` только пока у проекта нет метки управления (`record_project` ещё не выполнялся), у копии те же права и владелец. `reload_caddy` в реальном запуске выполняет reload всегда (он безвреден, а прерванное применение иначе оставило бы Caddy без новых файлов), но сообщает `changed`, только если сайты менялись. При `adopt` файл сайта с тем же адресом, но другим именем, заменяется (копия `.bak`); если адрес занят файлом другого управляемого проекта, шаг падает. Копия `project.json` в `/etc/lite-deploy/projects` пишется, если описание передано (`project create` или `apply --project-file`) и его хэш равен `project_hash` плана. Статус: принято владельцем (2026-11-04).
+**D-55. The behaviour of applying.** The journal `/var/lib/lite-deploy/journal.jsonl` is written before and after each step; if the journal is unavailable, applying does not start. The first error stops `apply`, the other steps are `skipped`; `dry-run` does not stop and shows all `would_fail`. An old file is replaced with a copy `.bak-<plan id>` only while the project has no management mark (`record_project` has not run yet), and the copy has the same mode and owner. `reload_caddy` in a real run always reloads (it is harmless, and an interrupted apply would otherwise leave Caddy without the new files), but reports `changed` only if the sites changed. With `adopt` a site file with the same address but another name is replaced (a `.bak` copy); if the address is taken by a file of another managed project, the step fails. A copy of `project.json` in `/etc/lite-deploy/projects` is written if the description was passed (`project create` or `apply --project-file`) and its hash equals the plan `project_hash`. Status: accepted by the owner (2026-11-04).
 
-**D-56. `apply` и `project create` требуют root (и `--dry-run` тоже); без терминала нужен `--yes`, иначе `confirmation_required` (код 4).** Квота `apply_per_hour` пока не действует (счёт по журналу появится в S6). Статус: принято владельцем (2026-11-04).
+**D-56. `apply` and `project create` need root (and `--dry-run` too); without a terminal `--yes` is needed, otherwise `confirmation_required` (code 4).** The quota `apply_per_hour` does not work yet (counting from the journal will appear in S6). Status: accepted by the owner (2026-11-04). Since v0.6 an administrator runs `lite project create` without root: the CLI hands the preview and the creation to the agent (D-64).
 
-## Пожелания (не решения, после v0)
+## Wishes (not decisions, after v0)
 
-- **Пользовательские хуки** (`pre_deploy`, `post_deploy`): запуск скрипта в деплое. Только от проектного пользователя, объявляются в `project.json`, установка и изменение это опасное действие (подпись), чтобы ключ CI не мог выполнить произвольный код.
-- **Выкатка по расписанию или по новому образу из самого lite-deploy** (режим Б). Сейчас триггер живёт в CI (GitHub Actions), lite-deploy получает `deploy <хэш>`.
+- **User hooks** (`pre_deploy`, `post_deploy`): running a script in a deploy. Only as the project user, declared in `project.json`; installing and changing them is a dangerous action (a signature), so that the CI key cannot run arbitrary code.
+- **Deploys on a schedule or on a new image from lite-deploy itself** (mode B). Now the trigger lives in CI (GitHub Actions), and lite-deploy receives `deploy <hash>`.
 
-## Решения сессии S3 (2026-11-03)
+## Decisions of session S3 (2026-11-03)
 
-Уточнения `SPEC-v0.md`, которые понадобились при реализации; принято владельцем 2026-11-04.
+Clarifications of `SPEC-v0.md` that were needed in the implementation; accepted by the owner on 2026-11-04.
 
-**D-48. В режиме `adopt` шаг `set_secret` для `_db_password` идёт до `provision_postgres`** (в `SPEC-v0.md` порядок был обратный). Иначе существующий пароль роли не из чего проверить. Без `adopt` передавать `_db_password` в план нельзя. Статус: принято владельцем (2026-11-04).
+**D-48. In `adopt` mode the `set_secret` step for `_db_password` goes before `provision_postgres`** (in `SPEC-v0.md` the order was the opposite). Otherwise there is nothing to check the existing role password with. Without `adopt` `_db_password` must not be passed into a plan. Status: accepted by the owner (2026-11-04).
 
-**D-49. Несекретное состояние проекта (`state/projects/<имя>.json`) содержит `hash`, `ports`, `secrets` (имена, не значения) и `deployed`.** Нужно, потому что `plan` работает без root и не может читать каталог секретов (700) и домашний каталог проекта. `record_project` заполняет `secrets` на сервере под root, `deployed` ставит выкатка (S5). Статус: принято владельцем (2026-11-04).
+**D-49. The non-secret project state (`state/projects/<name>.json`) holds `hash`, `ports`, `secrets` (names, not values) and `deployed`.** It is needed because `plan` works without root and cannot read the secrets directory (700) and the project home directory. `record_project` fills `secrets` on the server as root, `deployed` is set by a deploy (S5). Status: accepted by the owner (2026-11-04).
 
-**D-50. Все шифртексты секретов передаются в `project plan` флагами `--ciphertext имя=файл`; лишний шифртекст (имя не используется проектом) это ошибка `unused_secret`.** Команда `secret encrypt` появится в S8. Статус: принято владельцем (2026-11-04).
+**D-50. All secret ciphertexts are passed to `project plan` with the flags `--ciphertext name=file`; an extra ciphertext (a name the project does not use) is the error `unused_secret`.** The `secret encrypt` command appears in S8. Status: accepted by the owner (2026-11-04).
 
-**D-51. Порядок проверки плана: схема и размер, хэш, срок, сервер, затем шаги** (так в `SPEC-v0.md`, раздел 3). Шаг проверяется по списку действий, параметры строго, `project` в каждом шаге равен проекту плана. До S4 `apply --dry-run` только проверяет план и показывает шаги со статусом `pending`. Статус: принято владельцем (2026-11-04).
+**D-51. The order of plan verification: schema and size, hash, expiry, server, then the steps** (as in `SPEC-v0.md`, section 3). A step is checked against the action list, the parameters strictly, and `project` in every step equals the plan project. Before S4 `apply --dry-run` only validated the plan and showed the steps with the status `pending`. Status: accepted by the owner (2026-11-04).
 
-**D-52. Шифртекст в плане обязан быть выводом `secret encrypt` (age armor), иначе план отклоняется (`invalid_secret`, и при построении, и при проверке).** Значение секрета: UTF-8, 1…8192 байт, без NUL; шифртекст до 16 КиБ. `lite-deploy init` создаёт ключ исполнителя `/etc/lite-deploy/exec.age` (600) и `exec.pub` (644) и никогда не перезаписывает существующий закрытый ключ. Команды `secret encrypt` и `secret set` читают значение только со стандартного ввода или скрыто с терминала; `secret list` без root берёт имена из состояния проекта (D-49). Статус: принято владельцем (2026-11-04).
+**D-52. A ciphertext in a plan must be the output of `secret encrypt` (age armor), otherwise the plan is rejected (`invalid_secret`, both when building and when verifying).** A secret value: UTF-8, 1…8192 bytes, no NUL; a ciphertext up to 16 KiB. `lite-deploy init` creates the executor key `/etc/lite-deploy/exec.age` (600) and `exec.pub` (644) and never overwrites an existing private key. The commands `secret encrypt` and `secret set` read the value only from standard input or hidden from the terminal; `secret list` without root takes names from the project state (D-49). Status: accepted by the owner (2026-11-04).
 
-**D-57. Состав системы: минимум при установке, остальное плагины.** `install.sh` ставит только `lite`, `minisign` (проверка подписи) и агента. Всё остальное это плагины, которые ставятся командой `lite init --plugins` или из интерфейса: `caddy` (входящий трафик, обязателен для сайтов проектов), `podman`, `postgres`, `firewall` и далее. Уточнено владельцем 2026-11-17: прежняя формулировка делала Caddy зависимостью ядра и ставила его при установке. Скрипты `0*.sh` из `server-setup` для этого не нужны. Статус: принято владельцем.
+**D-57. The composition of the system: a minimum at install, the rest are plugins.** The installer installs only `lite`, `minisign` (the signature check) and the agent. Everything else is plugins installed with `lite init --plugins` or from the interface: `caddy` (incoming traffic, mandatory for project sites), `podman`, `postgres`, `firewall` and on. Clarified by the owner on 2026-11-17: the earlier wording made Caddy a core dependency and installed it at install time. The `0*.sh` scripts from `server-setup` are not needed for this. Status: accepted by the owner.
 
-**D-58. Движок контейнеров: podman по умолчанию, запасной вариант Docker.** Проект может отключить контейнеры совсем. Статус: принято владельцем (2026-11-13). Docker как запасной движок ещё не проектировался.
+**D-58. The container engine: podman by default, Docker as a fallback.** A project may turn containers off completely. Status: accepted by the owner (2026-11-13). **Changed by D-65 (2026-11-19): Docker is forbidden.**
 
-**D-59. Проект состоит из компонентов разных видов.** Компонент может быть контейнером (`podman` под systemd, Quadlet) или обычной службой systemd (демон на хосте, не в контейнере); в одном проекте допустимы оба вида вместе. Проект без контейнеров допустим. Деплой сегодняшнего S5 завязан на `podman`, его нужно будет отделить от вида компонента. Статус: принято владельцем (2026-11-13), реализация не начата.
+**D-59. A project consists of components of different kinds.** A component can be a container (`podman` under systemd, Quadlet) or a plain systemd service (a daemon on the host, not in a container); both kinds are allowed together in one project. A project without containers is allowed. Status: accepted by the owner (2026-11-13); implemented in v0.6 as `kind: quadlet|unit` (R-12, R-27).
 
-**D-60. Общие ресурсы проектов.** Несколько проектов могут разделять файлы, каталоги и сокеты. Модель доступа (кому что разрешено и как это согласуется с изоляцией проектов в `DEPLOY-PATTERN.md`) ещё не решена. Статус: требование владельца (2026-11-13), проектирование впереди.
+**D-60. Shared resources of projects.** Several projects may share files, directories and sockets. The access model (who is allowed what and how it agrees with project isolation in `DEPLOY-PATTERN.md`) is not decided. Status: the owner's requirement (2026-11-13); postponed by the owner on 2026-11-19 (needs rootless id checks on a server); persistent directories inside one project (`data`) exist.
 
-**D-61. Системные зависимости проекта.** Проект заявляет, что ему нужно на уровне хоста: системный сервис (например Redis без контейнера), пакет или библиотека. Эти зависимости ставятся через план и исполнитель, а не вручную. Какие именно действия допустимы, ещё не решено. Статус: требование владельца (2026-11-13), проектирование впереди.
+**D-61. System dependencies of a project.** A project declares what it needs at the host level: a system service (for example Redis without a container), a package or a library. These dependencies are installed through a plan and the executor, not by hand. Which actions are allowed is not decided. Status: the owner's requirement (2026-11-13); `lite verify` checks that the plugins a project needs are present (R-20).
 
-**D-62. Файервол это плагин, управляется из UI и CLI.** Команды `lite-deploy firewall status|allow|remove|enable` (запрещающие правила `deny` не нужны: входящее по умолчанию закрыто), раздел «Файервол» в UI. Плагин возвращает план, меняет `ufw` исполнитель (правило из раздела 7 `ARCHITECTURE.md`). Порты SSH, 80 и 443 закрыть нельзя (правила для них неудаляемы); любое изменение требует `--yes` в CLI и подтверждения в браузере. Сделано проще, чем в `ARCHITECTURE.md` (раздел 7): плагин вызывает `ufw` сам, без плана и исполнителя; когда появится общая модель плагинов, его нужно будет перевести на неё. Установка и первичная настройка сервера (пользователь, SSH, пакеты безопасности) остаются в `server-setup` скриптами, `install.sh` только устанавливает, `verify.sh` только проверяет. Статус: принято владельцем (2026-11-13).
+**D-62. The firewall is a plugin, managed from the UI and the CLI.** The commands `lite-deploy firewall status|allow|remove|enable` (`deny` rules are not needed: incoming is closed by default), the "Firewall" section in the UI. The plugin returns a plan, and the executor changes `ufw` (the rule of section 7 of `ARCHITECTURE.md`). The SSH, 80 and 443 ports cannot be closed (the rules for them cannot be deleted); any change needs `--yes` in the CLI and a confirmation in the browser. It was made simpler than in `ARCHITECTURE.md` (section 7): the plugin calls `ufw` itself, without a plan and the executor. Status: accepted by the owner (2026-11-13). Since v0.6 it is a built-in plugin on the common mechanism.
 
-**D-63. Агент: первая версия (S6).** Агент без прав и исполнитель по запросу по D-31 и D-32, но без подтверждения подписью ключа, квот и OpenAPI (они в S6, следующая очередь). Доступ к агенту у администраторов системы (группа `sudo`, на RHEL `wheel`; отдельной группы нет: один список администраторов, не два). Агент и Caddy ставит `install.sh` (не отдельная команда); сокет агента 0660, сокет исполнителя 0600 только для пользователя `lite-deploy`; оба сокета создаёт systemd. Исполнитель выполняет только действия `status`, `deploy`, `rollback`, `firewall.*` и сам проверяет параметры; выполняет их той же программой `lite-deploy` в том же процессе (не через оболочку). UI ходит к агенту командой `lite-deploy call` (локально или по SSH, без `sudo`). Проект CI по-прежнему идёт через привратник `gate` под пользователем проекта. Пока нет подписи ключа, любой член группы может выполнять любые действия из списка, включая файервол. Статус: принято владельцем (2026-11-13).
+**D-63. The agent: the first version (S6).** An unprivileged agent and an on-request executor per D-31 and D-32, but without a key-signature confirmation, quotas and OpenAPI (they are in S6, the next in the queue). System administrators (the group `sudo`, on RHEL `wheel`; there is no separate group: one list of administrators, not two) can use the agent. The installer installs the agent (not a separate command); the agent socket is 0660, the executor socket is 0600 for the `lite-deploy` user only; both sockets are created by systemd. The executor performs only the actions `status`, `deploy`, `rollback`, `firewall.*` (later also plugin commands, project creation, `fix`) and validates the parameters itself; it performs them with the same `lite-deploy` program in the same process (not through a shell). The UI reaches the agent with the command `lite-deploy call` (locally or over SSH, without `sudo`). The CI project still goes through the `gate` gatekeeper as the project user. Until there is a key signature, any member of the group can perform any action from the list, including the firewall. Status: accepted by the owner (2026-11-13).
 
-## Отвергнуто
+## Decisions of 2026-11-19 and 2026-11-20
 
-- Центральный компонент с root, выполняющий любые команды (как у Coolify, Dokploy, Kamal).
-- Единый формат Quadlet как единственный.
-- Хранение описания инфраструктуры и секретов в GitHub или GitLab.
-- Каталог готовых приложений.
-- Тяжёлая веб-панель, команды, роли, SSO.
-- Совместимость с Kubernetes и Gateway API.
-- YAML как основной формат конфигурации (выбран JSON, D-33) и gRPC для API (выбран HTTP/JSON, D-32).
-- Постоянно работающий процесс исполнителя с root (выбран запуск по запросу, D-31).
-- Проверка идеи «скриптами для вайбкодеров»: скрипты им не нужны, нужен интерфейс (UI или ИИ-клиент).
+**D-64. Working without root.** A privileged command run by an administrator (group `sudo` or `wheel`) is handed to the agent and the executor; plugin commands, `fix`, `project create` (preview and creation), `verify`, `deploy`, `rollback` and `status` work this way. Passwords and keys travel through stdin. Root is needed only for `lite init` and `liteup`. Status: accepted by the owner (2026-11-19).
 
-## Основания (факты из сравнения с аналогами)
+**D-65. Docker is forbidden.** Access to the Docker daemon is root on the server and breaks project isolation. `lite package` refuses Docker packages, `lite verify` warns if Docker is installed. Containers are podman and Quadlet only. Status: accepted by the owner (2026-11-19).
 
-Получены из документации самих проектов, 2026-10-29:
-- Coolify требует root или пользователя с sudo, хранит SSH-ключи, сам пишет, что взлом панели открывает все серверы ([Security model](https://coolify.io/docs/core/security-model)); есть официальный MCP с разграничением прав ([MCP](https://coolify.io/docs/mcp/how-mcp-works)); Cloudflare Tunnel как опция ([Tunnels](https://coolify.io/docs/knowledge-base/cloudflare/tunnels/overview)).
-- Dokploy: Docker и Swarm, Traefik, PostgreSQL, порты 80/443/3000, минимум 2 ГБ и 30 ГБ ([Installation](https://docs.dokploy.com/docs/core/installation)); внешние менеджеры секретов; OpenAPI.
-- Kamal: SSH под root по умолчанию, конфиг в репозитории, без демона и панели ([Installation](https://kamal-deploy.org/docs/installation/)).
-- Не проверено: Dokploy AI Assistant и API, Dokku, CapRover, Podman в полном тексте документации, реальный расход памяти.
+**D-66. Schema v2 and `unit` components.** `project/v2` adds `kind` (`quadlet` or `unit`), `exec`, `stop`, `data`, `release` and a database on another server; v1 descriptions are still accepted. A `unit` release is a tar.gz archive over https with a mandatory minisign signature (`minisign_key`). Status: accepted by the owner (2026-11-19).
+
+**D-67. Servers.** A project lives on one server; foreign resources (a database) are connected by an address from the server registry; there is no scheduling, moving or balancing, and ingress is a separate server. Status: accepted by the owner (2026-11-19).
+
+**D-68. Backups and secrets.** Project secrets enter a backup only encrypted with the owner's age key (the server keeps only the public part); database dumps are encrypted optionally; storage locations (Backblaze B2, S3, SFTP through rclone) are pluggable and upload with `copy`. The secret store is local; pluggable backends (an encrypted git, Vault) are postponed. Status: accepted by the owner (2026-11-19).
+
+**D-69. `liteup`.** The installer and manager is `liteup` (install, update, reinstall, uninstall, status), as `rustup` is for Rust; it is part of every signed release, and the agent restarts automatically on install and update. `install.sh` stays as a wrapper. Status: accepted by the owner (2026-11-20).
+
+**D-70. English everywhere.** All user-visible text, code comments and documentation are in English. Status: accepted by the owner (2026-11-20).
+
+## Rejected
+
+- A central component with root that runs any command (as in Coolify, Dokploy, Kamal).
+- The Quadlet format as the only one.
+- Keeping the infrastructure description and secrets in GitHub or GitLab.
+- A catalog of ready applications.
+- A heavy web panel, teams, roles, SSO.
+- Compatibility with Kubernetes and the Gateway API.
+- YAML as the main configuration format (JSON was chosen, D-33) and gRPC for the API (HTTP/JSON was chosen, D-32).
+- A permanently running executor process with root (a start on request was chosen, D-31).
+- Docker (D-65).
+- Testing the idea with "scripts for vibe coders": they do not need scripts, they need an interface (a UI or an AI client).
+
+## Grounds (facts from the comparison with alternatives)
+
+Taken from the documentation of the projects themselves, 2026-10-29:
+- Coolify needs root or a user with sudo, stores SSH keys, and itself writes that a break into the panel opens all servers ([Security model](https://coolify.io/docs/core/security-model)); there is an official MCP with permission separation ([MCP](https://coolify.io/docs/mcp/how-mcp-works)); Cloudflare Tunnel as an option ([Tunnels](https://coolify.io/docs/knowledge-base/cloudflare/tunnels/overview)).
+- Dokploy: Docker and Swarm, Traefik, PostgreSQL, ports 80/443/3000, at least 2 GB and 30 GB ([Installation](https://docs.dokploy.com/docs/core/installation)); external secret managers; OpenAPI.
+- Kamal: SSH as root by default, the config in the repository, no daemon and no panel ([Installation](https://kamal-deploy.org/docs/installation/)).
+- Not checked: the Dokploy AI Assistant and API, Dokku, CapRover, Podman in the full text of the documentation, real memory use.
