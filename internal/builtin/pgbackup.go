@@ -206,8 +206,26 @@ func (t tools) pgBackupsList() (plugin.Output, error) {
 // pgRestore restores database data from a backup (existing objects are replaced).
 func (t tools) pgRestore(args []string) (plugin.Output, error) {
 	args, identStdin := extractFlag(args, "--identity-stdin")
-	if len(args) != 2 || !pgNameRe.MatchString(args[0]) {
-		return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg restore DATABASE FILE [--identity-stdin] (files: lite pg backups; for .age give the age private key on stdin)")
+	// --as TARGET restores into another (existing) database instead of the one the backup was taken from
+	target := ""
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--as" {
+			if i+1 >= len(args) {
+				return plugin.Output{}, plugin.Errorf("usage", "--as needs a database name")
+			}
+			target = args[i+1]
+			i++
+			continue
+		}
+		rest = append(rest, args[i])
+	}
+	args = rest
+	if len(args) != 2 || !pgNameRe.MatchString(args[0]) || (target != "" && (!pgNameRe.MatchString(target) || target == "postgres")) {
+		return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg restore DATABASE FILE [--as OTHER_DATABASE] [--identity-stdin] (files: lite pg backups; for .age give the age private key on stdin)")
+	}
+	if target == "" {
+		target = args[0]
 	}
 	m := backupFileRe.FindStringSubmatch(args[1])
 	if m == nil || m[1] != args[0] {
@@ -216,12 +234,12 @@ func (t tools) pgRestore(args []string) (plugin.Output, error) {
 	if _, err := t.env.FS.Stat(PGBackupDir + "/" + args[1]); err != nil {
 		return plugin.Output{}, plugin.Errorf("precondition_failed", "file %s does not exist", args[1])
 	}
-	have, err := t.psql(fmt.Sprintf("select 1 from pg_database where datname='%s'", args[0]))
+	have, err := t.psql(fmt.Sprintf("select 1 from pg_database where datname='%s'", target))
 	if err != nil {
 		return plugin.Output{}, err
 	}
 	if strings.TrimSpace(have) == "" {
-		return plugin.Output{}, plugin.Errorf("precondition_failed", "database %s does not exist: create it first (lite pg create-db %s)", args[0], args[0])
+		return plugin.Output{}, plugin.Errorf("precondition_failed", "database %s does not exist: create it first (lite pg create-db %s)", target, target)
 	}
 	src := PGBackupDir + "/" + args[1]
 	if m[3] == ".age" {
@@ -235,10 +253,23 @@ func (t tools) pgRestore(args []string) (plugin.Output, error) {
 		defer func() { _ = t.env.FS.Remove(tmp) }()
 		src = tmp
 	}
-	if err := t.must("runuser", "-u", "postgres", "--", "pg_restore", "--clean", "--if-exists", "-d", args[0], src); err != nil {
+	cmd := []string{"-u", "postgres", "--", "pg_restore", "--clean", "--if-exists", "-d", target}
+	if target != args[0] {
+		// the objects of another database are given to the owner of the target, not to the original role
+		owner, err := t.psql(fmt.Sprintf("select pg_get_userbyid(datdba) from pg_database where datname='%s'", target))
+		if err != nil {
+			return plugin.Output{}, err
+		}
+		owner = strings.TrimSpace(owner)
+		if !pgNameRe.MatchString(owner) {
+			return plugin.Output{}, plugin.Errorf("precondition_failed", "the owner %q of database %s cannot be used", owner, target)
+		}
+		cmd = append(cmd, "--no-owner", "--role="+owner)
+	}
+	if err := t.must("runuser", append(cmd, src)...); err != nil {
 		return plugin.Output{}, err
 	}
-	return textOut("Database " + args[0] + " restored from " + args[1] + ".\n"), nil
+	return textOut("Database " + target + " restored from " + args[1] + ".\n"), nil
 }
 
 const (

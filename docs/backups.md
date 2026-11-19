@@ -66,9 +66,17 @@ Each location supports `status`, `upload`, `list`, `fetch` and `schedule` (for e
 
 ## 5. Test a restore (do this once)
 
-Restore always goes into the database the backup was taken from, replacing its current data, so **never test by restoring over a live database**. Test on a spare machine instead: a fresh virtual server or a second server. Follow "Lost the server" below there, with the same key and storage, and look at the data.
+A plain `lite pg restore shop FILE` writes into the database `shop` and **replaces its current data**, so do not test that way on a live database. Restore into a separate, empty database with `--as` instead, and look at the data:
 
-A backup that was never restored is a hope, not a backup. You can test before you have any real data: on a fresh server with a throwaway project, back it up, install `lite` on a second machine and restore.
+```sh
+lite pg backups                                                    # pick a file for shop
+lite pg create-db shop_restore_test --yes
+cat lite-backup.key | lite pg restore shop shop-20261119T030000Z.dump.age --as shop_restore_test --identity-stdin --yes
+sudo -u postgres psql -d shop_restore_test -c '\dt'                 # look at it
+lite pg drop-db shop_restore_test --yes                            # clean up
+```
+
+(Leave out `--identity-stdin` and the `cat …|` when dumps are not encrypted.) A backup that was never restored is a hope, not a backup. For a full rehearsal of losing the server, use a spare virtual server and follow "Lost the server" below.
 
 ## Lost the server: restore on a new one
 

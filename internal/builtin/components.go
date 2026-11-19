@@ -153,7 +153,7 @@ func (PG) Commands() []plugin.Command {
 		{Name: "drop-db", Confirm: true, Args: "DATABASE", Help: "delete a database (the role stays)"},
 		{Name: "backup", Root: true, Args: "[DATABASE]", Help: "back up a database (or all databases) into /var/backups/lite-deploy/pg, the latest 7 are kept"},
 		{Name: "backups", Root: true, Help: "list of backups"},
-		{Name: "restore", Confirm: true, Args: "DATABASE FILE [--identity-stdin]", Help: "restore a database from a backup (current data is replaced); for .age give the private key on stdin"},
+		{Name: "restore", Confirm: true, Args: "DATABASE FILE [--as OTHER_DATABASE] [--identity-stdin]", Help: "restore a database from a backup (current data is replaced; --as restores into another existing database); for .age give the private key on stdin"},
 		{Name: "schedule", Confirm: true, Args: "on|off", Help: "daily backup with a systemd timer"},
 		{Name: "password", Confirm: true, Args: "ROLE --password-stdin", Help: "set a role password (from standard input)"},
 		{Name: "listen", Confirm: true, Args: "ADDRESS|localhost", Help: "also accept connections on this server's address (restarts PostgreSQL)"},

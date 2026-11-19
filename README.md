@@ -278,6 +278,7 @@ lite pg backup [DATABASE]                        # a backup in /var/backups/lite
 lite pg schedule on                              # daily around 03:30 (a systemd timer)
 lite pg backups                                  # the list
 lite pg restore DATABASE FILE                    # restore (the current data is replaced; the database must exist)
+lite pg restore DATABASE FILE --as OTHER_DB      # restore into another existing database, for example to test a backup
 lite pg restore DATABASE FILE.age --identity-stdin < lite-backup.key
 ```
 

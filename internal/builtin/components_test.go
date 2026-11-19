@@ -285,3 +285,34 @@ func TestCreateDBWithGivenPassword(t *testing.T) {
 		t.Fatal("the password was not passed into the SQL")
 	}
 }
+
+func TestPGRestoreAsAnotherDatabase(t *testing.T) {
+	mem := host.NewMemFS()
+	mem.Files[PGBackupDir+"/shop-20261119T030000Z.dump"] = []byte("x")
+	var calls []string
+	env := plugin.Env{FS: mem, Runner: fn(func(c host.Cmd) (host.Result, error) {
+		calls = append(calls, c.Name+" "+strings.Join(c.Args, " "))
+		if c.Name == "runuser" {
+			q := c.Args[len(c.Args)-1]
+			switch {
+			case strings.HasPrefix(q, "select 1 from pg_database"):
+				return host.Result{Stdout: []byte("1\n")}, nil
+			case strings.HasPrefix(q, "select pg_get_userbyid"):
+				return host.Result{Stdout: []byte("restore_owner\n")}, nil
+			}
+		}
+		return host.Result{}, nil
+	})}
+	if _, err := (PG{}).Run(context.Background(), env, "restore", []string{"shop", "shop-20261119T030000Z.dump", "--as", "shop_test"}); err != nil {
+		t.Fatal(err)
+	}
+	all := strings.Join(calls, "\n")
+	if !strings.Contains(all, "pg_restore --clean --if-exists -d shop_test --no-owner --role=restore_owner "+PGBackupDir+"/shop-20261119T030000Z.dump") {
+		t.Fatalf("pg_restore was not run into the other database:\n%s", all)
+	}
+	for _, bad := range [][]string{{"shop", "shop-20261119T030000Z.dump", "--as"}, {"shop", "shop-20261119T030000Z.dump", "--as", "postgres"}, {"shop", "shop-20261119T030000Z.dump", "--as", "a;b"}} {
+		if _, err := (PG{}).Run(context.Background(), env, "restore", bad); err == nil {
+			t.Errorf("%v must be rejected", bad)
+		}
+	}
+}
