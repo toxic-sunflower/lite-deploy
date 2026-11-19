@@ -1,138 +1,140 @@
-# Как это устроено: lite-deploy (черновик, 2026-11-03)
+# How it works: lite-deploy (a draft, 2026-11-03)
 
-Название `lite-deploy` рабочее. Лицензия MIT. Все принятые решения с номерами: `DECISIONS.md`.
+The name `lite-deploy` is a working one. The license is MIT. All decisions taken, with numbers: `DECISIONS.md`.
 
-Файл собирает решения из обсуждений. Принципы и границы проекта: `VISION.md`. Что не решено, перечислено в конце.
+This file collects decisions from the discussions. The principles and limits of the project: `VISION.md`. What is not decided is listed at the end.
 
-## 1. Что это одной фразой
+## 1. What it is in one sentence
 
-На сервере работает маленький агент. Через него владелец, CI и ИИ-помощник настраивают сервер и выкатывают проекты, не получая полного доступа к серверу.
+A small agent runs on the server. Through it the owner, CI and an AI helper set up the server and deploy projects without getting full access to the server.
 
-## 2. Из чего состоит
+## 2. What it consists of
 
-1. **Агент.** Служба systemd, слушает только локальный сокет (в интернет ничего не открывает). Принимает запросы, проверяет, кто спрашивает и можно ли ему, строит план, применяет, пишет журнал.
-2. **Исполнитель.** Маленькая привилегированная часть (root), которая **не висит в фоне**: у неё свой сокет `/run/lite-deploy/exec.sock` (доступен только пользователю агента), которым владеет systemd; пришёл запрос, systemd запустил исполнитель, он выполнил шаг и завершился. Принимает только типизированные запросы из фиксированного списка (например, `{"action":"create_project_user","name":"shop"}`), сам проверяет параметры и выполняет заданные команды без оболочки. Ограничен systemd (набор возможностей и каталогов). Пишет журнал в файл, который агент не может менять. В режиме А тот же исполнитель запускается вручную: `sudo lite-deploy apply plan.json`. Решение D-31.
-3. **Плагины.** Каждый отвечает за одну часть: `base`, `postgres`, `caddy`, `podman`, `docker`, `cloudflare-tunnel`, хранилища секретов, способы подтверждения. Плагин не меняет систему сам, а возвращает **план**.
-4. **Описание проекта.** Небольшой JSON-файл со схемой (JSON Schema): имя, домен, образ, база, лимиты, ссылки на секреты. Из него строится план (тоже JSON, с версией и хэшем). Из схемы получаются формы UI и описания инструментов MCP.
-5. **Состояние на сервере.** Проекты, настройки, журнал. Секреты в файлах проекта (права 600). В GitHub и GitLab ничего этого нет, нужен шифрованный бэкап и восстановление.
-6. **Клиенты.** CLI, UI, MCP для ИИ. Тонкие, всё решает агент.
+1. **The agent.** A systemd service that listens only on a local socket (it opens nothing to the internet). It accepts requests, checks who asks and whether they may, builds a plan, applies it and writes a journal.
+2. **The executor.** A small privileged part (root) that **does not hang in the background**: it has its own socket `/run/lite-deploy/exec.sock` (available only to the agent user) owned by systemd; a request arrives, systemd starts the executor, it performs the step and exits. It accepts only typed requests from a fixed list (for example `{"action":"create_project_user","name":"shop"}`), validates the parameters itself and runs the given commands without a shell. It is restricted by systemd (a set of capabilities and directories). It writes a journal to a file the agent cannot change. In mode A the same executor is started by hand: `sudo lite-deploy apply plan.json`. Decision D-31.
+3. **Plugins.** Each is responsible for one part: `base`, `postgres`, `caddy`, `podman`, `docker`, `cloudflare-tunnel`, secret stores, confirmation methods. A plugin does not change the system itself but returns a **plan**.
+4. **The project description.** A small JSON file with a schema (JSON Schema): the name, the domain, the image, the database, limits, references to secrets. A plan is built from it (JSON too, with a version and a hash). UI forms and MCP tool descriptions come from the schema.
+5. **State on the server.** Projects, settings, the journal. Secrets in the project files (mode 600). None of this is in GitHub or GitLab, so an encrypted backup and a restore are needed.
+6. **Clients.** The CLI, the UI, MCP for AI. Thin; the agent decides everything.
 
-Язык: **Go** (предварительно подтверждён). Без `unsafe` и `cgo`, тесты с `-race`, автоперезапуск службы. Исполнитель при желании позже можно переписать на Rust.
+The language: **Go** (tentatively confirmed). No `unsafe` and no `cgo`, tests with `-race`, automatic service restart. The executor can be rewritten in Rust later if wanted.
 
-## 3. Режимы работы
+## 3. Modes of work
 
-Оба режима равноправны, выбираются для каждого сервера. Код и плагины одни и те же.
+Both modes are equal and are chosen per server. The code and the plugins are the same.
 
-- **Режим А: «собрали, применили сами».** Через CLI или UI собирается план. Вы заходите по SSH и применяете его одной командой от root. Постоянной программы с root на сервере нет.
-- **Режим Б: «агент делает сам».** Агент работает постоянно и применяет изменения без вас в рамках списка действий исполнителя. Опасные действия требуют подтверждения.
+- **Mode A: "built, applied by hand".** A plan is built through the CLI or the UI. You log in over SSH and apply it with one command as root. There is no permanent program with root on the server.
+- **Mode B: "the agent does it itself".** The agent works all the time and applies changes without you, within the executor's list of actions. Dangerous actions need confirmation.
 
-## 4. Безопасность
+## 4. Security
 
-| Уровень | Как работает | Безопасность | Удобство |
+| Level | How it works | Security | Convenience |
 |---|---|---|---|
-| 0 | Всё руками | максимум | нет |
-| 1 | Режим А: root-действия применяет владелец | очень высокая | среднее |
-| 2 | Режим Б: агент без прав + исполнитель с root и фиксированным списком действий | высокая | высокое |
-| 3 | Одна программа с root делает всё (у конкурентов) | слабая | высокое |
+| 0 | Everything by hand | the maximum | none |
+| 1 | Mode A: the owner applies the root actions | very high | medium |
+| 2 | Mode B: an agent without rights + an executor with root and a fixed list of actions | high | high |
+| 3 | One program with root does everything (competitors) | weak | high |
 
-Отличие от конкурентов: взломав их панель, получают любую команду от root. У нас взломщик агента может запросить только то, что есть в списке исполнителя, и это видно в плане. Остаточный риск: ошибка в исполнителе, поэтому он маленький и не разбирает сложный ввод.
+The difference from competitors: whoever breaks into their panel gets any command as root. With us someone who breaks into the agent can ask for only what is in the executor list, and it is visible in the plan. The residual risk: a bug in the executor, which is why it is small and does not parse complex input.
 
-Кто и что может:
+Who may do what:
 
-| Кто | Как | Что разрешено |
+| Who | How | What is allowed |
 |---|---|---|
-| Владелец | SSH, CLI, UI | Всё |
-| CI | Ограниченный SSH-ключ | `deploy <хэш>`, `rollback`, `status` одного проекта |
-| ИИ-помощник | MCP, ограниченный токен | Безопасные действия, опасные ждут подтверждения |
-| Пользователь проекта | Локально | Только свой проект |
+| The owner | SSH, CLI, UI | Everything |
+| CI | A restricted SSH key | `deploy <hash>`, `rollback`, `status` of one project |
+| An AI helper | MCP, a restricted token | Safe actions; dangerous ones wait for confirmation |
+| A project user | Locally | Only their own project |
 
-### Модель угроз (кратко, D-30)
+### The threat model (in short, D-30)
 
-- **Защищаем от:** взломанного проекта (контейнера), украденного ключа CI, вредного или взломанного плагина, ИИ-клиента, которого обманули (prompt injection), взломанного оркестратора или SaaS, взломанного агента, взломанного исполнителя, утечки репозитория.
-- **Не защищаем от:** взлома самого хоста с root, злонамеренного хостера, физического доступа, уязвимости ядра.
-- **Если взломан агент (он без root):** злоумышленник может только то, что агент делает без подтверждения (статус, выкатка, откат, создание проекта). Опасные действия подтвердить он не может: подпись делается закрытым ключом, которого на сервере нет. Произвольные команды от root и чужие секреты ему недоступны. Значения секретов агент не хранит (клиент шифрует их ключом исполнителя, агент передаёт шифртекст), журнал он менять не может, число действий ограничено квотами.
-- **Классы действий (D-29):** безопасные (статус, логи), обычные (`deploy`, `rollback`, смена значения секрета, создание проекта), опасные (удаление проекта, базы или маршрута; смена доверенных ключей и способа подтверждения; установка и обновление агента и плагинов; чтение секрета под root) требуют подписи ключом.
+- **We protect against:** a hacked project (container), a stolen CI key, a harmful or hacked plugin, a deceived AI client (prompt injection), a hacked orchestrator or SaaS, a hacked agent, a hacked executor, a leaked repository.
+- **We do not protect against:** a break-in to the host itself with root, a malicious hoster, physical access, a kernel vulnerability.
+- **If the agent is hacked (it has no root):** the attacker can do only what the agent does without confirmation (status, deploy, rollback, creating a project). They cannot confirm dangerous actions: the signature is made with a private key that is not on the server. Arbitrary commands as root and other people's secrets are out of reach. The agent does not store secret values (the client encrypts them with the executor key and the agent passes the ciphertext), it cannot change the journal, and the number of actions is limited by quotas.
+- **Action classes (D-29):** safe (status, logs), ordinary (`deploy`, `rollback`, changing a secret value, creating a project), dangerous (deleting a project, a database or a route; changing trusted keys and the confirmation method; installing and updating the agent and plugins; reading a secret as root) need a key signature.
 
-## 5. Секреты
+## 5. Secrets
 
-- В конфиге проекта лежат ссылки (`secret://имя/путь`), не значения.
-- Агент в момент выкатки получает значение и пишет файл с правами 600 пользователю проекта. Передача в контейнер через `EnvironmentFile` или секреты Podman, не через аргументы команды.
-- **Секреты только на запись**, как в GitHub: можно задать, заменить и использовать, но нет команды «показать значение». UI, CLI и MCP сообщают только, что секрет задан и когда менялся. Прочитать можно только на сервере под root, и это пишется в журнал.
-- Плагины хранилищ: локальные файлы на сервере (по умолчанию, достаточно для одного сервера), Vault или OpenBao, Infisical, Doppler, облачные менеджеры. Токен хранилища хранится как секрет 600, права на чтение минимальные.
+- The project config holds references (`secret://name/path`), not values.
+- At deploy time the agent receives the value and writes a file with mode 600 for the project user. Passing it into the container is through `EnvironmentFile` or Podman secrets, not through command arguments.
+- **Secrets are write-only**, as in GitHub: you can set, replace and use them, but there is no "show the value" command. The UI, the CLI and MCP only report that a secret is set and when it changed. It can be read only on the server as root, and that is written to the journal.
+- Store plugins: local files on the server (the default, enough for one server), Vault or OpenBao, Infisical, Doppler, cloud managers. The store token is kept as a 600 secret with minimal read rights.
 
-## 6. Подтверждение опасных действий
+## 6. Confirming dangerous actions
 
-Нужно в режиме Б. Способы подтверждения это плагины, строгость задаётся для каждого типа действий (например, удаление базы требует подтверждения, обычная выкатка нет).
+Needed in mode B. The confirmation methods are plugins, and the strictness is set per action type (for example deleting a database needs confirmation, an ordinary deploy does not).
 
-| Способ | Надёжность |
+| Method | Reliability |
 |---|---|
-| **Подпись ключом** (по умолчанию) | Самая сильная: на сервере только открытый ключ |
-| Интерактивная SSH-сессия | Хорошая, просто |
-| Cloudflare Access (веб, двухфакторная проверка) | Хорошая, удобно с телефона |
-| OTP-код | Средняя: общий секрет лежит на сервере |
-| Сообщение в мессенджер | Слабее, доверяем каналу |
+| **A key signature** (the default) | The strongest: only the public key is on the server |
+| An interactive SSH session | Good, simple |
+| Cloudflare Access (web, two-factor check) | Good, convenient from a phone |
+| An OTP code | Medium: the shared secret lies on the server |
+| A messenger message | Weaker, we trust the channel |
 
-Подпись ключом: у владельца закрытый ключ (SSH, YubiKey, passkey), у агента открытый. Агент создаёт заявку («удалить базу `shop`, №17, 5 минут, число N»), клиент подписывает именно этот текст, агент проверяет подпись. Секрета, который можно украсть, на сервере нет, подмена действия и повтор невозможны.
+A key signature: the owner has a private key (SSH, YubiKey, passkey), the agent has the public one. The agent creates a request ("delete database `shop`, no. 17, 5 minutes, number N"), the client signs exactly this text, the agent checks the signature. There is no secret on the server that could be stolen, and substituting an action or a replay is impossible.
 
-## 7. Плагины
+## 7. Plugins
 
-Главное правило: **плагин никогда не меняет систему сам, он возвращает план**, а выполняет его только исполнитель в рамках своих действий. Вредный плагин может запросить лишь то, что исполнитель умеет, и владелец видит это в плане.
+The main rule: **a plugin never changes the system itself, it returns a plan**, and only the executor carries it out within its actions. A harmful plugin can ask for only what the executor can do, and the owner sees it in the plan.
 
-| Категория | Что это | Как работает |
+| Category | What it is | How it works |
 |---|---|---|
-| Шаблоны | Данные | Ничего не исполняется |
-| Провайдеры (секреты, подтверждения, уведомления) | Код с узкой задачей | Песочница без root, только разрешённые сеть и файлы |
-| Инфраструктурные (Caddy, Postgres, движки) | Выдают план | Исполняет исполнитель |
+| Templates | Data | Nothing is executed |
+| Providers (secrets, confirmations, notifications) | Code with a narrow task | A sandbox without root, only the allowed network and files |
+| Infrastructure (Caddy, Postgres, engines) | They issue a plan | The executor executes it |
 
-Порядок внедрения:
-1. **Первая версия:** все плагины встроены в бинарник, но уже возвращают план.
-2. **Вторая:** песочница для плагинов сообщества, предварительно WASM (в Go без C-кода, wazero). У плагина манифест прав («хочу обращаться к vault.example.com и писать в `/etc/caddy/conf.d/`»), владелец видит и соглашается. Подпись плагинов и уровни доверия: официальный, проверенный, непроверенный (явное подтверждение).
+The order of introduction:
+1. **The first version:** all plugins are built into the binary but already return a plan.
+2. **The second:** a sandbox for community plugins, tentatively WASM (in Go without C code, wazero). A plugin has a permission manifest ("I want to talk to vault.example.com and write to `/etc/caddy/conf.d/`"), and the owner sees and agrees. Plugin signing and trust levels: official, verified, unverified (explicit confirmation).
 
-Шаблоны приложений: декларативный манифест без скриптов. Каталог создаёт сообщество.
+Application templates: a declarative manifest without scripts. The catalog is made by the community.
 
-## 8. UI и оркестратор
+(Since v0.6 the built-in plugins also run commands themselves through the executor's fixed list of actions and through `host.Runner`; see `README.md`, "Plugins".)
 
-- **Первый UI:** локальный, запускается на компьютере владельца командой вроде `ctl ui` на `127.0.0.1`, по SSH ходит к агентам. Список серверов хранится у владельца, для одного и для нескольких серверов схема одна.
-- **Второй:** UI на сервере через туннель Cloudflare под Access, для доступа с телефона или чужого компьютера.
-- **Оркестратор** (необязательный, позже): знает желаемое состояние проектов и серверов и раздаёт его агентам. Нужен для командной работы и постоянно включённого центра. У него тоже есть UI. Может работать как **SaaS** или быть развёрнут самостоятельно. Идея и ограничения:
-  - агенты сами подключаются к нему наружу, входящих портов у сервера нет;
-  - опасные действия он подтвердить не может: нужна подпись ключом с устройства владельца;
-  - значения секретов через него не читаются; при задании секрета значение шифруется в браузере открытым ключом агента, оркестратор передаёт только шифртекст;
-  - компрометация оркестратора даёт не больше, чем разрешено в API агента без подтверждения.
+## 8. UI and orchestrator
 
-## 9. Что решено
+- **The first UI:** local, started on the owner's computer with a command like `ctl ui` on `127.0.0.1`, reaching the agents over SSH. The list of servers is kept by the owner; the scheme is the same for one and for several servers.
+- **The second:** a UI on the server through a Cloudflare tunnel under Access, for access from a phone or someone else's computer.
+- **The orchestrator** (optional, later): knows the desired state of projects and servers and hands it to the agents. It is needed for teamwork and a permanently running center. It has a UI too. It can work as a **SaaS** or be deployed by yourself. The idea and the limits:
+  - the agents connect to it outward themselves, the server has no incoming ports;
+  - it cannot confirm dangerous actions: a key signature from the owner's device is needed;
+  - secret values cannot be read through it; when a secret is set, the value is encrypted in the browser with the agent's public key and the orchestrator passes only ciphertext;
+  - compromising the orchestrator gives no more than is allowed in the agent API without confirmation.
 
-- Лёгкий агент, один API, клиенты отдельно, тяжёлой панели нет.
-- Два режима А и Б, равноправные.
+## 9. What is decided
+
+- A light agent, one API, separate clients, no heavy panel.
+- Two modes A and B, equal.
 - Go.
-- Секреты: ссылки в конфиге, только запись, локальные файлы по умолчанию, плагины для внешних хранилищ.
-- Подтверждение: подпись ключом по умолчанию, остальные способы настраиваются.
-- Плагины возвращают план, исполняет исполнитель; встроенные сначала, песочница для сообщества потом.
-- Плагины: Caddy, Postgres (на хосте по умолчанию или в контейнере), Podman и Docker, Cloudflare Tunnel.
-- Проект можно описывать через compose или Quadlet, в одном проекте можно смешивать.
-- Балансировщик: `Route`, `Backend`, `Listener`, по умолчанию Caddy.
-- Каталог сервисов не делаем, формат шаблонов закладываем.
-- Пока один сервер, несколько позже.
-- Название `lite-deploy`, лицензия MIT, цель: открытый инструмент без обязательств по срокам.
-- Первая версия: режим А, `project create`, `deploy`, `rollback`, `status`, CLI с JSON как базовый API, тонкие UI и MCP по SSH (D-28).
-- API агента: HTTP + JSON по unix-сокету, `/v1`, OpenAPI (D-32). Формат проекта и плана: JSON + JSON Schema (D-33, D-34).
-- Приоритет проекта: ИИ (MCP) и UI; dry-run для всего, подтверждения в агенте (D-37).
-- Оркестратор и SaaS отложены до v1 (D-35).
+- Secrets: references in the config, write-only, local files by default, plugins for external stores.
+- Confirmation: a key signature by default, other methods configurable.
+- Plugins return a plan, the executor executes; built-in first, a sandbox for the community later.
+- Plugins: Caddy, Postgres (on the host by default or in a container), Podman (Docker is forbidden, R-11), Cloudflare Tunnel.
+- A project can be described through compose or Quadlet, both can be mixed in one project (since v0.6: `quadlet` and `unit` kinds, compose through `unit`).
+- The load balancer: `Route`, `Backend`, `Listener`, Caddy by default.
+- No catalog of services, a template format is provided for.
+- One server for now, several later.
+- The name `lite-deploy`, the license MIT, the goal: an open tool with no obligations on deadlines.
+- The first version: mode A, `project create`, `deploy`, `rollback`, `status`, the CLI with JSON as the base API, thin UI and MCP over SSH (D-28).
+- The agent API: HTTP + JSON over a unix socket, `/v1`, OpenAPI (D-32). The format of a project and a plan: JSON + JSON Schema (D-33, D-34).
+- The project priority: AI (MCP) and the UI; dry-run for everything, confirmations in the agent (D-37).
+- The orchestrator and SaaS are postponed until v1 (D-35).
 
-## 10. Что не решено
+## 10. What is not decided
 
-Форматы и действия v0 описаны в `SPEC-v0.md` (сессия S2), чистая логика реализована в S3 (код в `internal/`). Осталось:
+The formats and actions of v0 are described in `SPEC-v0.md` (session S2), the pure logic was implemented in S3 (the code is in `internal/`). What remains:
 
-1. Способ запускать команды в сессии проектного пользователя для rootless podman (проверить в S4).
-2. Формат манифеста шаблона приложения (после v0).
-4. Подпись подтверждений, список доверенных ключей, переход переключения Caddy на сокет исполнителя (S6).
-5. Оркестратор и SaaS: всё, что с ними связано, после v1.
+1. A way to run commands in the session of a project user for rootless podman (checked in S4: `systemd-run --machine=USER@.host --user` works).
+2. The format of the application template manifest (after v0).
+4. Signing confirmations, the list of trusted keys, moving the Caddy switch to the executor socket (S6).
+5. The orchestrator and SaaS: everything related to them comes after v1.
 
-## 11. Словарь
+## 11. Glossary
 
-- **Демон, служба** — программа, постоянно работающая в фоне.
-- **Сокет** — «файл-розетка» на сервере для общения программ. Из интернета недоступен.
-- **План и применение** — сначала показывается, что изменится, потом изменение, потом проверка.
-- **Декларативный конфиг** — описание того, что должно быть, а не последовательность команд.
-- **MCP** — способ подключить ИИ-помощника к инструменту.
-- **WASM** — формат безопасных плагинов, которые работают в песочнице без доступа к системе.
+- **A daemon, a service** — a program that works in the background all the time.
+- **A socket** — a "file socket" on the server for programs to talk to each other. Not reachable from the internet.
+- **Plan and apply** — first it is shown what will change, then the change, then a check.
+- **A declarative config** — a description of what must be, not a sequence of commands.
+- **MCP** — a way to connect an AI helper to a tool.
+- **WASM** — a format of safe plugins that run in a sandbox without access to the system.
