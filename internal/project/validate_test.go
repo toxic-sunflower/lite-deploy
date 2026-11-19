@@ -211,7 +211,7 @@ func TestDefaults(t *testing.T) {
 
 func TestRoleName(t *testing.T) {
 	if RoleName("shop") != "shop" {
-		t.Fatal("роль")
+		t.Fatal("role")
 	}
 }
 

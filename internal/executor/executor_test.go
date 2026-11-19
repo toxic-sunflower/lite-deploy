@@ -376,7 +376,7 @@ func TestProbeCatchesUnknownHost(t *testing.T) {
 			failed = &rep.Steps[i]
 		}
 	}
-	if failed == nil || failed.Action != "probe_site" || !strings.Contains(failed.Error, "не подхватил") {
+	if failed == nil || failed.Action != "probe_site" || !strings.Contains(failed.Error, "did not pick up") {
 		t.Fatalf("probe_site должен ловить пустой ответ Caddy: %+v", failed)
 	}
 }
@@ -511,7 +511,7 @@ func TestPodmanVersionPolicy(t *testing.T) {
 		if failed := s.State == StateWouldFail; failed != c.wantFail {
 			t.Errorf("podman %s: состояние %s (%s)", c.ver, s.State, s.Error)
 		}
-		if warned := strings.Contains(s.Detail, "проверено только на 5.x"); warned != c.wantWarned {
+		if warned := strings.Contains(s.Detail, "only tested on 5.x"); warned != c.wantWarned {
 			t.Errorf("podman %s: предупреждение=%v, detail %q", c.ver, warned, s.Detail)
 		}
 	}

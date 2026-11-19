@@ -70,11 +70,11 @@ func TestRunFailure(t *testing.T) {
 	m.Files["/jq"] = []byte("x")
 	p, _ := r.Get("logs")
 	fr.Handler = func(c host.Cmd) (host.Result, error) {
-		return host.Result{ExitCode: 3, Stderr: []byte("нет доступа")}, nil
+		return host.Result{ExitCode: 3, Stderr: []byte("no access")}, nil
 	}
 	_, err := p.Run(context.Background(), Env{Runner: fr, FS: m}, "clear", nil)
 	var pe *Error
-	if !errors.As(err, &pe) || pe == nil || pe.Code != "step_failed" || !strings.Contains(pe.Message, "нет доступа") {
+	if !errors.As(err, &pe) || pe == nil || pe.Code != "step_failed" || !strings.Contains(pe.Message, "no access") {
 		t.Fatalf("%v", err)
 	}
 }

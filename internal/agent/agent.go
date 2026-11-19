@@ -79,7 +79,7 @@ func (a *Agent) exec(ctx context.Context, req Request) []byte {
 	defer cancel()
 	conn, err := a.ExecDial(ctx)
 	if err != nil {
-		return ErrorJSON(req.Cmd, "precondition_failed", "исполнитель недоступен: "+err.Error())
+		return ErrorJSON(req.Cmd, "precondition_failed", "the executor is unavailable: "+err.Error())
 	}
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(to))
@@ -93,7 +93,7 @@ func (a *Agent) exec(ctx context.Context, req Request) []byte {
 	}
 	out = []byte(strings.TrimSpace(string(out)))
 	if len(out) == 0 || out[0] != '{' {
-		return ErrorJSON(req.Cmd, "io_error", "исполнитель не вернул ответа")
+		return ErrorJSON(req.Cmd, "io_error", "the executor returned no answer")
 	}
 	return out
 }
@@ -133,13 +133,13 @@ func (a *Agent) Handler() http.Handler {
 			var body []byte
 			switch {
 			case !ok:
-				status, body = 403, ErrorJSON("api", "permission_denied", "нет доступа: пользователь должен быть администратором системы (группа sudo или wheel)")
+				status, body = 403, ErrorJSON("api", "permission_denied", "no access: the user must be a system administrator (group sudo or wheel)")
 			case r.Method != method:
-				status, body = 405, ErrorJSON("api", "usage", "метод не разрешён")
+				status, body = 405, ErrorJSON("api", "usage", "method not allowed")
 			default:
 				req, valid := build(r)
 				if !valid {
-					status, body = 400, ErrorJSON("api", "usage", "неверный запрос")
+					status, body = 400, ErrorJSON("api", "usage", "invalid request")
 				} else {
 					req.Caller = name
 					body = a.exec(r.Context(), req)
@@ -239,7 +239,7 @@ func (a *Agent) Handler() http.Handler {
 		uid := uidOf(r.Context())
 		if _, ok := a.Allowed(uid); !ok || uid < 0 {
 			w.WriteHeader(403)
-			_, _ = w.Write(ErrorJSON("api", "permission_denied", "нет доступа"))
+			_, _ = w.Write(ErrorJSON("api", "permission_denied", "no access"))
 			return
 		}
 		b, _ := json.Marshal(map[string]any{"ok": true, "api_version": "v1", "command": "info", "data": map[string]string{"version": a.Version}})
@@ -322,7 +322,7 @@ func Call(ctx context.Context, sock, method, path string, body []byte) ([]byte, 
 	}
 	resp, err := (&http.Client{Transport: tr, Timeout: 30 * time.Minute}).Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("агент недоступен (%s): %w", sock, err)
+		return nil, fmt.Errorf("the agent is unavailable (%s): %w", sock, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	return io.ReadAll(io.LimitReader(resp.Body, 4<<20))

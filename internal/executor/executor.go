@@ -157,7 +157,7 @@ func Apply(ctx context.Context, e Env, pl *plan.Plan, dry bool) (*Report, error)
 	rep := &Report{PlanID: pl.ID, PlanHash: pl.Hash, DryRun: dry}
 	if !dry {
 		if err := r.journal("", "", "run_start", ""); err != nil {
-			return nil, fmt.Errorf("журнал недоступен, применение не начато: %w", err)
+			return nil, fmt.Errorf("the journal is unavailable, applying did not start: %w", err)
 		}
 	}
 	stop := false
@@ -165,13 +165,13 @@ func Apply(ctx context.Context, e Env, pl *plan.Plan, dry bool) (*Report, error)
 		res := StepResult{ID: s.ID, Action: s.Action}
 		if stop {
 			res.State = StateSkipped
-			res.Detail = "предыдущий шаг завершился ошибкой"
+			res.Detail = "the previous step failed"
 			rep.Steps = append(rep.Steps, res)
 			continue
 		}
 		if !dry {
 			if err := r.journal(s.ID, s.Action, "start", ""); err != nil {
-				res.State, res.Error = StateFailed, "журнал недоступен: "+err.Error()
+				res.State, res.Error = StateFailed, "the journal is unavailable: "+err.Error()
 				rep.Steps = append(rep.Steps, res)
 				rep.Failed = s.ID
 				stop = true
@@ -184,9 +184,9 @@ func Apply(ctx context.Context, e Env, pl *plan.Plan, dry bool) (*Report, error)
 		var err error
 		switch {
 		case !ok:
-			err = fmt.Errorf("нет обработчика действия %s", s.Action)
+			err = fmt.Errorf("no handler for action %s", s.Action)
 		case len(issues) > 0:
-			err = fmt.Errorf("параметры не прошли проверку: %s", issues[0].Message)
+			err = fmt.Errorf("parameters did not pass validation: %s", issues[0].Message)
 		default:
 			out, err = h(ctx, r, params)
 		}
@@ -349,7 +349,7 @@ func (r *run) must(ctx context.Context, c host.Cmd) (host.Result, error) {
 		return res, fmt.Errorf("%s: %w", c.Name, err)
 	}
 	if res.ExitCode != 0 {
-		return res, fmt.Errorf("%s завершилась с кодом %d: %s", c.Name, res.ExitCode, trimErr(res))
+		return res, fmt.Errorf("%s exited with code %d: %s", c.Name, res.ExitCode, trimErr(res))
 	}
 	return res, nil
 }

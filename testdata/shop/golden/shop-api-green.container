@@ -1,5 +1,5 @@
 [Unit]
-Description=shop api (слот green)
+Description=shop api (slot green)
 After=network-online.target
 Wants=network-online.target
 

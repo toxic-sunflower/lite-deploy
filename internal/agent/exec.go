@@ -44,7 +44,7 @@ type Request struct {
 func checkSpec(spec, from string) error {
 	m := specRe.FindStringSubmatch(spec)
 	if m == nil {
-		return errors.New("порт задаётся как 8080/tcp")
+		return errors.New("the port is given as 8080/tcp")
 	}
 	n, _ := strconv.Atoi(m[1])
 	if e := firewall.ValidateRule(n, m[2], from); e != nil {
@@ -58,14 +58,14 @@ func checkSpec(spec, from string) error {
 func (r Request) CLIArgs() ([]string, error) {
 	a := r.Args
 	if r.Body != "" && r.Cmd != "project.preview" && r.Cmd != "project.create" && r.Cmd != "plugin.run" {
-		return nil, fmt.Errorf("%s: тело запроса не допускается", r.Cmd)
+		return nil, fmt.Errorf("%s: a request body is not allowed", r.Cmd)
 	}
 	if r.Cmd == "plugin.run" && len(r.Body) > MaxPluginStdin {
-		return nil, fmt.Errorf("plugin.run: стандартный ввод больше %d байт", MaxPluginStdin)
+		return nil, fmt.Errorf("plugin.run: standard input is larger than %d bytes", MaxPluginStdin)
 	}
 	need := func(n int) error {
 		if len(a) != n {
-			return fmt.Errorf("%s: нужно аргументов: %d", r.Cmd, n)
+			return fmt.Errorf("%s: expected %d arguments", r.Cmd, n)
 		}
 		return nil
 	}
@@ -78,7 +78,7 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, err
 		}
 		if !projectRe.MatchString(a[0]) {
-			return nil, errors.New("неверное имя проекта")
+			return nil, errors.New("invalid project name")
 		}
 		return []string{"status", a[0]}, nil
 	case "deploy":
@@ -86,10 +86,10 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, err
 		}
 		if !projectRe.MatchString(a[0]) {
-			return nil, errors.New("неверное имя проекта")
+			return nil, errors.New("invalid project name")
 		}
 		if !shaRe.MatchString(a[1]) {
-			return nil, errors.New("нужен полный хэш коммита: 40 символов 0-9a-f")
+			return nil, errors.New("the full commit hash is required: 40 characters 0-9a-f")
 		}
 		return []string{"deploy", a[0], a[1]}, nil
 	case "rollback":
@@ -97,7 +97,7 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, err
 		}
 		if !projectRe.MatchString(a[0]) {
-			return nil, errors.New("неверное имя проекта")
+			return nil, errors.New("invalid project name")
 		}
 		return []string{"rollback", a[0]}, nil
 	case "project.preview", "project.create": // тело: пакет {project, ciphertexts, ...}; create применяет, preview только описывает
@@ -105,7 +105,7 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, err
 		}
 		if r.Body == "" || len(r.Body) > MaxBody || !json.Valid([]byte(r.Body)) {
-			return nil, errors.New(r.Cmd + ": нужно тело: JSON-пакет не больше 128 КиБ")
+			return nil, errors.New(r.Cmd + ": a body is required: a JSON bundle of at most 128 KiB")
 		}
 		if r.Cmd == "project.preview" {
 			return []string{"project", "bundle", "--dry-run"}, nil
@@ -128,7 +128,7 @@ func (r Request) CLIArgs() ([]string, error) {
 		return []string{r.Cmd}, nil
 	case "plugin.run": // аргументы: плагин, команда, аргументы команды; подтверждение даёт интерфейс (--yes)
 		if len(a) < 2 || !pluginRe.MatchString(a[0]) || !pluginRe.MatchString(a[1]) || !plugin.ValidArgs(a[2:]) {
-			return nil, errors.New("plugin.run: нужны имя плагина, команда и допустимые аргументы")
+			return nil, errors.New("plugin.run: a plugin name, a command and valid arguments are required")
 		}
 		return append(append([]string{"plugin", "run"}, a...), "--yes"), nil
 	case "firewall.status":
@@ -161,7 +161,7 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, err
 		}
 		if a[2] != "allow" && a[2] != "limit" && a[2] != "deny" {
-			return nil, errors.New("неверное действие правила")
+			return nil, errors.New("invalid rule action")
 		}
 		out := []string{"firewall", "remove", a[0], "--action", a[2]}
 		if a[1] != "" && a[1] != "any" {
@@ -169,7 +169,7 @@ func (r Request) CLIArgs() ([]string, error) {
 		}
 		return append(out, "--yes"), nil
 	}
-	return nil, fmt.Errorf("действие %q не разрешено", r.Cmd)
+	return nil, fmt.Errorf("action %q is not allowed", r.Cmd)
 }
 
 // ErrorJSON ответ-конверт с ошибкой (формат `--json`, SPEC-v0.md, 6.2).
@@ -192,12 +192,12 @@ func ExecBody(r io.Reader, w io.Writer, run func(args []string, stdin []byte) []
 	dec := json.NewDecoder(io.LimitReader(r, MaxRequest+2*MaxBody))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&req); err != nil {
-		_, _ = w.Write(ErrorJSON("exec", "usage", "неверный запрос"))
+		_, _ = w.Write(ErrorJSON("exec", "usage", "invalid request"))
 		return
 	}
 	args, err := req.CLIArgs()
 	if err != nil {
-		_, _ = fmt.Fprintf(journal, "отклонено: cmd=%q caller=%q: %v\n", req.Cmd, req.Caller, err)
+		_, _ = fmt.Fprintf(journal, "rejected: cmd=%q caller=%q: %v\n", req.Cmd, req.Caller, err)
 		_, _ = w.Write(ErrorJSON(req.Cmd, "usage", err.Error()))
 		return
 	}
@@ -205,7 +205,7 @@ func ExecBody(r io.Reader, w io.Writer, run func(args []string, stdin []byte) []
 	if !userRe.MatchString(caller) {
 		caller = "?"
 	}
-	_, _ = fmt.Fprintf(journal, "выполняется: caller=%s %s\n", caller, strings.Join(args, " "))
+	_, _ = fmt.Fprintf(journal, "running: caller=%s %s\n", caller, strings.Join(args, " "))
 	out := run(append(args, "--json"), []byte(req.Body))
 	_, _ = w.Write(out)
 }

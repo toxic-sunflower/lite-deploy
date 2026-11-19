@@ -46,19 +46,19 @@ func (s *RcloneStore) Description() string { return s.Describe }
 // Commands реализует plugin.Plugin.
 func (s *RcloneStore) Commands() []plugin.Command {
 	return []plugin.Command{
-		{Name: "install", Help: "поставить rclone", Confirm: true},
+		{Name: "install", Help: "install rclone", Confirm: true},
 		{Name: "setup", Confirm: true, Args: s.SetupArgs, Help: s.SetupHelp},
-		{Name: "status", Root: true, Help: "настройка и время последней отправки"},
-		{Name: "upload", Root: true, Help: "отправить копии (ничего не удаляя в месте хранения)"},
-		{Name: "list", Root: true, Help: "что лежит в месте хранения"},
-		{Name: "fetch", Root: true, Args: "[config|pg|all]", Help: "скачать копии в /var/backups/lite-deploy (на новом сервере; по умолчанию config)"},
-		{Name: "schedule", Confirm: true, Args: "on|off", Help: "ежедневная отправка по таймеру systemd"},
+		{Name: "status", Root: true, Help: "configuration and the time of the last upload"},
+		{Name: "upload", Root: true, Help: "upload backups (never deleting anything at the storage)"},
+		{Name: "list", Root: true, Help: "what is in the storage"},
+		{Name: "fetch", Root: true, Args: "[config|pg|all]", Help: "download backups into /var/backups/lite-deploy (on a new server; config by default)"},
+		{Name: "schedule", Confirm: true, Args: "on|off", Help: "daily upload with a systemd timer"},
 	}
 }
 
 // InstallRclone ставит rclone.
 func InstallRclone(ctx context.Context, env plugin.Env, say Say) error {
-	say.say("Ставлю rclone...")
+	say.say("Installing rclone...")
 	return tools{ctx, env}.install("rclone")
 }
 
@@ -70,7 +70,7 @@ func (s *RcloneStore) load(t tools) (storeConfig, error) {
 	b, err := t.env.FS.ReadFile(s.settings())
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			e := plugin.Errorf("precondition_failed", "%s не настроен", s.Title)
+			e := plugin.Errorf("precondition_failed", "%s is not configured", s.Title)
 			e.Hint = "lite " + s.PluginName + " setup " + s.SetupArgs
 			return storeConfig{}, e
 		}
@@ -78,7 +78,7 @@ func (s *RcloneStore) load(t tools) (storeConfig, error) {
 	}
 	var c storeConfig
 	if err := json.Unmarshal(b, &c); err != nil || c.Path == "" {
-		return storeConfig{}, plugin.Errorf("step_failed", "файл %s повреждён", s.settings())
+		return storeConfig{}, plugin.Errorf("step_failed", "file %s is corrupt", s.settings())
 	}
 	return c, nil
 }
@@ -135,9 +135,9 @@ func (s *RcloneStore) setup(t tools, args []string) (plugin.Output, error) {
 	cfg := storeConfig{Path: path}
 	res, err := s.rclone(t, "lsf", "--max-depth", "1", s.remote(cfg))
 	if err != nil || res.ExitCode != 0 {
-		return plugin.Output{}, plugin.Errorf("precondition_failed", "настройки сохранены, но место хранения не отвечает (неверный ключ или адрес): %s", failText(res, err))
+		return plugin.Output{}, plugin.Errorf("precondition_failed", "settings saved, but the storage does not respond (wrong key or address): %s", failText(res, err))
 	}
-	return textOut(s.Title + " настроен: " + s.remote(cfg) + ". Проверка доступа прошла.\n"), nil
+	return textOut(s.Title + " configured: " + s.remote(cfg) + ". Access check passed.\n"), nil
 }
 
 // Upload отправляет копии: copy, а не sync, чтобы ротация локальных копий не стирала их на месте хранения.
@@ -148,12 +148,12 @@ func (s *RcloneStore) Upload(t tools) (plugin.Output, error) {
 	}
 	res, err := s.rclone(t, "copy", backupRoot, s.remote(cfg), "--exclude", "lost+found/**")
 	if err != nil || res.ExitCode != 0 {
-		return plugin.Output{}, plugin.Errorf("step_failed", "отправка в %s не удалась: %s", s.Title, failText(res, err))
+		return plugin.Output{}, plugin.Errorf("step_failed", "upload to %s failed: %s", s.Title, failText(res, err))
 	}
 	if err := t.env.FS.MkdirAll("/var/lib/lite-deploy", 0o755); err == nil {
 		_ = t.env.FS.WriteFile(s.lastFile(), []byte(t.now().UTC().Format(time.RFC3339)+"\n"), 0o644)
 	}
-	return textOut("Копии отправлены в " + s.remote(cfg) + ".\n"), nil
+	return textOut("Backups uploaded to " + s.remote(cfg) + ".\n"), nil
 }
 
 func (s *RcloneStore) lastTime(t tools) (time.Time, bool) {
@@ -167,7 +167,7 @@ func (s *RcloneStore) lastTime(t tools) (time.Time, bool) {
 
 func (s *RcloneStore) schedule(t tools, args []string) (plugin.Output, error) {
 	if len(args) != 1 || (args[0] != "on" && args[0] != "off") {
-		return plugin.Output{}, plugin.Errorf("usage", "использование: lite %s schedule on|off", s.PluginName)
+		return plugin.Output{}, plugin.Errorf("usage", "usage: lite %s schedule on|off", s.PluginName)
 	}
 	svcPath := "/etc/systemd/system/" + s.unitBase() + ".service"
 	timerPath := "/etc/systemd/system/" + s.unitBase() + ".timer"
@@ -176,13 +176,13 @@ func (s *RcloneStore) schedule(t tools, args []string) (plugin.Output, error) {
 		_ = t.env.FS.Remove(timerPath)
 		_ = t.env.FS.Remove(svcPath)
 		_ = t.must("systemctl", "daemon-reload")
-		return textOut("Ежедневная отправка выключена.\n"), nil
+		return textOut("The daily upload is off.\n"), nil
 	}
 	if _, err := s.load(t); err != nil {
 		return plugin.Output{}, err
 	}
-	svc := "[Unit]\nDescription=lite-deploy: отправка копий (" + s.Title + ")\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/lite-deploy " + s.PluginName + " upload\n"
-	tm := "[Unit]\nDescription=lite-deploy: ежедневная отправка копий (" + s.Title + ")\n\n[Timer]\nOnCalendar=*-*-* 04:30:00\nRandomizedDelaySec=15min\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n"
+	svc := "[Unit]\nDescription=lite-deploy: backup upload (" + s.Title + ")\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/lite-deploy " + s.PluginName + " upload\n"
+	tm := "[Unit]\nDescription=lite-deploy: daily backup upload (" + s.Title + ")\n\n[Timer]\nOnCalendar=*-*-* 04:30:00\nRandomizedDelaySec=15min\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n"
 	for p, c := range map[string]string{svcPath: svc, timerPath: tm} {
 		if err := t.env.FS.WriteFile(p, []byte(c), 0o644); err != nil {
 			return plugin.Output{}, plugin.Errorf("step_failed", "%s: %v", p, err)
@@ -194,13 +194,13 @@ func (s *RcloneStore) schedule(t tools, args []string) (plugin.Output, error) {
 	if err := t.must("systemctl", "enable", "--now", s.unitBase()+".timer"); err != nil {
 		return plugin.Output{}, err
 	}
-	return textOut("Копии будут отправляться ежедневно около 04:30 (после снятия копий).\n"), nil
+	return textOut("Backups will be uploaded daily around 04:30 (after the backups are taken).\n"), nil
 }
 
 func (s *RcloneStore) fetch(t tools, args []string) (plugin.Output, error) {
 	what := "config"
 	if len(args) > 1 || (len(args) == 1 && args[0] != "config" && args[0] != "pg" && args[0] != "all") {
-		return plugin.Output{}, plugin.Errorf("usage", "использование: lite %s fetch [config|pg|all]", s.PluginName)
+		return plugin.Output{}, plugin.Errorf("usage", "usage: lite %s fetch [config|pg|all]", s.PluginName)
 	}
 	if len(args) == 1 {
 		what = args[0]
@@ -218,12 +218,12 @@ func (s *RcloneStore) fetch(t tools, args []string) (plugin.Output, error) {
 	}
 	res, err := s.rclone(t, "copy", src, dst)
 	if err != nil || res.ExitCode != 0 {
-		return plugin.Output{}, plugin.Errorf("step_failed", "скачивание не удалось: %s", failText(res, err))
+		return plugin.Output{}, plugin.Errorf("step_failed", "download failed: %s", failText(res, err))
 	}
 	if what == "pg" || what == "all" {
 		_ = t.env.FS.Chown(PGBackupDir, "postgres", "postgres")
 	}
-	return textOut("Скачано из " + src + " в " + dst + ".\n"), nil
+	return textOut("Downloaded from " + src + " in " + dst + ".\n"), nil
 }
 
 // Run реализует plugin.Plugin.
@@ -245,7 +245,7 @@ func (s *RcloneStore) Run(ctx context.Context, env plugin.Env, cmd string, args 
 		if err := InstallRclone(ctx, env, nil); err != nil {
 			return plugin.Output{}, err
 		}
-		return textOut("rclone установлен.\n"), nil
+		return textOut("rclone is installed.\n"), nil
 	case "upload":
 		return s.Upload(t)
 	case "list":
@@ -255,7 +255,7 @@ func (s *RcloneStore) Run(ctx context.Context, env plugin.Env, cmd string, args 
 		}
 		res, err := s.rclone(t, "lsf", "-R", s.remote(cfg))
 		if err != nil || res.ExitCode != 0 {
-			return plugin.Output{}, plugin.Errorf("step_failed", "%s не отвечает: %s", s.Title, failText(res, err))
+			return plugin.Output{}, plugin.Errorf("step_failed", "%s is not responding: %s", s.Title, failText(res, err))
 		}
 		return textOut(string(res.Stdout)), nil
 	case "status":
@@ -263,15 +263,15 @@ func (s *RcloneStore) Run(ctx context.Context, env plugin.Env, cmd string, args 
 		if err != nil {
 			return plugin.Output{}, err
 		}
-		last := "ещё не отправлялось"
+		last := "not uploaded yet"
 		data := map[string]any{"path": cfg.Path}
 		if at, ok := s.lastTime(t); ok {
 			last = at.Format(time.RFC3339)
 			data["last_upload"] = last
 		}
-		return plugin.Output{Text: fmt.Sprintf("%s, последняя отправка: %s\n", s.remote(cfg), last), Data: data}, nil
+		return plugin.Output{Text: fmt.Sprintf("%s, last upload: %s\n", s.remote(cfg), last), Data: data}, nil
 	}
-	return plugin.Output{}, plugin.Errorf("usage", "у плагина %s нет команды %q", s.PluginName, cmd)
+	return plugin.Output{}, plugin.Errorf("usage", "plugin %s has no command %q", s.PluginName, cmd)
 }
 
 // Check реализует plugin.Plugin.
@@ -279,23 +279,23 @@ func (s *RcloneStore) Check(ctx context.Context, env plugin.Env) []plugin.Findin
 	t := tools{ctx, env}
 	if _, err := s.load(t); err != nil {
 		if info, serr := env.FS.Stat(s.dir()); serr != nil || !info.IsDir {
-			return []plugin.Finding{finding(s.PluginName, "configured", plugin.LevelOK, s.Title+" не настроен (не используется)", "")}
+			return []plugin.Finding{finding(s.PluginName, "configured", plugin.LevelOK, s.Title+" is not configured (not in use)", "")}
 		}
 		return []plugin.Finding{finding(s.PluginName, "configured", plugin.LevelFail, err.Error(), "")}
 	}
 	var out []plugin.Finding
 	if info, err := env.FS.Stat(s.conf()); err == nil && info.Mode&0o077 != 0 {
-		out = append(out, finding(s.PluginName, "key-perms", plugin.LevelFail, "ключ доступа к "+s.Title+" доступен не только root", "sudo chmod 600 "+s.conf()))
+		out = append(out, finding(s.PluginName, "key-perms", plugin.LevelFail, "access key for "+s.Title+" is readable by more than root", "sudo chmod 600 "+s.conf()))
 	} else {
-		out = append(out, finding(s.PluginName, "key-perms", plugin.LevelOK, "ключ доступа к "+s.Title+" закрыт для остальных", ""))
+		out = append(out, finding(s.PluginName, "key-perms", plugin.LevelOK, "access key for "+s.Title+" is closed to others", ""))
 	}
 	switch at, ok := s.lastTime(t); {
 	case !ok:
-		out = append(out, finding(s.PluginName, "upload", plugin.LevelWarn, "копии ещё ни разу не отправлялись", "sudo lite "+s.PluginName+" upload; sudo lite "+s.PluginName+" schedule on"))
+		out = append(out, finding(s.PluginName, "upload", plugin.LevelWarn, "backups have never been uploaded", "sudo lite "+s.PluginName+" upload; sudo lite "+s.PluginName+" schedule on"))
 	case t.now().Sub(at) > pgStale:
-		out = append(out, finding(s.PluginName, "upload", plugin.LevelFail, "последняя отправка копий была давно ("+at.Format(time.RFC3339)+")", "sudo lite "+s.PluginName+" schedule on"))
+		out = append(out, finding(s.PluginName, "upload", plugin.LevelFail, "the last backup upload was long ago ("+at.Format(time.RFC3339)+")", "sudo lite "+s.PluginName+" schedule on"))
 	default:
-		out = append(out, finding(s.PluginName, "upload", plugin.LevelOK, "копии отправлены "+at.Format(time.RFC3339), ""))
+		out = append(out, finding(s.PluginName, "upload", plugin.LevelOK, "backups uploaded "+at.Format(time.RFC3339), ""))
 	}
 	return out
 }
@@ -313,13 +313,13 @@ var (
 
 func bucketPath(bucket string, rest []string) (string, error) {
 	if !bucketRe.MatchString(bucket) {
-		return "", plugin.Errorf("usage", "неверное имя бакета")
+		return "", plugin.Errorf("usage", "invalid bucket name")
 	}
 	if len(rest) == 0 {
 		return bucket, nil
 	}
 	if len(rest) > 1 || !prefixRe.MatchString(rest[0]) || strings.Contains(rest[0], "..") {
-		return "", plugin.Errorf("usage", "неверный префикс")
+		return "", plugin.Errorf("usage", "invalid prefix")
 	}
 	return bucket + "/" + rest[0], nil
 }
@@ -327,7 +327,7 @@ func bucketPath(bucket string, rest []string) (string, error) {
 func keyPair(in string) (string, string, error) {
 	lines := readLinesFrom(in, 2)
 	if len(lines) != 2 || !keyIDRe.MatchString(lines[0]) || !secretRe.MatchString(lines[1]) {
-		return "", "", plugin.Errorf("usage", "на stdin нужны две строки: идентификатор ключа и секретный ключ")
+		return "", "", plugin.Errorf("usage", "stdin needs two lines: the key identifier and the secret key")
 	}
 	return lines[0], lines[1], nil
 }
@@ -346,11 +346,11 @@ func readLinesFrom(in string, n int) []string {
 // Backblaze: Backblaze B2.
 var Backblaze = &RcloneStore{
 	PluginName: "backblaze", Title: "Backblaze B2", Remote: "b2",
-	Describe:  "копии за пределами сервера: отправка /var/backups/lite-deploy в Backblaze B2",
-	SetupArgs: "БАКЕТ [ПРЕФИКС] (ключи из stdin)", SetupHelp: "сохранить ключ и бакет: две строки на stdin, ID ключа и сам ключ",
+	Describe:  "backups outside the server: upload /var/backups/lite-deploy to Backblaze B2",
+	SetupArgs: "BUCKET [PREFIX] (keys on stdin)", SetupHelp: "save the key and bucket: two lines on stdin, the key ID and the key itself",
 	setupLocal: func(t tools, s *RcloneStore, args []string, in string) (string, string, map[string]string, error) {
 		if len(args) < 1 {
-			return "", "", nil, plugin.Errorf("usage", "использование: lite backblaze setup БАКЕТ [ПРЕФИКС] (ID ключа и ключ двумя строками на stdin)")
+			return "", "", nil, plugin.Errorf("usage", "usage: lite backblaze setup BUCKET [PREFIX] (key ID and key on two lines of stdin)")
 		}
 		path, err := bucketPath(args[0], args[1:])
 		if err != nil {
@@ -367,11 +367,11 @@ var Backblaze = &RcloneStore{
 // S3: любое S3-совместимое хранилище (AWS S3, Wasabi, MinIO, Cloudflare R2 и т.д.).
 var S3 = &RcloneStore{
 	PluginName: "s3", Title: "S3", Remote: "s3",
-	Describe:  "копии за пределами сервера: отправка /var/backups/lite-deploy в S3-совместимое хранилище",
-	SetupArgs: "АДРЕС_https БАКЕТ [ПРЕФИКС] (ключи из stdin)", SetupHelp: "сохранить адрес, бакет и ключи: две строки на stdin, ключ доступа и секретный ключ",
+	Describe:  "backups outside the server: upload /var/backups/lite-deploy to S3-compatible storage",
+	SetupArgs: "ADDRESS_https BUCKET [PREFIX] (keys on stdin)", SetupHelp: "save the address, bucket and keys: two lines on stdin, the access key and the secret key",
 	setupLocal: func(t tools, s *RcloneStore, args []string, in string) (string, string, map[string]string, error) {
 		if len(args) < 2 || !endpoint.MatchString(args[0]) {
-			return "", "", nil, plugin.Errorf("usage", "использование: lite s3 setup https://адрес БАКЕТ [ПРЕФИКС] (ключ доступа и секретный ключ двумя строками на stdin)")
+			return "", "", nil, plugin.Errorf("usage", "usage: lite s3 setup https://address BUCKET [PREFIX] (access key and secret key on two lines of stdin)")
 		}
 		path, err := bucketPath(args[1], args[2:])
 		if err != nil {
@@ -388,16 +388,16 @@ var S3 = &RcloneStore{
 // SFTP: сервер по SFTP (проверка ключа хоста обязательна).
 var SFTP = &RcloneStore{
 	PluginName: "sftp", Title: "SFTP", Remote: "sftp",
-	Describe:  "копии за пределами сервера: отправка /var/backups/lite-deploy на сервер по SFTP",
-	SetupArgs: "ХОСТ ПОЛЬЗОВАТЕЛЬ КАТАЛОГ (ключи из stdin)", SetupHelp: "stdin: закрытый ключ SSH, затем строка --- и строка known_hosts с ключом хоста (ssh-keyscan -t ed25519 ХОСТ)",
+	Describe:  "backups outside the server: upload /var/backups/lite-deploy to a server over SFTP",
+	SetupArgs: "HOST USER DIRECTORY (keys on stdin)", SetupHelp: "stdin: an SSH private key, then a --- line and a known_hosts line with the host key (ssh-keyscan -t ed25519 HOST)",
 	setupLocal: func(t tools, s *RcloneStore, args []string, in string) (string, string, map[string]string, error) {
 		if len(args) != 3 || !hostRe.MatchString(args[0]) || !userRe.MatchString(args[1]) || !pathRe.MatchString(args[2]) || strings.Contains(args[2], "..") {
-			return "", "", nil, plugin.Errorf("usage", "использование: lite sftp setup ХОСТ ПОЛЬЗОВАТЕЛЬ КАТАЛОГ (закрытый ключ, строка ---, строка known_hosts на stdin)")
+			return "", "", nil, plugin.Errorf("usage", "usage: lite sftp setup HOST USER DIRECTORY (private key, a --- line and a known_hosts line on stdin)")
 		}
 		key, hosts, ok := strings.Cut(in, "\n---\n")
 		hosts = strings.TrimSpace(hosts)
 		if !ok || !strings.Contains(key, "PRIVATE KEY") || hosts == "" || strings.Count(hosts, "\n") > 3 {
-			return "", "", nil, plugin.Errorf("usage", "на stdin нужны закрытый ключ SSH, затем строка --- и строка known_hosts: без проверки ключа хоста соединение не открывается")
+			return "", "", nil, plugin.Errorf("usage", "stdin needs an SSH private key, then a --- line and a known_hosts line: without checking the host key the connection is not opened")
 		}
 		keyFile, khFile := s.dir()+"/id", s.dir()+"/known_hosts"
 		conf := fmt.Sprintf("[sftp]\ntype = sftp\nhost = %s\nuser = %s\nkey_file = %s\nknown_hosts_file = %s\n", args[0], args[1], keyFile, khFile)

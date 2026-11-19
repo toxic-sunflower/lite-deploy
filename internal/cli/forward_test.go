@@ -70,7 +70,7 @@ func TestVerifyWithoutRootUsesAgentResults(t *testing.T) {
 	if c := run(t, env, "verify"); c != 8 {
 		t.Fatalf("код %d", c)
 	}
-	if !strings.Contains(out.String(), "security/fail2ban: защищает") || !strings.Contains(out.String(), "исправить: sudo lite pg install") {
+	if !strings.Contains(out.String(), "security/fail2ban: защищает") || !strings.Contains(out.String(), "fix: sudo lite pg install") {
 		t.Fatalf("вывод: %s", out.String())
 	}
 }
@@ -82,7 +82,7 @@ func TestVerifyWithoutRootFallsBackWhenAgentIsMissing(t *testing.T) {
 		return nil, errors.New("нет агента")
 	}
 	run(t, env, "verify")
-	if !strings.Contains(out.String(), "Итого:") {
+	if !strings.Contains(out.String(), "Total:") {
 		t.Fatalf("проверка на месте должна выполниться: %s", out.String())
 	}
 }
@@ -96,7 +96,7 @@ func TestDeployByAdminGoesThroughAgentButProjectUserRunsLocally(t *testing.T) {
 		path, body = p, string(b)
 		return []byte(`{"ok":true,"api_version":"v1","command":"deploy","data":{"project":"shop","version":"` + strings.Repeat("a", 40) + `","slot":"blue","previous_slot":"none"}}`), nil
 	}
-	if c := run(t, env, "deploy", "shop", strings.Repeat("a", 40)); c != 0 || path != "/v1/deploy" || !strings.Contains(body, `"project":"shop"`) || !strings.Contains(out.String(), "Выкачено aaaaaaaaaaaa") {
+	if c := run(t, env, "deploy", "shop", strings.Repeat("a", 40)); c != 0 || path != "/v1/deploy" || !strings.Contains(body, `"project":"shop"`) || !strings.Contains(out.String(), "Deployed aaaaaaaaaaaa") {
 		t.Fatalf("%d %s %s %s", c, path, body, out.String())
 	}
 	// пользователь проекта (CI через привратник) выкатывает сам, агент не нужен
@@ -105,5 +105,22 @@ func TestDeployByAdminGoesThroughAgentButProjectUserRunsLocally(t *testing.T) {
 	run(t, env, "deploy", "shop", strings.Repeat("a", 40), "--json")
 	if path != "" {
 		t.Fatalf("пользователь проекта не должен ходить к агенту: %s", path)
+	}
+}
+
+func TestHelpWorksForEveryoneIncludingRoot(t *testing.T) {
+	for _, args := range [][]string{{"--help"}, {"help"}, {"-h"}, {}, {"deploy", "--help"}} {
+		env, out, _ := testEnv(t)
+		env.IsRoot = func() bool { return true }
+		env.LoginUID = func() (int, bool) { return 0, true } // вход под root: остальные команды запрещены
+		if c := run(t, env, args...); c != 0 || !strings.Contains(out.String(), "Usage: lite") {
+			t.Errorf("%v: код %d, вывод %q", args, c, out.String())
+		}
+	}
+	env, out, _ := testEnv(t)
+	env.IsRoot = func() bool { return true }
+	env.LoginUID = func() (int, bool) { return 0, true }
+	if c := run(t, env, "verify"); c != 4 || !strings.Contains(out.String()+"", "") {
+		t.Errorf("остальные команды под root по-прежнему запрещены: %d", c)
 	}
 }

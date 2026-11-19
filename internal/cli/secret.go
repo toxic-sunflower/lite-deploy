@@ -48,7 +48,7 @@ func (e Env) root() bool { return e.IsRoot != nil && e.IsRoot() }
 // Значение никогда не берётся из аргументов или переменных окружения (SPEC-v0.md, 6.1).
 func readSecretValue(env Env) ([]byte, error) {
 	if f, ok := env.Stdin.(*os.File); ok && term.IsTerminal(int(f.Fd())) { //nolint:gosec // дескриптор терминала помещается в int
-		_, _ = fmt.Fprint(env.Stderr, "Значение секрета (ввод скрыт): ")
+		_, _ = fmt.Fprint(env.Stderr, "Secret value (input hidden): ")
 		b, err := term.ReadPassword(int(f.Fd())) //nolint:gosec // см. выше
 		_, _ = fmt.Fprintln(env.Stderr)
 		return b, err
@@ -66,7 +66,7 @@ func readSecretValue(env Env) ([]byte, error) {
 	return b, nil
 }
 
-const initUsage = "использование: lite init [--user имя[,имя…]] [--all-users] [--ufw keep|off|http|max] [--plugins caddy,podman,pg,security] [--yes]"
+const initUsage = "usage: lite init [--user name[,name…]] [--all-users] [--ufw keep|off|http|max] [--plugins caddy,podman,pg,security] [--yes]"
 
 // cmdInit готовит сервер к работе: ключ исполнителя и каталоги, пользователи-администраторы с SSH-ключами,
 // вход по SSH только по ключу, режим файервола, плагины. Единственная команда, которую можно запускать прямо от root.
@@ -83,7 +83,7 @@ func cmdInit(args []string, env Env) result {
 		return fail("init", CodeUsage, initUsage)
 	}
 	if !env.root() {
-		return fail("init", "permission_denied", "init выполняется от root: sudo lite init")
+		return fail("init", "permission_denied", "init must run as root: sudo lite init")
 	}
 	pub, created, err := secrets.EnsureKey(env.FS, env.keyPath(), env.pubPath())
 	if err != nil {
@@ -98,7 +98,7 @@ func cmdInit(args []string, env Env) result {
 		{env.secretsDir(), 0o700},
 	} {
 		if err := env.FS.MkdirAll(d.path, os.FileMode(d.perm)); err != nil {
-			return fail("init", CodeIO, "не удалось создать "+d.path+": "+err.Error())
+			return fail("init", CodeIO, "could not create "+d.path+": "+err.Error())
 		}
 	}
 	split := func(vals []string) []string {
@@ -126,17 +126,17 @@ func cmdInit(args []string, env Env) result {
 	if err := se.Apply(context.Background(), opts); err != nil {
 		return fail("init", plan.CodePrecondition, err.Error())
 	}
-	text := "Ключ исполнителя уже был создан, он не изменён.\n"
+	text := "The executor key already exists and was not changed.\n"
 	if created {
-		text = "Ключ исполнителя создан: " + env.keyPath() + " (права 600).\n"
+		text = "Executor key created: " + env.keyPath() + " (mode 600).\n"
 	}
-	text += "Открытый ключ (его можно показывать): " + pub + "\n"
+	text += "Public key (safe to show): " + pub + "\n"
 	return result{command: "init", data: map[string]any{"public_key": pub, "created": created}, text: text}
 }
 
 func cmdSecret(args []string, env Env) result {
 	if len(args) == 0 {
-		return fail("secret", CodeUsage, "использование: lite-deploy secret pubkey|encrypt|set|list")
+		return fail("secret", CodeUsage, "usage: lite-deploy secret pubkey|encrypt|set|list")
 	}
 	switch args[0] {
 	case "pubkey":
@@ -148,13 +148,13 @@ func cmdSecret(args []string, env Env) result {
 	case "list":
 		return secretList(args[1:], env)
 	}
-	return fail("secret", CodeUsage, "неизвестная подкоманда secret: "+args[0])
+	return fail("secret", CodeUsage, "unknown secret subcommand: "+args[0])
 }
 
 func secretPubkey(env Env) result {
 	b, err := env.FS.ReadFile(env.pubPath())
 	if err != nil {
-		return fail("secret.pubkey", plan.CodePrecondition, "открытый ключ не найден в "+env.pubPath()+": на сервере выполните sudo lite-deploy init")
+		return fail("secret.pubkey", plan.CodePrecondition, "public key not found in "+env.pubPath()+": run sudo lite-deploy init on the server")
 	}
 	pub := strings.TrimSpace(string(b))
 	return result{command: "secret.pubkey", data: map[string]any{"public_key": pub}, text: pub + "\n"}
@@ -174,19 +174,19 @@ func secretEncrypt(args []string, env Env) result {
 	pubFlag := fs.String("pubkey", "", "")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 2 {
-		return fail("secret.encrypt", CodeUsage, "использование: lite-deploy secret encrypt <проект> <имя> [--pubkey age1…]; значение читается со стандартного ввода или скрыто с терминала")
+		return fail("secret.encrypt", CodeUsage, "usage: lite-deploy secret encrypt <project> <name> [--pubkey age1…]; the value is read from standard input or hidden from the terminal")
 	}
 	pub := strings.TrimSpace(*pubFlag)
 	if pub == "" {
 		b, err := env.FS.ReadFile(env.pubPath())
 		if err != nil {
-			return fail("secret.encrypt", plan.CodePrecondition, "нет открытого ключа исполнителя: задайте --pubkey или выполните на сервере sudo lite-deploy init")
+			return fail("secret.encrypt", plan.CodePrecondition, "no executor public key: pass --pubkey or run sudo lite-deploy init on the server")
 		}
 		pub = string(b)
 	}
 	val, err := readSecretValue(env)
 	if err != nil {
-		return fail("secret.encrypt", CodeIO, "не удалось прочитать значение: "+err.Error())
+		return fail("secret.encrypt", CodeIO, "could not read the value: "+err.Error())
 	}
 	ct, err := secrets.Encrypt(pub, pos[0], pos[1], val, env.Now())
 	if err != nil {
@@ -199,33 +199,33 @@ func secretSet(args []string, env Env) result {
 	fs := flag.NewFlagSet("secret.set", flag.ContinueOnError)
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 2 {
-		return fail("secret.set", CodeUsage, "использование: lite-deploy secret set <проект> <имя>; значение читается со стандартного ввода или скрыто с терминала")
+		return fail("secret.set", CodeUsage, "usage: lite-deploy secret set <project> <name>; the value is read from standard input or hidden from the terminal")
 	}
 	if !env.root() {
-		return fail("secret.set", "permission_denied", "secret set выполняется от root: хранилище секретов доступно только root")
+		return fail("secret.set", "permission_denied", "secret set must run as root: the secret store is root-only")
 	}
 	val, err := readSecretValue(env)
 	if err != nil {
-		return fail("secret.set", CodeIO, "не удалось прочитать значение: "+err.Error())
+		return fail("secret.set", CodeIO, "could not read the value: "+err.Error())
 	}
 	changed, err := secrets.NewStoreAt(env.FS, env.secretsDir()).Put(pos[0], pos[1], val)
 	if err != nil {
 		return secretErr("secret.set", err)
 	}
-	word := "не изменился"
+	word := "unchanged"
 	if changed {
-		word = "записан"
+		word = "saved"
 	}
 	// значение и шифртекст не печатаются
 	return result{command: "secret.set", data: map[string]any{"project": pos[0], "name": pos[1], "changed": changed},
-		text: fmt.Sprintf("Секрет %s проекта %s %s.\n", pos[1], pos[0], word)}
+		text: fmt.Sprintf("Secret %s of project %s %s.\n", pos[1], pos[0], word)}
 }
 
 func secretList(args []string, env Env) result {
 	fs := flag.NewFlagSet("secret.list", flag.ContinueOnError)
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 1 {
-		return fail("secret.list", CodeUsage, "использование: lite-deploy secret list <проект>")
+		return fail("secret.list", CodeUsage, "usage: lite-deploy secret list <project>")
 	}
 	type item struct {
 		Name      string  `json:"name"`
@@ -247,7 +247,7 @@ func secretList(args []string, env Env) result {
 		}
 		ps, ok := st.Projects[pos[0]]
 		if !ok {
-			return fail("secret.list", CodeProjectMissing, "проект "+pos[0]+" не найден")
+			return fail("secret.list", CodeProjectMissing, "project "+pos[0]+" not found")
 		}
 		for _, n := range ps.Secrets {
 			items = append(items, item{n, nil})
@@ -255,14 +255,14 @@ func secretList(args []string, env Env) result {
 	}
 	var sb strings.Builder
 	for _, it := range items {
-		when := "время неизвестно"
+		when := "time unknown"
 		if it.UpdatedAt != nil {
 			when = *it.UpdatedAt
 		}
 		fmt.Fprintf(&sb, "%s\t%s\n", it.Name, when)
 	}
 	if len(items) == 0 {
-		sb.WriteString("Секретов нет.\n")
+		sb.WriteString("No secrets.\n")
 	}
 	return result{command: "secret.list", data: map[string]any{"secrets": items}, text: sb.String()}
 }

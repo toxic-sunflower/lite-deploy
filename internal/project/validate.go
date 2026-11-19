@@ -33,7 +33,7 @@ func Reserved(name string) bool {
 // Значения по умолчанию не подставляются, см. WithDefaults.
 func Parse(data []byte) (*Project, []schema.Issue) {
 	if len(data) > MaxBytes {
-		return nil, []schema.Issue{{Path: "/", Code: "too_large", Message: fmt.Sprintf("файл больше %d байт", MaxBytes)}}
+		return nil, []schema.Issue{{Path: "/", Code: "too_large", Message: fmt.Sprintf("the file is larger than %d bytes", MaxBytes)}}
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
@@ -48,7 +48,7 @@ func Parse(data []byte) (*Project, []schema.Issue) {
 		return nil, []schema.Issue{{Path: "/", Code: code, Message: err.Error()}}
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return nil, []schema.Issue{{Path: "/", Code: "syntax", Message: "после описания проекта есть лишние данные"}}
+		return nil, []schema.Issue{{Path: "/", Code: "syntax", Message: "extra data after the project description"}}
 	}
 	return &p, nil
 }
@@ -60,22 +60,22 @@ func Validate(p *Project) []schema.Issue {
 		issues = append(issues, schema.Issue{Path: path, Code: code, Message: fmt.Sprintf(format, args...)})
 	}
 	if p.Schema != "" && p.Schema != SchemaID && p.Schema != SchemaIDv1 {
-		add("/schema", "enum", "неизвестная версия схемы %q", p.Schema)
+		add("/schema", "enum", "unknown schema version %q", p.Schema)
 	}
 	if d := p.Database; d != nil {
 		if d.IsLocal() {
 			if d.Port != 0 {
-				add("/database/port", "not_applicable", "port задаётся только для базы на другом сервере")
+				add("/database/port", "not_applicable", "port is only for a database on another server")
 			}
 			if d.PasswordSecret != "" {
-				add("/database/password_secret", "not_applicable", "для базы на этом сервере пароль создаётся автоматически")
+				add("/database/password_secret", "not_applicable", "for a database on this server the password is generated automatically")
 			}
 		} else if d.PasswordSecret == "" {
-			add("/database/password_secret", "required", "для базы на другом сервере нужен password_secret")
+			add("/database/password_secret", "required", "a database on another server needs password_secret")
 		}
 	}
 	if p.Name != "" && Reserved(p.Name) {
-		add("/name", "reserved", "имя %q зарезервировано", p.Name)
+		add("/name", "reserved", "the name %q is reserved", p.Name)
 	}
 
 	used := map[int]string{}
@@ -84,7 +84,7 @@ func Validate(p *Project) []schema.Issue {
 			return
 		}
 		if prev, ok := used[port]; ok {
-			add(path, "duplicate_port", "порт %d уже занят в %s", port, prev)
+			add(path, "duplicate_port", "port %d is already used in %s", port, prev)
 			return
 		}
 		used[port] = path
@@ -101,44 +101,44 @@ func Validate(p *Project) []schema.Issue {
 		switch s.KindOf() {
 		case KindQuadlet:
 			if s.Image == "" {
-				add(base+"/image", "required", "для контейнера нужен image")
+				add(base+"/image", "required", "a container needs image")
 			}
 			if s.ContainerPort == 0 {
-				add(base+"/container_port", "required", "для контейнера нужен container_port")
+				add(base+"/container_port", "required", "a container needs container_port")
 			}
 			if len(s.Exec) > 0 {
-				add(base+"/exec", "not_applicable", "exec задаётся только для kind unit")
+				add(base+"/exec", "not_applicable", "exec is only allowed for kind unit")
 			}
 			if len(s.Stop) > 0 {
-				add(base+"/stop", "not_applicable", "stop задаётся только для kind unit")
+				add(base+"/stop", "not_applicable", "stop is only allowed for kind unit")
 			}
 			if s.Release != nil {
-				add(base+"/release", "not_applicable", "release задаётся только для kind unit")
+				add(base+"/release", "not_applicable", "release is only allowed for kind unit")
 			}
 		case KindUnit:
 			if len(s.Exec) == 0 {
-				add(base+"/exec", "required", "для kind unit нужна команда запуска exec")
+				add(base+"/exec", "required", "kind unit needs a start command exec")
 			}
 			for i, a := range s.Exec {
 				if a == "" || strings.ContainsAny(a, "\r\n\x00") || len(a) > 512 {
-					add(base+"/exec/"+strconv.Itoa(i), "pattern", "аргумент не пустой, без переводов строки, до 512 знаков")
+					add(base+"/exec/"+strconv.Itoa(i), "pattern", "an argument must be non-empty, without line breaks, up to 512 characters")
 				}
 			}
 			if s.Image != "" || s.ContainerPort != 0 {
-				add(base, "not_applicable", "image и container_port относятся к контейнерам, у kind unit их нет")
+				add(base, "not_applicable", "image and container_port belong to containers; kind unit has neither")
 			}
 			for i, a := range s.Stop {
 				if a == "" || strings.ContainsAny(a, "\r\n\x00") || len(a) > 512 {
-					add(base+"/stop/"+strconv.Itoa(i), "pattern", "аргумент не пустой, без переводов строки, до 512 знаков")
+					add(base+"/stop/"+strconv.Itoa(i), "pattern", "an argument must be non-empty, without line breaks, up to 512 characters")
 				}
 			}
 			if s.Release == nil {
-				add(base+"/release", "required", "для kind unit нужен release (откуда брать архив)")
+				add(base+"/release", "required", "kind unit needs a release (where to get the archive)")
 			}
 			if len(s.Exec) > 0 {
 				for _, part := range strings.Split(s.Exec[0], "/") {
 					if part == ".." {
-						add(base+"/exec/0", "pattern", "путь к программе не должен содержать «..»")
+						add(base+"/exec/0", "pattern", "the program path must not contain \"..\"")
 					}
 				}
 			}
@@ -146,10 +146,10 @@ func Validate(p *Project) []schema.Issue {
 		seenData := map[string]bool{}
 		for i, d := range s.Data {
 			if !dataNameRe.MatchString(d) {
-				add(base+"/data/"+strconv.Itoa(i), "pattern", "имя каталога: строчные латинские буквы, цифры, «-», до 16 знаков")
+				add(base+"/data/"+strconv.Itoa(i), "pattern", "directory name: lowercase Latin letters, digits and \"-\", up to 16 characters")
 			}
 			if seenData[d] {
-				add(base+"/data/"+strconv.Itoa(i), "duplicate", "каталог %q повторяется", d)
+				add(base+"/data/"+strconv.Itoa(i), "duplicate", "directory %q is repeated", d)
 			}
 			seenData[d] = true
 		}
@@ -157,23 +157,23 @@ func Validate(p *Project) []schema.Issue {
 			usePort(hp, base+"/host_ports/"+strconv.Itoa(i))
 		}
 		if s.DatabaseEnv != "" && p.Database == nil {
-			add(base+"/database_env", "no_database", "database_env указан, но в проекте нет database")
+			add(base+"/database_env", "no_database", "database_env is set but the project has no database")
 		}
 		if s.Limits != nil && s.Limits.Memory != "" {
 			if mb, ok := MemoryMB(s.Limits.Memory); !ok || mb > 16*1024 {
-				add(base+"/limits/memory", "maximum", "память не больше 16g")
+				add(base+"/limits/memory", "maximum", "memory at most 16g")
 			}
 		}
 		for env := range s.Env {
 			if _, dup := s.Secrets[env]; dup {
-				add(base+"/secrets/"+env, "duplicate_env", "переменная %s задана и в env, и в secrets", env)
+				add(base+"/secrets/"+env, "duplicate_env", "variable %s is set in both env and secrets", env)
 			}
 		}
 		if s.DatabaseEnv != "" {
 			_, inEnv := s.Env[s.DatabaseEnv]
 			_, inSec := s.Secrets[s.DatabaseEnv]
 			if inEnv || inSec {
-				add(base+"/database_env", "duplicate_env", "переменная %s задана ещё и в env или secrets", s.DatabaseEnv)
+				add(base+"/database_env", "duplicate_env", "variable %s is also set in env or secrets", s.DatabaseEnv)
 			}
 		}
 	}
@@ -183,25 +183,25 @@ func Validate(p *Project) []schema.Issue {
 	for i, s := range p.Sites {
 		base := "/sites/" + strconv.Itoa(i)
 		if siteNames[s.Name] {
-			add(base+"/name", "duplicate", "имя сайта %q повторяется", s.Name)
+			add(base+"/name", "duplicate", "the site name %q is repeated", s.Name)
 		}
 		siteNames[s.Name] = true
 		if hosts[s.Host] {
-			add(base+"/host", "duplicate", "хост %q повторяется", s.Host)
+			add(base+"/host", "duplicate", "host %q is repeated", s.Host)
 		}
 		hosts[s.Host] = true
 		if s.Service != "" {
 			if _, ok := p.Services[s.Service]; !ok {
-				add(base+"/service", "unknown_service", "сервис %q не описан в services", s.Service)
+				add(base+"/service", "unknown_service", "service %q is not described in services", s.Service)
 			}
 		}
 		usePort(s.ListenPort, base+"/listen_port")
 		if s.MaxBody != "" && !sizeWithin(s.MaxBody) {
-			add(base+"/max_body", "maximum", "размер не больше 1000MB")
+			add(base+"/max_body", "maximum", "size at most 1000MB")
 		}
 		for j, r := range s.Routes {
 			if r.MaxBody != "" && !sizeWithin(r.MaxBody) {
-				add(base+"/routes/"+strconv.Itoa(j)+"/max_body", "maximum", "размер не больше 1000MB")
+				add(base+"/routes/"+strconv.Itoa(j)+"/max_body", "maximum", "size at most 1000MB")
 			}
 		}
 	}

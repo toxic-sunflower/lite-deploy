@@ -115,13 +115,13 @@ func NewRegistry() *Registry { return &Registry{byName: map[string]Plugin{}} }
 func (r *Registry) Add(p Plugin) error {
 	n := p.Name()
 	if !nameRe.MatchString(n) {
-		return fmt.Errorf("неверное имя плагина %q", n)
+		return fmt.Errorf("invalid plugin name %q", n)
 	}
 	if reserved[n] {
-		return fmt.Errorf("имя плагина %q занято командой lite", n)
+		return fmt.Errorf("the plugin name %q is taken by a lite command", n)
 	}
 	if _, dup := r.byName[n]; dup {
-		return fmt.Errorf("плагин %q уже есть", n)
+		return fmt.Errorf("plugin %q already exists", n)
 	}
 	r.byName[n] = p
 	return nil
@@ -205,29 +205,29 @@ func ParseManifest(data []byte) (Manifest, error) {
 		return m, fmt.Errorf("plugin.json: %w", err)
 	}
 	if !nameRe.MatchString(m.Name) || reserved[m.Name] {
-		return m, fmt.Errorf("plugin.json: неверное или занятое имя %q", m.Name)
+		return m, fmt.Errorf("plugin.json: invalid or reserved name %q", m.Name)
 	}
 	if len(m.Commands) == 0 && len(m.Checks) == 0 {
-		return m, errors.New("plugin.json: нет ни команд, ни проверок")
+		return m, errors.New("plugin.json: neither commands nor checks")
 	}
 	seen := map[string]bool{}
 	for _, c := range m.Commands {
 		if !nameRe.MatchString(c.Name) || seen[c.Name] {
-			return m, fmt.Errorf("plugin.json: неверная или повторная команда %q", c.Name)
+			return m, fmt.Errorf("plugin.json: invalid or duplicate command %q", c.Name)
 		}
 		seen[c.Name] = true
 		if !execOK(c.Exec) {
-			return m, fmt.Errorf("plugin.json: команда %s: файл %q должен быть путём внутри каталога плагина", c.Name, c.Exec)
+			return m, fmt.Errorf("plugin.json: command %s: file %q must be a path inside the plugin directory", c.Name, c.Exec)
 		}
 	}
 	for _, c := range m.Checks {
 		if !nameRe.MatchString(c.Name) || !execOK(c.Exec) {
-			return m, fmt.Errorf("plugin.json: неверная проверка %q", c.Name)
+			return m, fmt.Errorf("plugin.json: invalid check %q", c.Name)
 		}
 	}
 	for _, r := range m.Requires {
 		if !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.+_-]{0,100}$`).MatchString(r) {
-			return m, fmt.Errorf("plugin.json: неверное имя пакета %q", r)
+			return m, fmt.Errorf("plugin.json: invalid package name %q", r)
 		}
 	}
 	return m, nil
@@ -275,7 +275,7 @@ func (x *external) Run(ctx context.Context, env Env, cmd string, args []string) 
 			continue
 		}
 		if miss := x.missing(ctx); len(miss) > 0 {
-			e := Errorf("precondition_failed", "плагину %s не хватает пакетов: %s", x.m.Name, strings.Join(miss, ", "))
+			e := Errorf("precondition_failed", "plugin %s is missing packages: %s", x.m.Name, strings.Join(miss, ", "))
 			e.Hint = "lite package install " + strings.Join(miss, " ")
 			return Output{}, e
 		}
@@ -286,7 +286,7 @@ func (x *external) Run(ctx context.Context, env Env, cmd string, args []string) 
 		if res.ExitCode != 0 {
 			msg := strings.TrimSpace(string(res.Stderr))
 			if msg == "" {
-				msg = fmt.Sprintf("команда завершилась с кодом %d", res.ExitCode)
+				msg = fmt.Sprintf("the command exited with code %d", res.ExitCode)
 			}
 			return Output{}, Errorf("step_failed", "%s %s: %s", x.m.Name, cmd, msg)
 		}
@@ -296,14 +296,14 @@ func (x *external) Run(ctx context.Context, env Env, cmd string, args []string) 
 		}
 		return Output{Text: out, Data: map[string]string{"output": strings.TrimRight(out, "\n")}}, nil
 	}
-	return Output{}, Errorf("usage", "у плагина %s нет команды %q", x.m.Name, cmd)
+	return Output{}, Errorf("usage", "plugin %s has no command %q", x.m.Name, cmd)
 }
 
 func (x *external) Check(ctx context.Context, env Env) []Finding {
 	var out []Finding
 	if miss := x.missing(ctx); len(miss) > 0 {
 		out = append(out, Finding{Plugin: x.m.Name, Check: "requires", Level: LevelFail,
-			Message: "не установлены пакеты: " + strings.Join(miss, ", "), Fix: "lite package install " + strings.Join(miss, " ")})
+			Message: "packages not installed: " + strings.Join(miss, ", "), Fix: "lite package install " + strings.Join(miss, " ")})
 	}
 	for _, c := range x.m.Checks {
 		res, err := env.Runner.Run(ctx, host.Cmd{Name: path.Join(x.dir, c.Exec), Env: x.env(env), Timeout: 2 * time.Minute})
@@ -346,23 +346,23 @@ func LoadDir(fsys host.FS, dir string, r *Registry, installed func(ctx context.C
 		}
 		// плагин выполняется с правами lite: каталог должен принадлежать root и быть закрыт для записи другим
 		if st.Owner != "root" || st.Mode&0o022 != 0 {
-			errs = append(errs, fmt.Errorf("плагин %s: каталог %s должен принадлежать root и быть закрыт для записи другим (chown root, chmod go-w)", n, pd))
+			errs = append(errs, fmt.Errorf("plugin %s: directory %s must be owned by root and not writable by others (chown root, chmod go-w)", n, pd))
 			continue
 		}
 		b, err := fsys.ReadFile(path.Join(pd, "plugin.json"))
 		if err != nil {
-			errs = append(errs, fmt.Errorf("плагин %s: %w", n, err))
+			errs = append(errs, fmt.Errorf("plugin %s: %w", n, err))
 			continue
 		}
 		m, err := ParseManifest(b)
 		if err == nil && m.Name != n {
-			err = fmt.Errorf("plugin.json: имя %q не совпадает с именем каталога %q", m.Name, n)
+			err = fmt.Errorf("plugin.json: name %q does not match the directory name %q", m.Name, n)
 		}
 		if err == nil {
 			err = r.Add(&external{m: m, dir: pd, installed: installed})
 		}
 		if err != nil {
-			errs = append(errs, fmt.Errorf("плагин %s: %w", n, err))
+			errs = append(errs, fmt.Errorf("plugin %s: %w", n, err))
 		}
 	}
 	return errs

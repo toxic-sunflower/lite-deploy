@@ -52,13 +52,13 @@ func (s *Server) projectCall(action string) func(*http.Request) ([]byte, int) {
 	return func(r *http.Request) ([]byte, int) {
 		var in projectIn
 		if code := readLarge(r, &in); code != 0 {
-			return errBody("usage", "неверный запрос"), code
+			return errBody("usage", "invalid request"), code
 		}
 		var head struct {
 			Name string `json:"name"`
 		}
 		if json.Unmarshal(in.Project, &head) != nil || !projectRe.MatchString(head.Name) {
-			return errBody("usage", "в описании проекта нужно корректное имя"), 400
+			return errBody("usage", "the project description needs a valid name"), 400
 		}
 		pub, bad := s.serverKey(r)
 		if bad != nil {
@@ -68,7 +68,7 @@ func (s *Server) projectCall(action string) func(*http.Request) ([]byte, int) {
 		for name, val := range in.Secrets {
 			ct, err := secrets.Encrypt(pub, head.Name, name, []byte(val), time.Now())
 			if err != nil {
-				return errBody("invalid_secret", "секрет "+name+": "+err.Error()), 400
+				return errBody("invalid_secret", "secret "+name+": "+err.Error()), 400
 			}
 			cts[name] = ct
 		}

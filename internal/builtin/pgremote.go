@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	hbaBegin = "# --- lite-deploy: begin (не править вручную) ---"
+	hbaBegin = "# --- lite-deploy: begin (do not edit by hand) ---"
 	hbaEnd   = "# --- lite-deploy: end ---"
 	pgPort   = 5432
 )
@@ -27,16 +27,16 @@ func (r hbaRule) line() string {
 func normalizeFrom(s string) (string, error) {
 	if a, err := netip.ParseAddr(s); err == nil {
 		if a.IsUnspecified() {
-			return "", fmt.Errorf("нужен конкретный адрес, а не %s", s)
+			return "", fmt.Errorf("a specific address is required, not %s", s)
 		}
 		return netip.PrefixFrom(a, a.BitLen()).String(), nil
 	}
 	p, err := netip.ParsePrefix(s)
 	if err != nil {
-		return "", fmt.Errorf("источник: адрес (10.0.0.5) или сеть (10.0.0.0/24)")
+		return "", fmt.Errorf("source: an address (10.0.0.5) or a network (10.0.0.0/24)")
 	}
 	if p.Bits() == 0 {
-		return "", fmt.Errorf("сеть /0 пускает весь интернет; укажите конкретный адрес или сеть")
+		return "", fmt.Errorf("the network /0 lets the whole internet in; give a specific address or network")
 	}
 	return p.Masked().String(), nil
 }
@@ -82,7 +82,7 @@ func (t tools) hbaFile() (string, error) {
 	}
 	p := strings.TrimSpace(out)
 	if p == "" {
-		return "", plugin.Errorf("step_failed", "PostgreSQL не назвал файл pg_hba.conf")
+		return "", plugin.Errorf("step_failed", "PostgreSQL did not report the pg_hba.conf file")
 	}
 	return p, nil
 }
@@ -90,14 +90,14 @@ func (t tools) hbaFile() (string, error) {
 // applyHBA записывает новые правила, перечитывает конфигурацию и при ошибках в файле возвращает прежнее содержимое.
 func (t tools) applyHBA(path, old string, outside string, rules []hbaRule) error {
 	if err := t.env.FS.Overwrite(path, []byte(hbaJoin(outside, rules))); err != nil {
-		return plugin.Errorf("step_failed", "запись %s: %v", path, err)
+		return plugin.Errorf("step_failed", "write %s: %v", path, err)
 	}
 	bad, err := t.psql("select pg_reload_conf(); select count(*) from pg_hba_file_rules where error is not null")
 	if err == nil {
 		lines := strings.Fields(bad)
 		err = nil
 		if len(lines) > 0 && lines[len(lines)-1] != "0" {
-			err = plugin.Errorf("step_failed", "pg_hba.conf содержит ошибки")
+			err = plugin.Errorf("step_failed", "pg_hba.conf contains errors")
 		}
 	}
 	if err != nil {
@@ -112,10 +112,10 @@ func (t tools) fw() *firewall.Manager { return &firewall.Manager{Runner: t.env.R
 
 func hbaArgs(args []string) (db, role, from string, err error) {
 	if len(args) != 3 {
-		return "", "", "", plugin.Errorf("usage", "использование: lite pg allow|deny БАЗА РОЛЬ ОТКУДА")
+		return "", "", "", plugin.Errorf("usage", "usage: lite pg allow|deny DATABASE ROLE FROM")
 	}
 	if !pgNameRe.MatchString(args[0]) || !pgNameRe.MatchString(args[1]) {
-		return "", "", "", plugin.Errorf("usage", "неверное имя базы или роли")
+		return "", "", "", plugin.Errorf("usage", "invalid database or role name")
 	}
 	f, e := normalizeFrom(args[2])
 	if e != nil {
@@ -130,7 +130,7 @@ func (t tools) pgAllow(args []string) (plugin.Output, error) {
 		return plugin.Output{}, err
 	}
 	if on, e := t.psql("show ssl"); e != nil || strings.TrimSpace(on) != "on" {
-		return plugin.Output{}, plugin.Errorf("precondition_failed", "в PostgreSQL выключен ssl; удалённый доступ без шифрования не открываю")
+		return plugin.Output{}, plugin.Errorf("precondition_failed", "ssl is off in PostgreSQL; remote access without encryption is not opened")
 	}
 	path, err := t.hbaFile()
 	if err != nil {
@@ -138,7 +138,7 @@ func (t tools) pgAllow(args []string) (plugin.Output, error) {
 	}
 	b, err := t.env.FS.ReadFile(path)
 	if err != nil {
-		return plugin.Output{}, plugin.Errorf("step_failed", "чтение %s: %v", path, err)
+		return plugin.Output{}, plugin.Errorf("step_failed", "read %s: %v", path, err)
 	}
 	outside, rules := hbaSplit(string(b))
 	r := hbaRule{db, role, from}
@@ -155,7 +155,7 @@ func (t tools) pgAllow(args []string) (plugin.Output, error) {
 	if _, fe := t.fw().Allow(t.ctx, pgPort, "tcp", from); fe != nil {
 		return plugin.Output{}, fwErr(fe)
 	}
-	return plugin.Output{Text: fmt.Sprintf("Разрешено: база %s, роль %s, с %s (ssl, пароль), порт %d открыт для этого адреса.\n", db, role, from, pgPort),
+	return plugin.Output{Text: fmt.Sprintf("Allowed: database %s, role %s, from %s (ssl, password), port %d is open for this address.\n", db, role, from, pgPort),
 		Data: map[string]any{"database": db, "role": role, "from": from}}, nil
 }
 
@@ -170,7 +170,7 @@ func (t tools) pgDeny(args []string) (plugin.Output, error) {
 	}
 	b, err := t.env.FS.ReadFile(path)
 	if err != nil {
-		return plugin.Output{}, plugin.Errorf("step_failed", "чтение %s: %v", path, err)
+		return plugin.Output{}, plugin.Errorf("step_failed", "read %s: %v", path, err)
 	}
 	outside, rules := hbaSplit(string(b))
 	var keep []hbaRule
@@ -184,7 +184,7 @@ func (t tools) pgDeny(args []string) (plugin.Output, error) {
 		keep = append(keep, x)
 	}
 	if !found {
-		return plugin.Output{}, plugin.Errorf("precondition_failed", "такого правила нет (lite pg access)")
+		return plugin.Output{}, plugin.Errorf("precondition_failed", "there is no such rule (lite pg access)")
 	}
 	if err := t.applyHBA(path, string(b), outside, keep); err != nil {
 		return plugin.Output{}, err
@@ -194,7 +194,7 @@ func (t tools) pgDeny(args []string) (plugin.Output, error) {
 			return plugin.Output{}, fwErr(fe)
 		}
 	}
-	return textOut(fmt.Sprintf("Запрещено: база %s, роль %s, с %s.\n", db, role, from)), nil
+	return textOut(fmt.Sprintf("Denied: database %s, role %s, from %s.\n", db, role, from)), nil
 }
 
 func (t tools) pgAccess() (plugin.Output, error) {
@@ -204,7 +204,7 @@ func (t tools) pgAccess() (plugin.Output, error) {
 	}
 	b, err := t.env.FS.ReadFile(path)
 	if err != nil {
-		return plugin.Output{}, plugin.Errorf("step_failed", "чтение %s: %v", path, err)
+		return plugin.Output{}, plugin.Errorf("step_failed", "read %s: %v", path, err)
 	}
 	_, rules := hbaSplit(string(b))
 	var sb strings.Builder
@@ -214,7 +214,7 @@ func (t tools) pgAccess() (plugin.Output, error) {
 		list = append(list, map[string]string{"database": r.DB, "role": r.Role, "from": r.From})
 	}
 	if sb.Len() == 0 {
-		sb.WriteString("Удалённый доступ не открыт.\n")
+		sb.WriteString("Remote access is not open.\n")
 	}
 	return plugin.Output{Text: sb.String(), Data: map[string]any{"rules": list}}, nil
 }
@@ -222,13 +222,13 @@ func (t tools) pgAccess() (plugin.Output, error) {
 // pgListen задаёт адрес, на котором PostgreSQL принимает соединения кроме localhost, и перезапускает службу.
 func (t tools) pgListen(args []string) (plugin.Output, error) {
 	if len(args) != 1 {
-		return plugin.Output{}, plugin.Errorf("usage", "использование: lite pg listen АДРЕС (адрес этого сервера во внутренней сети) или lite pg listen localhost")
+		return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg listen ADDRESS (this server's address on the internal network) or lite pg listen localhost")
 	}
 	value := "localhost"
 	if args[0] != "localhost" {
 		a, err := netip.ParseAddr(args[0])
 		if err != nil || a.IsUnspecified() || a.IsLoopback() || net.ParseIP(args[0]) == nil {
-			return plugin.Output{}, plugin.Errorf("usage", "нужен один конкретный адрес этого сервера, не 0.0.0.0 и не *")
+			return plugin.Output{}, plugin.Errorf("usage", "one specific address of this server is required, not 0.0.0.0 and not *")
 		}
 		value = "localhost," + a.String()
 	}
@@ -238,5 +238,5 @@ func (t tools) pgListen(args []string) (plugin.Output, error) {
 	if err := t.must("systemctl", "restart", "postgresql"); err != nil {
 		return plugin.Output{}, err
 	}
-	return textOut("PostgreSQL слушает: " + value + ". Доступ с адресов открывается командой lite pg allow.\n"), nil
+	return textOut("PostgreSQL listens on: " + value + ". Allow access from an address with lite pg allow.\n"), nil
 }

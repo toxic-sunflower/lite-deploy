@@ -17,20 +17,20 @@ import (
 // cmdUI запускает локальный веб-интерфейс и ждёт Ctrl+C.
 func cmdUI(args []string, env Env) result {
 	fs := flag.NewFlagSet("ui", flag.ContinueOnError)
-	hostFlag := fs.String("host", "", "пользователь@сервер: управлять сервером по SSH (без флага: этот компьютер)")
-	listen := fs.String("listen", "127.0.0.1:8787", "адрес, только loopback")
-	tokenFile := fs.String("token-file", "", "файл с постоянным токеном (создаётся с правами 0600); для запуска сервисом")
+	hostFlag := fs.String("host", "", "user@server: manage the server over SSH (without the flag: this computer)")
+	listen := fs.String("listen", "127.0.0.1:8787", "address, loopback only")
+	tokenFile := fs.String("token-file", "", "file with a permanent token (created with mode 0600); for running as a service")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 0 {
-		return fail("ui", CodeUsage, "использование: lite-deploy ui [--host пользователь@сервер] [--listen 127.0.0.1:8787] [--token-file путь]")
+		return fail("ui", CodeUsage, "usage: lite-deploy ui [--host user@server] [--listen 127.0.0.1:8787] [--token-file path]")
 	}
 	h, _, err := net.SplitHostPort(*listen)
 	if err != nil || (h != "127.0.0.1" && h != "localhost" && h != "::1") {
-		return fail("ui", CodeUsage, "интерфейс слушает только 127.0.0.1 (в интернет его выставлять нельзя)")
+		return fail("ui", CodeUsage, "the interface listens on 127.0.0.1 only (never expose it to the internet)")
 	}
 	rnd := env.Rand
 	if rnd == nil {
-		return fail("ui", CodeInternal, "нет источника случайных чисел")
+		return fail("ui", CodeInternal, "no source of random numbers")
 	}
 	token := ""
 	if *tokenFile != "" {
@@ -46,7 +46,7 @@ func cmdUI(args []string, env Env) result {
 		token = hex.EncodeToString(raw)
 		if *tokenFile != "" {
 			if err := os.WriteFile(*tokenFile, []byte(token+"\n"), 0o600); err != nil {
-				return fail("ui", CodeIO, "не удалось записать токен: "+err.Error())
+				return fail("ui", CodeIO, "could not write the token: "+err.Error())
 			}
 		}
 	}
@@ -57,13 +57,13 @@ func cmdUI(args []string, env Env) result {
 	}
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
-		return fail("ui", CodeIO, "не удалось занять адрес "+*listen+": "+err.Error())
+		return fail("ui", CodeIO, "could not take the address "+*listen+": "+err.Error())
 	}
-	_, _ = fmt.Fprintf(env.Stdout, "Интерфейс запущен. Откройте в браузере:\n\n  http://%s/?t=%s\n\nОстановить: Ctrl+C.\n", ln.Addr().String(), srv.Token)
+	_, _ = fmt.Fprintf(env.Stdout, "The interface is running. Open it in a browser:\n\n  http://%s/?t=%s\n\nStop with Ctrl+C.\n", ln.Addr().String(), srv.Token)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if err := srv.Serve(ctx, ln); err != nil {
 		return fail("ui", CodeIO, err.Error())
 	}
-	return result{command: "ui", text: "Интерфейс остановлен.\n"}
+	return result{command: "ui", text: "The interface has stopped.\n"}
 }

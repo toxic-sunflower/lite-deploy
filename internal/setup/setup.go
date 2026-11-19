@@ -26,7 +26,7 @@ import (
 // SSHDropIn файл настроек sshd, которым управляет lite.
 const SSHDropIn = "/etc/ssh/sshd_config.d/50-lite-deploy.conf"
 
-const dropInMark = "# managed-by: lite-deploy (не правьте руками: файл переписывает lite init)"
+const dropInMark = "# managed-by: lite-deploy (do not edit by hand: lite init rewrites this file)"
 
 var (
 	userRe = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
@@ -102,12 +102,12 @@ func (e Env) ResolveUsers(o Options) ([]string, error) {
 			}
 		}
 		if len(names) == 0 {
-			return nil, fmt.Errorf("обычных пользователей с оболочкой нет: укажите --user имя, он будет создан")
+			return nil, fmt.Errorf("there are no regular users with a shell: pass --user NAME, it will be created")
 		}
 	case len(o.Users) > 0:
 		names = o.Users
 	case o.Current == "" || o.Current == "root":
-		return nil, fmt.Errorf("при запуске от root укажите пользователя: lite init --user имя (существующего или нового)")
+		return nil, fmt.Errorf("when running as root, name a user: lite init --user NAME (existing or new)")
 	default:
 		names = []string{o.Current}
 	}
@@ -115,10 +115,10 @@ func (e Env) ResolveUsers(o Options) ([]string, error) {
 	var out []string
 	for _, n := range names {
 		if !userRe.MatchString(n) || n == "root" {
-			return nil, fmt.Errorf("неверное имя пользователя: %q", n)
+			return nil, fmt.Errorf("invalid user name: %q", n)
 		}
 		if project[n] {
-			return nil, fmt.Errorf("%s это пользователь проекта, администратором он быть не может", n)
+			return nil, fmt.Errorf("%s is a project user and cannot be an administrator", n)
 		}
 		if !seen[n] {
 			seen[n] = true
@@ -170,33 +170,33 @@ func (e Env) Plan(o Options, users []string) ([]string, error) {
 	var p []string
 	for _, u := range users {
 		if exists[u] {
-			p = append(p, "пользователь "+u+": есть; права администратора (sudo), SSH-ключ, вход по SSH только по ключу")
+			p = append(p, "user "+u+": exists; administrator rights (sudo), SSH key, SSH login by key only")
 		} else {
-			p = append(p, "пользователь "+u+": будет создан; пароль (спросит passwd), права администратора (sudo), SSH-ключ, вход по SSH только по ключу")
+			p = append(p, "user "+u+": will be created; password (passwd will ask), administrator rights (sudo), SSH key, SSH login by key only")
 		}
 	}
 	switch o.Firewall {
 	case "keep":
-		p = append(p, "файервол: не менять (оставить настроенное вручную)")
+		p = append(p, "firewall: leave unchanged (keep what was set up by hand)")
 	case firewall.ModeOff:
-		p = append(p, "файервол: выключить (без фильтрации трафика)")
+		p = append(p, "firewall: turn off (no traffic filtering)")
 	case firewall.ModeHTTP:
-		p = append(p, "файервол: сбросить правила, открыть только SSH и веб-порты (80/tcp, 443/tcp, 443/udp)")
+		p = append(p, "firewall: reset the rules, open only SSH and the web ports (80/tcp, 443/tcp, 443/udp)")
 	case firewall.ModeMax:
-		p = append(p, "файервол: сбросить правила, открыть только SSH (сайты на 80 и 443 снаружи недоступны, пока режим не сменён на http)")
+		p = append(p, "firewall: reset the rules, open SSH only (sites on 80 and 443 are unreachable from outside until the mode is changed to http)")
 	default:
-		return nil, fmt.Errorf("режим файервола: keep, off, http или max")
+		return nil, fmt.Errorf("firewall mode: keep, off, http or max")
 	}
 	for _, pl := range o.Plugins {
 		switch pl {
 		case "caddy":
-			p = append(p, "плагин caddy: установить Caddy, главный Caddyfile (подключает сайты проектов из /etc/caddy/conf.d), запустить службу")
+			p = append(p, "plugin caddy: install Caddy, the main Caddyfile (serves the project sites from /etc/caddy/conf.d), start the service")
 		case "security":
-			p = append(p, "плагин security: защита сервера: SSH только по ключу для всех и root только по ключу, fail2ban, автообновления безопасности, защитные параметры ядра")
+			p = append(p, "plugin security: server protection: SSH by key only for everyone and root by key only, fail2ban, automatic security updates, protective kernel parameters")
 		case "podman", "pg", "postgres", "redis", "backblaze", "s3", "sftp":
-			p = append(p, "плагин "+pl+": установить пакеты")
+			p = append(p, "plugin "+pl+": install packages")
 		default:
-			return nil, fmt.Errorf("неизвестный плагин %q (есть: %s)", pl, strings.Join(builtin.PluginNames(), ", "))
+			return nil, fmt.Errorf("unknown plugin %q (available: %s)", pl, strings.Join(builtin.PluginNames(), ", "))
 		}
 	}
 	return p, nil
@@ -213,14 +213,14 @@ func (e Env) Apply(ctx context.Context, o Options) error {
 	if err != nil {
 		return err
 	}
-	e.say("Будет сделано:")
+	e.say("Will do:")
 	for _, l := range plan {
 		e.say("  - %s", l)
 	}
 	if !o.Yes {
-		a, err := e.ask("Продолжить? [y/N] ")
-		if err != nil || (a != "y" && a != "Y" && a != "д" && a != "Д" && a != "yes" && a != "да") {
-			return fmt.Errorf("отменено, ничего не изменено")
+		a, err := e.ask("Continue? [y/N] ")
+		if a = strings.ToLower(a); err != nil || (a != "y" && a != "yes") {
+			return fmt.Errorf("canceled, nothing was changed")
 		}
 	}
 	group, err := agent.AdminGroup(ctx, e.Runner)
@@ -230,14 +230,14 @@ func (e Env) Apply(ctx context.Context, o Options) error {
 	var keyed []string
 	for _, u := range users {
 		if err := e.user(ctx, u, group); err != nil {
-			return fmt.Errorf("пользователь %s: %w", u, err)
+			return fmt.Errorf("user %s: %w", u, err)
 		}
 		keyed = append(keyed, u)
 	}
 	for _, pl := range o.Plugins {
 		penv := plugin.Env{Runner: e.Runner, FS: e.FS, Projects: e.Projects, User: o.Current}
 		if err := builtin.InstallPlugin(ctx, penv, pl, builtin.Say(e.say)); err != nil {
-			return fmt.Errorf("плагин %s: %w", pl, err)
+			return fmt.Errorf("plugin %s: %w", pl, err)
 		}
 	}
 	if o.Firewall != "keep" {
@@ -249,8 +249,8 @@ func (e Env) Apply(ctx context.Context, o Options) error {
 		return err
 	}
 	e.say("")
-	e.say("Готово. Не закрывая эту сессию, откройте новую и проверьте вход по ключу: ssh %s@этот-сервер, затем sudo -v.", users[0])
-	e.say("Вход под root по SSH не менялся: отключать его или нет, решаете вы.")
+	e.say("Done. Keep this session open, open a new one and check key login: ssh %s@this-server, then sudo -v.", users[0])
+	e.say("Root SSH login was not changed: whether to disable it is up to you.")
 	return nil
 }
 
@@ -267,7 +267,7 @@ func (e Env) user(ctx context.Context, name, group string) error {
 		}
 	}
 	if acc == nil {
-		e.say("Создаю пользователя %s.", name)
+		e.say("Creating user %s.", name)
 		if err := e.must(ctx, "useradd", "--create-home", "--shell", "/bin/bash", name); err != nil {
 			return err
 		}
@@ -287,13 +287,13 @@ func (e Env) user(ctx context.Context, name, group string) error {
 	}
 	f := strings.Fields(string(res.Stdout))
 	if len(f) < 2 || (f[1] != "P" && f[1] != "PS") {
-		e.say("У пользователя %s нет пароля (он нужен для sudo). Задайте его:", name)
+		e.say("User %s has no password (sudo needs one). Set it now:", name)
 		r, err := e.Runner.Run(ctx, host.Cmd{Name: "passwd", Args: []string{name}, Interactive: true, Timeout: 10 * time.Minute})
 		if err != nil {
 			return err
 		}
 		if r.ExitCode != 0 {
-			return fmt.Errorf("пароль не задан")
+			return fmt.Errorf("no password set")
 		}
 	}
 	if err := e.must(ctx, "usermod", "-aG", group, name); err != nil {
@@ -312,9 +312,9 @@ func (e Env) key(name, home string) error {
 			have++
 		}
 	}
-	prompt := fmt.Sprintf("Открытый SSH-ключ для %s (строка вида ssh-ed25519 AAAA…): ", name)
+	prompt := fmt.Sprintf("Public SSH key for %s (a line like ssh-ed25519 AAAA…): ", name)
 	if have > 0 {
-		prompt = fmt.Sprintf("Открытый SSH-ключ для %s (у него уже ключей: %d; Enter, чтобы оставить как есть): ", name, have)
+		prompt = fmt.Sprintf("Public SSH key for %s (already has %d keys; press Enter to keep as is): ", name, have)
 	}
 	var key string
 	for try := 0; ; try++ {
@@ -323,7 +323,7 @@ func (e Env) key(name, home string) error {
 			return nil // ввода нет (запуск без терминала), ключи уже есть
 		}
 		if err != nil {
-			return fmt.Errorf("ключ не введён: без SSH-ключа вход по паролю отключать нельзя")
+			return fmt.Errorf("no key entered: password login cannot be disabled without an SSH key")
 		}
 		if k == "" && have > 0 {
 			return nil
@@ -333,9 +333,9 @@ func (e Env) key(name, home string) error {
 			break
 		}
 		if try >= 2 {
-			return fmt.Errorf("это не открытый SSH-ключ; он лежит на вашем компьютере в ~/.ssh/id_ed25519.pub")
+			return fmt.Errorf("that is not a public SSH key; it is on your computer in ~/.ssh/id_ed25519.pub")
 		}
-		e.say("Это не похоже на открытый SSH-ключ. Он лежит на вашем компьютере в файле ~/.ssh/id_ed25519.pub.")
+		e.say("That does not look like a public SSH key. It is on your computer in ~/.ssh/id_ed25519.pub.")
 	}
 	body := strings.Fields(key)[1]
 	if strings.Contains(string(old), body) {
@@ -365,14 +365,14 @@ func (e Env) firewall(ctx context.Context, mode string) error {
 		if mode == firewall.ModeOff {
 			return nil // ufw нет, фильтрации и так нет
 		}
-		e.say("Ставлю ufw...")
+		e.say("Installing ufw...")
 		if err := (&pkgmgr.Manager{Runner: e.Runner, FS: e.FS}).Install(ctx, "ufw"); err != nil {
-			return fmt.Errorf("не удалось поставить ufw: %w", err)
+			return fmt.Errorf("could not install ufw: %w", err)
 		}
 	}
-	e.say("Файервол: режим %s (порт SSH %d).", mode, m.SSHPort(ctx))
+	e.say("Firewall: mode %s (SSH port %d).", mode, m.SSHPort(ctx))
 	if fe := m.SetMode(ctx, mode); fe != nil {
-		return fmt.Errorf("файервол: %s", fe.Message)
+		return fmt.Errorf("firewall: %s", fe.Message)
 	}
 	return nil
 }
@@ -407,7 +407,7 @@ func (e Env) sshKeyOnly(ctx context.Context, users []string) error {
 		return nil
 	}
 	if main, err := e.FS.ReadFile("/etc/ssh/sshd_config"); err == nil && !strings.Contains(string(main), "sshd_config.d") {
-		return fmt.Errorf("в /etc/ssh/sshd_config нет строки Include /etc/ssh/sshd_config.d/*.conf: вход по паролю не изменён")
+		return fmt.Errorf("/etc/ssh/sshd_config has no Include /etc/ssh/sshd_config.d/*.conf line: password login was not changed")
 	}
 	if err := e.FS.MkdirAll("/etc/ssh/sshd_config.d", fs.FileMode(0o755)); err != nil {
 		return err
@@ -424,7 +424,7 @@ func (e Env) sshKeyOnly(ctx context.Context, users []string) error {
 	}
 	if err := e.must(ctx, "sshd", "-t"); err != nil {
 		restore()
-		return fmt.Errorf("новая настройка sshd не прошла проверку, возвращена прежняя: %w", err)
+		return fmt.Errorf("the new sshd configuration failed validation, the previous one was restored: %w", err)
 	}
 	for _, unit := range []string{"ssh", "sshd"} {
 		if e.must(ctx, "systemctl", "is-active", "--quiet", unit) != nil {
@@ -432,10 +432,10 @@ func (e Env) sshKeyOnly(ctx context.Context, users []string) error {
 		}
 		if err := e.must(ctx, "systemctl", "reload", unit); err != nil {
 			restore()
-			return fmt.Errorf("не удалось перечитать настройки sshd, возвращена прежняя: %w", err)
+			return fmt.Errorf("could not reload the sshd settings, the previous one was restored: %w", err)
 		}
 		break
 	}
-	e.say("Вход по SSH по паролю отключён для: %s (остался вход по ключу).", strings.Join(users, ", "))
+	e.say("SSH password login is disabled for: %s (key login remains).", strings.Join(users, ", "))
 	return nil
 }

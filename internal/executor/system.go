@@ -22,12 +22,12 @@ func verifyHost(ctx context.Context, r *run, _ any) (outcome, error) {
 	var problems, warns []string
 	osr, err := r.FS.ReadFile(OSRelease)
 	if err != nil {
-		problems = append(problems, "не прочитан "+OSRelease)
+		problems = append(problems, "not read: "+OSRelease)
 	} else {
 		kv := parseOSRelease(string(osr))
 		m := versionRe.FindStringSubmatch(kv["VERSION_ID"])
 		if kv["ID"] != "ubuntu" || m == nil || atoi(m[1]) < 24 {
-			problems = append(problems, fmt.Sprintf("нужна Ubuntu 24.04 или новее, найдено %s %s", kv["ID"], kv["VERSION_ID"]))
+			problems = append(problems, fmt.Sprintf("Ubuntu 24.04 or newer is required, found %s %s", kv["ID"], kv["VERSION_ID"]))
 		}
 	}
 	tools := [][]string{{"caddy", "version"}, {"loginctl", "--version"}, {"visudo", "--version"}}
@@ -40,34 +40,34 @@ func verifyHost(ctx context.Context, r *run, _ any) (outcome, error) {
 	for _, t := range tools {
 		res, err := r.Runner.Run(ctx, hostCmd(t[0], t[1:]...))
 		if err != nil || res.ExitCode != 0 {
-			problems = append(problems, t[0]+" не установлен или не запускается"+installHint(t[0]))
+			problems = append(problems, t[0]+" is not installed or does not start"+installHint(t[0]))
 			continue
 		}
 		if t[0] == "podman" {
 			m := regexp.MustCompile(`version (\d+)\.(\d+)`).FindStringSubmatch(string(res.Stdout))
 			switch {
 			case m == nil:
-				problems = append(problems, "не удалось определить версию podman: "+strings.TrimSpace(string(res.Stdout)))
+				problems = append(problems, "could not determine the podman version: "+strings.TrimSpace(string(res.Stdout)))
 			case atoi(m[1]) < 4 || atoi(m[1]) == 4 && atoi(m[2]) < 4:
-				problems = append(problems, "нужен podman 4.4 или новее (Quadlet): "+strings.TrimSpace(string(res.Stdout)))
+				problems = append(problems, "podman 4.4 or newer is required (Quadlet): "+strings.TrimSpace(string(res.Stdout)))
 			case atoi(m[1]) < 5:
-				warns = append(warns, "podman "+m[1]+"."+m[2]+": проверено только на 5.x")
+				warns = append(warns, "podman "+m[1]+"."+m[2]+": only tested on 5.x")
 			}
 		}
 	}
 	if res, err := r.Runner.Run(ctx, hostCmd("ufw", "status")); err != nil || !strings.Contains(string(res.Stdout), "Status: active") {
-		warns = append(warns, "ufw не активен")
+		warns = append(warns, "ufw is not active")
 	}
 	if cf, err := r.FS.ReadFile(CaddyfilePth); err != nil {
-		problems = append(problems, "не прочитан "+CaddyfilePth)
+		problems = append(problems, "not read: "+CaddyfilePth)
 	} else if !strings.Contains(string(cf), "import "+ConfDir+"/*") {
-		problems = append(problems, "главный Caddyfile не содержит import "+ConfDir+"/*")
+		problems = append(problems, "the main Caddyfile does not contain import "+ConfDir+"/*")
 	}
 	if ok, _ := exists(r.FS, ConfDir); !ok {
-		problems = append(problems, "нет каталога "+ConfDir)
+		problems = append(problems, "no directory "+ConfDir)
 	}
 	if resp, err := r.HTTP.Get(ctx, CaddyAPI, ""); err != nil || resp.Status >= 500 {
-		problems = append(problems, "API Caddy на localhost:2019 недоступен (нужен для reload)")
+		problems = append(problems, "Caddy API on localhost:2019 is unreachable (needed for reload)")
 	}
 	if len(problems) > 0 {
 		return outcome{}, fmt.Errorf("precondition_failed: %s", strings.Join(problems, "; "))
@@ -98,7 +98,7 @@ func createProjectUser(ctx context.Context, r *run, v any) (outcome, error) {
 	}
 	userExists := res.ExitCode == 0
 	if !userExists {
-		did = append(did, "пользователь")
+		did = append(did, "user")
 		if !r.dry {
 			if _, err := r.must(ctx, hostCmd("adduser", "--disabled-password", "--gecos", "", u)); err != nil {
 				return outcome{}, err
@@ -115,9 +115,9 @@ func createProjectUser(ctx context.Context, r *run, v any) (outcome, error) {
 	}
 	if userExists || !r.dry {
 		if info, err := r.FS.Stat(h); err != nil {
-			return outcome{}, fmt.Errorf("нет домашнего каталога %s: %w", h, err)
+			return outcome{}, fmt.Errorf("no home directory %s: %w", h, err)
 		} else if info.Mode != 0o750 {
-			did = append(did, "права "+h)
+			did = append(did, "permissions "+h)
 			if !r.dry {
 				if err := r.FS.Chmod(h, 0o750); err != nil {
 					return outcome{}, err
@@ -129,7 +129,7 @@ func createProjectUser(ctx context.Context, r *run, v any) (outcome, error) {
 		for _, f := range []string{SubUID, SubGID} {
 			b, err := r.FS.ReadFile(f)
 			if err != nil || !strings.Contains("\n"+string(b), "\n"+u+":") {
-				return outcome{}, fmt.Errorf("для %s нет диапазона в %s (нужен для rootless podman)", u, f)
+				return outcome{}, fmt.Errorf("%s has no range in %s (needed for rootless podman)", u, f)
 			}
 		}
 	}
@@ -143,7 +143,7 @@ func createProjectUser(ctx context.Context, r *run, v any) (outcome, error) {
 			return outcome{}, err
 		}
 		if made {
-			did = append(did, "каталог "+d)
+			did = append(did, "directory "+d)
 		}
 	}
 	if len(did) == 0 {
@@ -156,9 +156,9 @@ func createProjectUser(ctx context.Context, r *run, v any) (outcome, error) {
 func installHint(tool string) string {
 	switch tool {
 	case "caddy", "podman":
-		return " (поставьте: sudo lite init --plugins " + tool + ")"
+		return " (install it: sudo lite init --plugins " + tool + ")"
 	case "psql":
-		return " (поставьте: sudo lite init --plugins postgres)"
+		return " (install it: sudo lite init --plugins postgres)"
 	}
 	return ""
 }

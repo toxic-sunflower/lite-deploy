@@ -242,7 +242,6 @@ func TestUsageAndUnimplemented(t *testing.T) {
 		code int
 		err  string
 	}{
-		{nil, 2, "usage"},
 		{[]string{"bogus"}, 2, "usage"},
 		{[]string{"project"}, 2, "usage"},
 		{[]string{"project", "bogus"}, 2, "usage"},

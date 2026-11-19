@@ -33,7 +33,7 @@ func UpstreamPath(project, site string) string {
 func Quadlet(a actions.InstallQuadlet) string {
 	var b strings.Builder
 	name := UnitName(a.Project, a.Service, a.Slot)
-	fmt.Fprintf(&b, "[Unit]\nDescription=%s %s (слот %s)\nAfter=network-online.target\nWants=network-online.target\n\n", a.Project, a.Service, a.Slot)
+	fmt.Fprintf(&b, "[Unit]\nDescription=%s %s (slot %s)\nAfter=network-online.target\nWants=network-online.target\n\n", a.Project, a.Service, a.Slot)
 	fmt.Fprintf(&b, "[Container]\nContainerName=%s\nImage=localhost/%s-%s:%s\n", name, a.Project, a.Service, a.Slot)
 	fmt.Fprintf(&b, "PublishPort=127.0.0.1:%d:%d\n", a.HostPort, a.ContainerPort)
 	fmt.Fprintf(&b, "EnvironmentFile=%%h/.config/lite-deploy/env/%s.env\n", a.Service)
@@ -74,7 +74,7 @@ func systemdSize(s string) string { // 768m → 768M
 func Unit(a actions.InstallUnit) string {
 	var b strings.Builder
 	dir := "%h/" + AppDir(a.Service, a.Slot)
-	fmt.Fprintf(&b, "[Unit]\nDescription=%s %s (слот %s)\nAfter=network-online.target\nWants=network-online.target\nConditionPathExists=%s/.release\n\n", a.Project, a.Service, a.Slot, dir)
+	fmt.Fprintf(&b, "[Unit]\nDescription=%s %s (slot %s)\nAfter=network-online.target\nWants=network-online.target\nConditionPathExists=%s/.release\n\n", a.Project, a.Service, a.Slot, dir)
 	prog := unitArg(a.Exec[0])
 	if !strings.HasPrefix(a.Exec[0], "/") {
 		prog = unitArgWith("%h/"+AppDir(a.Service, a.Slot)+"/", strings.TrimPrefix(a.Exec[0], "./"))
@@ -161,7 +161,7 @@ func EnvFile(lines []EnvLine) (string, error) {
 	var b strings.Builder
 	for _, l := range sorted {
 		if strings.ContainsAny(l.Value, "\r\n\x00") {
-			return "", fmt.Errorf("значение переменной %s содержит перевод строки или NUL", l.Name)
+			return "", fmt.Errorf("the value of variable %s contains a line break or NUL", l.Name)
 		}
 		b.WriteString(l.Name + "=" + l.Value + "\n")
 	}
@@ -178,7 +178,7 @@ func DatabaseURL(format, role, db, password string) (string, error) {
 	case "libpq":
 		return fmt.Sprintf("host=/var/run/postgresql dbname=%s user=%s password=%s", db, role, password), nil
 	}
-	return "", fmt.Errorf("неизвестный формат строки подключения %q", format)
+	return "", fmt.Errorf("unknown connection string format %q", format)
 }
 
 // RemoteDatabaseURL строка подключения к PostgreSQL на другом сервере: по сети и только с шифрованием (sslmode=require).
@@ -195,7 +195,7 @@ func RemoteDatabaseURL(format, host string, port int, role, db, password string)
 	case "libpq":
 		return fmt.Sprintf("host=%s port=%d dbname=%s user=%s password=%s sslmode=require", host, port, db, role, libpqValue(password)), nil
 	}
-	return "", fmt.Errorf("неизвестный формат строки подключения %q", format)
+	return "", fmt.Errorf("unknown connection string format %q", format)
 }
 
 func npgsqlValue(s string) string {

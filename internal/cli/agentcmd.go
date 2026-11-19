@@ -16,7 +16,7 @@ import (
 )
 
 // Служебные команды: их запускают install.sh и systemd, вручную они не нужны.
-const agentUsage = "использование: lite-deploy agent install (служебная, вызывается install.sh) | agent serve (запускает systemd)"
+const agentUsage = "usage: lite-deploy agent install (internal, called by install.sh) | agent serve (started by systemd)"
 
 func cmdAgent(args []string, env Env) result {
 	if len(args) == 0 {
@@ -38,7 +38,7 @@ func agentInstall(args []string, env Env) result {
 		return fail("agent.install", CodeUsage, agentUsage)
 	}
 	if !env.root() {
-		return fail("agent.install", "permission_denied", "установка агента требует root; она входит в установку сервера: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh")
+		return fail("agent.install", "permission_denied", "installing the agent requires root; it is part of the server install: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh")
 	}
 	bin, _ := os.Executable()
 	group, err := agent.Install(context.Background(), env.Runner, env.FS, bin)
@@ -46,14 +46,14 @@ func agentInstall(args []string, env Env) result {
 		return fail("agent.install", CodeIO, err.Error())
 	}
 	return result{command: "agent.install", data: map[string]any{"group": group, "socket": agent.APISocket},
-		text: fmt.Sprintf("Агент установлен и запущен (сокет %s). Управлять могут администраторы системы (группа %s).\n", agent.APISocket, group)}
+		text: fmt.Sprintf("Agent installed and running (socket %s). System administrators (group %s) can manage it.\n", agent.APISocket, group)}
 }
 
 func agentServe(args []string, env Env) result {
 	fs := flag.NewFlagSet("agent serve", flag.ContinueOnError)
-	sock := fs.String("socket", "", "путь сокета (режим разработки без systemd)")
-	execSock := fs.String("exec-socket", agent.ExecSocket, "сокет исполнителя")
-	group := fs.String("group", agent.DefaultGroup, "группа, которой разрешён доступ")
+	sock := fs.String("socket", "", "socket path (development mode without systemd)")
+	execSock := fs.String("exec-socket", agent.ExecSocket, "executor socket")
+	group := fs.String("group", agent.DefaultGroup, "the group allowed to use the agent")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 0 {
 		return fail("agent.serve", CodeUsage, agentUsage)
@@ -64,7 +64,7 @@ func agentServe(args []string, env Env) result {
 	}
 	if !inherited {
 		if *sock == "" {
-			return fail("agent.serve", CodeUsage, "агент запускается через systemd (lite-deploy-agent.socket); для разработки задайте --socket")
+			return fail("agent.serve", CodeUsage, "the agent is started by systemd (lite-deploy-agent.socket); pass --socket for development")
 		}
 		if ln, err = host.ListenUnix(*sock); err != nil {
 			return fail("agent.serve", CodeIO, err.Error())
@@ -75,7 +75,7 @@ func agentServe(args []string, env Env) result {
 		defer func() { _ = f.Close() }()
 		audit = f
 	} else {
-		_, _ = fmt.Fprintf(env.Stderr, "журнал агента недоступен: %v\n", err)
+		_, _ = fmt.Fprintf(env.Stderr, "the agent journal is unavailable: %v\n", err)
 	}
 	a := &agent.Agent{Version: Version, Audit: audit, Allowed: agent.GroupAllowed(env.FS, *group),
 		ExecDial: func(ctx context.Context) (net.Conn, error) {
@@ -86,13 +86,13 @@ func agentServe(args []string, env Env) result {
 	if err := a.Serve(ctx, ln); err != nil {
 		return fail("agent.serve", CodeIO, err.Error())
 	}
-	return result{command: "agent.serve", text: "Агент остановлен.\n"}
+	return result{command: "agent.serve", text: "Agent stopped.\n"}
 }
 
 // cmdExec исполнитель: один запрос на стандартном вводе (сокет systemd), ответ на стандартный вывод.
 func cmdExec(env Env) result {
 	if !env.root() {
-		return fail("exec", "permission_denied", "исполнитель запускается systemd от root")
+		return fail("exec", "permission_denied", "the executor is started by systemd as root")
 	}
 	run := func(args []string, stdin []byte) []byte {
 		var out bytes.Buffer
@@ -111,7 +111,7 @@ func cmdCall(args []string, env Env) result {
 	fs := flag.NewFlagSet("call", flag.ContinueOnError)
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 2 || (pos[0] != "GET" && pos[0] != "POST") || !strings.HasPrefix(pos[1], "/v1/") {
-		return fail("call", CodeUsage, "использование: lite-deploy call GET|POST /v1/путь (тело POST читается со стандартного ввода)")
+		return fail("call", CodeUsage, "usage: lite-deploy call GET|POST /v1/path (the POST body is read from standard input)")
 	}
 	var body []byte
 	if pos[0] == "POST" && env.Stdin != nil {
@@ -127,11 +127,11 @@ func cmdCall(args []string, env Env) result {
 	out, err := agent.Call(context.Background(), sock, pos[0], pos[1], body)
 	if err != nil {
 		return result{command: "call", err: &ErrorBody{Code: "precondition_failed", Message: err.Error(),
-			Hint: "агент ставится при установке сервера: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh; пользователь должен быть администратором (sudo или wheel)"}}
+			Hint: "the agent is installed with the server: curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh; the user must be a system administrator (sudo or wheel)"}}
 	}
 	out = bytes.TrimSpace(out)
 	if len(out) == 0 || out[0] != '{' {
-		return fail("call", CodeIO, "агент вернул не JSON")
+		return fail("call", CodeIO, "the agent returned something that is not JSON")
 	}
 	return result{command: "call", raw: out}
 }

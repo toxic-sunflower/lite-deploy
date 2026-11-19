@@ -23,7 +23,7 @@ const (
 	jailFile       = "/etc/fail2ban/jail.d/lite-deploy.local"
 	aptAutoFile    = "/etc/apt/apt.conf.d/52lite-deploy-auto-upgrades"
 	dnfAutoFile    = "/etc/dnf/automatic.conf"
-	securityMark   = "# managed-by: lite-deploy (security): не правьте руками, файл переписывает lite security"
+	securityMark   = "# managed-by: lite-deploy (security): do not edit by hand, lite security rewrites this file"
 	rootProhibitPw = "prohibit-password"
 )
 
@@ -57,20 +57,20 @@ func (Security) Name() string       { return "security" }
 func (Security) Kind() string       { return "builtin" }
 func (Security) Requires() []string { return nil }
 func (Security) Description() string {
-	return "защита сервера: SSH, fail2ban, автообновления безопасности, параметры ядра, журнал входов"
+	return "server protection: SSH, fail2ban, automatic security updates, kernel parameters, login journal"
 }
 func (Security) Commands() []plugin.Command {
 	return []plugin.Command{
-		{Name: "status", Root: true, Help: "состояние защиты (то же, что проверки security в lite verify)"},
-		{Name: "enable", Help: "включить всё: fail2ban, автообновления, параметры ядра, затем запрет паролей и root по паролю в SSH; no-root полностью запрещает вход root", Args: "[no-root]", Confirm: true},
-		{Name: "ssh", Help: "SSH: вход только по ключу для всех, root только по ключу (no-root: root не входит совсем)", Args: "[no-root]", Confirm: true},
-		{Name: "allow-users", Help: "SSH: пускать только перечисленных пользователей (any: снять ограничение); пользователи проектов добавляются сами", Args: "ИМЯ…|any", Confirm: true},
-		{Name: "fail2ban", Help: "поставить и настроить fail2ban для SSH", Confirm: true},
-		{Name: "updates", Help: "автоматически ставить обновления безопасности", Confirm: true},
-		{Name: "sysctl", Help: "применить защитные параметры ядра", Confirm: true},
-		{Name: "logins", Root: true, Help: "журнал входов: последние входы и неудачные попытки", Args: "[ЧИСЛО]"},
-		{Name: "banned", Root: true, Help: "кого сейчас заблокировал fail2ban"},
-		{Name: "unban", Help: "снять блокировку fail2ban с адреса", Args: "АДРЕС", Confirm: true},
+		{Name: "status", Root: true, Help: "protection state (the same as the security checks in lite verify)"},
+		{Name: "enable", Help: "enable everything: fail2ban, automatic updates, kernel parameters, then no SSH passwords and no root password login; no-root forbids root login entirely", Args: "[no-root]", Confirm: true},
+		{Name: "ssh", Help: "SSH: key-only login for everyone, root by key only (no-root: root cannot log in at all)", Args: "[no-root]", Confirm: true},
+		{Name: "allow-users", Help: "SSH: allow only the listed users (any: remove the restriction); project users are added automatically", Args: "NAME…|any", Confirm: true},
+		{Name: "fail2ban", Help: "install and configure fail2ban for SSH", Confirm: true},
+		{Name: "updates", Help: "install security updates automatically", Confirm: true},
+		{Name: "sysctl", Help: "apply the protective kernel parameters", Confirm: true},
+		{Name: "logins", Root: true, Help: "login journal: recent logins and failed attempts", Args: "[NUMBER]"},
+		{Name: "banned", Root: true, Help: "who fail2ban has banned right now"},
+		{Name: "unban", Help: "remove a fail2ban ban from an address", Args: "ADDRESS", Confirm: true},
 	}
 }
 
@@ -221,13 +221,13 @@ func (s *sec) guardSSH(c sshConf) error {
 		}
 	}
 	if len(keyed) == 0 {
-		e := plugin.Errorf("precondition_failed", "нет ни одного администратора (sudo) с SSH-ключом: после запрета паролей вы потеряли бы доступ")
-		e.Hint = "сначала: sudo lite init --user ИМЯ (создаст пользователя и спросит ключ)"
+		e := plugin.Errorf("precondition_failed", "there is no administrator (sudo) with an SSH key: after disabling passwords you would lose access")
+		e.Hint = "first: sudo lite init --user NAME (creates the user and asks for a key)"
 		return e
 	}
 	if u := s.env.User; u != "" && !s.hasKey(u) {
-		e := plugin.Errorf("precondition_failed", "у пользователя %s нет SSH-ключа: после запрета паролей он потерял бы доступ", u)
-		e.Hint = "добавьте ключ в ~/.ssh/authorized_keys или войдите другим администратором"
+		e := plugin.Errorf("precondition_failed", "user %s has no SSH key: after disabling passwords they would lose access", u)
+		e.Hint = "add the key to ~/.ssh/authorized_keys or log in as another administrator"
 		return e
 	}
 	if len(c.AllowUsers) > 0 {
@@ -238,7 +238,7 @@ func (s *sec) guardSSH(c sshConf) error {
 			}
 		}
 		if !ok {
-			return plugin.Errorf("precondition_failed", "в AllowUsers нет ни одного администратора с ключом (%s): доступ был бы потерян", strings.Join(keyed, ", "))
+			return plugin.Errorf("precondition_failed", "AllowUsers would contain no administrator with a key (%s): access would be lost", strings.Join(keyed, ", "))
 		}
 		if s.env.User != "" {
 			in := false
@@ -246,7 +246,7 @@ func (s *sec) guardSSH(c sshConf) error {
 				in = in || u == s.env.User
 			}
 			if !in {
-				return plugin.Errorf("precondition_failed", "вы (%s) не входите в список AllowUsers: после применения вы потеряли бы доступ", s.env.User)
+				return plugin.Errorf("precondition_failed", "you (%s) are not in the AllowUsers list: after applying this you would lose access", s.env.User)
 			}
 		}
 	}
@@ -261,7 +261,7 @@ func (s *sec) applySSH(c sshConf) error {
 	}
 	fs := s.env.FS
 	if main, err := fs.ReadFile("/etc/ssh/sshd_config"); err == nil && !strings.Contains(string(main), "sshd_config.d") {
-		return plugin.Errorf("precondition_failed", "в /etc/ssh/sshd_config нет строки Include /etc/ssh/sshd_config.d/*.conf: настройки SSH не изменены")
+		return plugin.Errorf("precondition_failed", "/etc/ssh/sshd_config has no Include /etc/ssh/sshd_config.d/*.conf line: SSH settings were not changed")
 	}
 	old, oldErr := fs.ReadFile(SSHSecurity)
 	body := c.body()
@@ -285,17 +285,17 @@ func (s *sec) applySSH(c sshConf) error {
 	_ = fs.MkdirAll("/run/sshd", 0o755)
 	if err := s.must("sshd", "-t"); err != nil {
 		restore()
-		return plugin.Errorf("step_failed", "новая настройка sshd не прошла проверку, возвращена прежняя: %v", err)
+		return plugin.Errorf("step_failed", "the new sshd configuration failed validation, the previous one was restored: %v", err)
 	}
 	eff, err := s.sshdEffective()
 	if err != nil {
 		restore()
-		return plugin.Errorf("step_failed", "не удалось прочитать действующие настройки sshd, возвращены прежние: %v", err)
+		return plugin.Errorf("step_failed", "could not read the effective sshd settings, the previous ones were restored: %v", err)
 	}
 	if eff["passwordauthentication"] != "no" || eff["permitrootlogin"] != c.Root || (len(c.AllowUsers) > 0 && eff["allowusers"] == "") {
 		restore()
-		e := plugin.Errorf("step_failed", "другой файл sshd переопределяет настройки (действует: passwordauthentication=%s, permitrootlogin=%s); прежние настройки возвращены", eff["passwordauthentication"], eff["permitrootlogin"])
-		e.Hint = "проверьте sshd -T и файлы в " + sshdDir + " и /etc/ssh/sshd_config"
+		e := plugin.Errorf("step_failed", "another sshd file overrides the settings (in effect: passwordauthentication=%s, permitrootlogin=%s); the previous settings were restored", eff["passwordauthentication"], eff["permitrootlogin"])
+		e.Hint = "check sshd -T and the files in " + sshdDir + " and /etc/ssh/sshd_config"
 		return e
 	}
 	// служба называется ssh (Debian, Ubuntu) или sshd; если ни одна не запущена (запуск по сокету), перечитывать нечего:
@@ -306,7 +306,7 @@ func (s *sec) applySSH(c sshConf) error {
 		}
 		if err := s.must("systemctl", "reload", unit); err != nil {
 			restore()
-			return plugin.Errorf("step_failed", "не удалось перечитать настройки sshd, возвращены прежние: %v", err)
+			return plugin.Errorf("step_failed", "could not reload the sshd settings, the previous ones were restored: %v", err)
 		}
 		break
 	}
@@ -342,7 +342,7 @@ func (s *sec) fail2ban() error {
 		waitStep(time.Second)
 	}
 	if err := jailErr; err != nil {
-		return plugin.Errorf("step_failed", "fail2ban запущен, но защита SSH (jail sshd) не работает: %v", err)
+		return plugin.Errorf("step_failed", "fail2ban is running, but SSH protection (jail sshd) is not working: %v", err)
 	}
 	return nil
 }
@@ -397,7 +397,7 @@ func (s *sec) updates() (string, error) {
 		}
 		return "", s.must("systemctl", "enable", "--now", "dnf-automatic-install.timer")
 	}
-	return "автообновления поддерживаются на apt и dnf; на этой системе пропущено", nil
+	return "automatic updates are supported on apt and dnf; skipped on this system", nil
 }
 
 func (s *sec) sysctl() error {
@@ -419,7 +419,7 @@ func (Security) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 		case len(args) == 1 && args[0] == "no-root":
 			return "no", nil
 		}
-		return "", plugin.Errorf("usage", "использование: lite security %s [no-root]", cmd)
+		return "", plugin.Errorf("usage", "usage: lite security %s [no-root]", cmd)
 	}
 	switch cmd {
 	case "status":
@@ -435,7 +435,7 @@ func (Security) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 			if err := f(); err != nil {
 				var pe *plugin.Error
 				if errors.As(err, &pe) {
-					pe.Message = fmt.Sprintf("шаг «%s»: %s (уже выполнено: %s)", name, pe.Message, strings.Join(append(done, "—"), ", "))
+					pe.Message = fmt.Sprintf("step \"%s\": %s (already done: %s)", name, pe.Message, strings.Join(append(done, "—"), ", "))
 				}
 				return err
 			}
@@ -447,15 +447,15 @@ func (Security) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 			f func() error
 		}{
 			{"fail2ban", s.fail2ban},
-			{"автообновления", func() error { _, err := s.updates(); return err }},
-			{"параметры ядра", s.sysctl},
+			{"automatic updates", func() error { _, err := s.updates(); return err }},
+			{"kernel parameters", s.sysctl},
 			{"SSH", func() error { c := s.readSSHConf(); c.Root = root; return s.applySSH(c) }},
 		} {
 			if err := step(st.n, st.f); err != nil {
 				return plugin.Output{}, err
 			}
 		}
-		return plugin.Output{Text: "Защита включена: " + strings.Join(done, ", ") + ".\nНе закрывая эту сессию, откройте новую и проверьте вход по ключу.\n", Data: map[string]any{"steps": done}}, nil
+		return plugin.Output{Text: "Protection enabled: " + strings.Join(done, ", ") + ".\nKeep this session open, open a new one and check that key login works.\n", Data: map[string]any{"steps": done}}, nil
 	case "ssh":
 		root, err := noRoot()
 		if err != nil {
@@ -466,10 +466,10 @@ func (Security) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 		if err := s.applySSH(c); err != nil {
 			return plugin.Output{}, err
 		}
-		return plugin.Output{Text: "SSH: пароли отключены для всех; root: " + root + ".\nНе закрывая эту сессию, откройте новую и проверьте вход по ключу.\n", Data: map[string]any{"root": root}}, nil
+		return plugin.Output{Text: "SSH: passwords are disabled for everyone; root: " + root + ".\nKeep this session open, open a new one and check that key login works.\n", Data: map[string]any{"root": root}}, nil
 	case "allow-users":
 		if len(args) == 0 {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: lite security allow-users ИМЯ… | any")
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite security allow-users NAME… | any")
 		}
 		c := s.readSSHConf()
 		if len(args) == 1 && args[0] == "any" {
@@ -483,7 +483,7 @@ func (Security) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 			for _, u := range append(append([]string{}, args...), s.env.Projects...) {
 				if !known[u] {
 					if contains(args, u) {
-						return plugin.Output{}, plugin.Errorf("usage", "нет пользователя %q", u)
+						return plugin.Output{}, plugin.Errorf("usage", "no user %q", u)
 					}
 					continue
 				}
@@ -498,14 +498,14 @@ func (Security) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 		if err := s.applySSH(c); err != nil {
 			return plugin.Output{}, err
 		}
-		text := "SSH: ограничение по пользователям снято.\n"
+		text := "SSH: user restriction removed.\n"
 		if len(c.AllowUsers) > 0 {
-			text = "SSH: входить могут только " + strings.Join(c.AllowUsers, ", ") + " (пользователи проектов добавлены автоматически).\n"
+			text = "SSH: only these users may log in: " + strings.Join(c.AllowUsers, ", ") + " (project users were added automatically).\n"
 		}
 		return plugin.Output{Text: text, Data: map[string]any{"allow_users": c.AllowUsers}}, nil
 	case "fail2ban", "updates", "sysctl":
 		if len(args) != 0 {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: lite security %s", cmd)
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite security %s", cmd)
 		}
 		var err error
 		note := ""
@@ -521,7 +521,7 @@ func (Security) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 			return plugin.Output{}, err
 		}
 		if note == "" {
-			note = "Готово: " + cmd + ".\n"
+			note = "Done: " + cmd + ".\n"
 		} else {
 			note += "\n"
 		}
@@ -531,19 +531,19 @@ func (Security) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 	case "banned":
 		res, err := s.run("fail2ban-client", "status", "sshd")
 		if err != nil || res.ExitCode != 0 {
-			return plugin.Output{}, plugin.Errorf("precondition_failed", "fail2ban не работает: lite security fail2ban")
+			return plugin.Output{}, plugin.Errorf("precondition_failed", "fail2ban is not working: lite security fail2ban")
 		}
 		return plugin.Output{Text: string(res.Stdout), Data: map[string]any{"output": strings.TrimSpace(string(res.Stdout))}}, nil
 	case "unban":
 		if len(args) != 1 || net.ParseIP(args[0]) == nil {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: lite security unban АДРЕС")
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite security unban ADDRESS")
 		}
 		if err := s.must("fail2ban-client", "set", "sshd", "unbanip", args[0]); err != nil {
 			return plugin.Output{}, err
 		}
-		return plugin.Output{Text: "Блокировка снята: " + args[0] + "\n", Data: map[string]any{"ip": args[0]}}, nil
+		return plugin.Output{Text: "Lock released: " + args[0] + "\n", Data: map[string]any{"ip": args[0]}}, nil
 	}
-	return plugin.Output{}, plugin.Errorf("usage", "у плагина security нет команды %q", cmd)
+	return plugin.Output{}, plugin.Errorf("usage", "plugin security has no command %q", cmd)
 }
 
 func contains(l []string, s string) bool {
@@ -559,17 +559,17 @@ func contains(l []string, s string) bool {
 func (s *sec) logins(args []string) (plugin.Output, error) {
 	n := 20
 	if len(args) > 1 {
-		return plugin.Output{}, plugin.Errorf("usage", "использование: lite security logins [ЧИСЛО]")
+		return plugin.Output{}, plugin.Errorf("usage", "usage: lite security logins [COUNT]")
 	}
 	if len(args) == 1 {
 		v, err := strconv.Atoi(args[0])
 		if err != nil || v < 1 || v > 500 {
-			return plugin.Output{}, plugin.Errorf("usage", "число строк от 1 до 500")
+			return plugin.Output{}, plugin.Errorf("usage", "the number of lines is from 1 to 500")
 		}
 		n = v
 	}
 	var sb strings.Builder
-	sb.WriteString("Последние входы:\n")
+	sb.WriteString("Recent logins:\n")
 	ok := []string{}
 	if res, err := s.run("last", "-n", strconv.Itoa(n), "-a", "-w"); err == nil && res.ExitCode == 0 {
 		for _, l := range strings.Split(strings.TrimSpace(string(res.Stdout)), "\n") {
@@ -579,7 +579,7 @@ func (s *sec) logins(args []string) (plugin.Output, error) {
 			}
 		}
 	}
-	sb.WriteString("Неудачные попытки (журнал sshd):\n")
+	sb.WriteString("Failed attempts (sshd journal):\n")
 	bad := []string{}
 	for _, unit := range []string{"ssh", "sshd"} {
 		res, err := s.run("journalctl", "-u", unit, "--no-pager", "-n", "2000", "-o", "short-iso")
@@ -599,7 +599,7 @@ func (s *sec) logins(args []string) (plugin.Output, error) {
 		sb.WriteString("  " + l + "\n")
 	}
 	if len(bad) == 0 {
-		sb.WriteString("  нет\n")
+		sb.WriteString("  none\n")
 	}
 	return plugin.Output{Text: sb.String(), Data: map[string]any{"logins": ok, "failed": bad}}, nil
 }
@@ -609,7 +609,7 @@ func findingsOutput(fs []plugin.Finding) plugin.Output {
 	for _, f := range fs {
 		fmt.Fprintf(&sb, "[%s] %s: %s\n", f.Level, f.Check, f.Message)
 		if f.Fix != "" && f.Level != plugin.LevelOK {
-			fmt.Fprintf(&sb, "      исправить: %s\n", f.Fix)
+			fmt.Fprintf(&sb, "      fix: %s\n", f.Fix)
 		}
 	}
 	return plugin.Output{Text: sb.String(), Data: map[string]any{"findings": fs}}
@@ -625,45 +625,45 @@ func (s *sec) findings() []plugin.Finding {
 
 	// SSH
 	if eff, err := s.sshdEffective(); err != nil {
-		add("ssh", plugin.LevelWarn, "не удалось прочитать настройки sshd: "+err.Error(), "")
+		add("ssh", plugin.LevelWarn, "could not read the sshd settings: "+err.Error(), "")
 	} else {
 		switch eff["permitrootlogin"] {
 		case "yes":
-			add("ssh-root", plugin.LevelFail, "root может входить по SSH по паролю", "sudo lite security ssh")
+			add("ssh-root", plugin.LevelFail, "root can log in over SSH with a password", "sudo lite security ssh")
 		case "no":
-			add("ssh-root", plugin.LevelOK, "root по SSH не входит", "")
+			add("ssh-root", plugin.LevelOK, "root cannot log in over SSH", "")
 		default:
-			add("ssh-root", plugin.LevelOK, "root входит по SSH только по ключу", "")
+			add("ssh-root", plugin.LevelOK, "root can log in over SSH with a key only", "")
 		}
 		if eff["passwordauthentication"] == "yes" {
-			add("ssh-password", plugin.LevelFail, "вход по SSH по паролю разрешён", "sudo lite security ssh")
+			add("ssh-password", plugin.LevelFail, "SSH password login is allowed", "sudo lite security ssh")
 		} else {
-			add("ssh-password", plugin.LevelOK, "вход по SSH по паролю отключён", "")
+			add("ssh-password", plugin.LevelOK, "SSH password login is disabled", "")
 		}
 		if eff["permitemptypasswords"] == "yes" {
-			add("ssh-empty", plugin.LevelFail, "разрешён вход с пустым паролем", "sudo lite security ssh")
+			add("ssh-empty", plugin.LevelFail, "login with an empty password is allowed", "sudo lite security ssh")
 		}
 		if au := eff["allowusers"]; au != "" {
-			add("ssh-allow", plugin.LevelOK, "SSH только для: "+au, "")
+			add("ssh-allow", plugin.LevelOK, "SSH only for: "+au, "")
 		} else {
-			add("ssh-allow", plugin.LevelWarn, "список пользователей SSH не ограничен", "sudo lite security allow-users ИМЯ…")
+			add("ssh-allow", plugin.LevelWarn, "the SSH user list is not restricted", "sudo lite security allow-users NAME…")
 		}
 	}
 
 	// fail2ban
 	if res, err := s.run("fail2ban-client", "status", "sshd"); err != nil || res.ExitCode != 0 {
-		add("fail2ban", plugin.LevelFail, "fail2ban не защищает SSH (не установлен, не запущен или нет jail sshd)", "sudo lite security fail2ban")
+		add("fail2ban", plugin.LevelFail, "fail2ban does not protect SSH (not installed, not running, or no sshd jail)", "sudo lite security fail2ban")
 	} else {
-		add("fail2ban", plugin.LevelOK, "fail2ban защищает SSH", "")
+		add("fail2ban", plugin.LevelOK, "fail2ban protects SSH", "")
 	}
 
 	// автообновления и ожидающие обновления безопасности
 	switch s.manager() {
 	case "apt":
 		if res, err := s.run("apt-config", "dump"); err == nil && strings.Contains(string(res.Stdout), `APT::Periodic::Unattended-Upgrade "1"`) {
-			add("auto-updates", plugin.LevelOK, "обновления безопасности ставятся автоматически", "")
+			add("auto-updates", plugin.LevelOK, "security updates are installed automatically", "")
 		} else {
-			add("auto-updates", plugin.LevelWarn, "автоматические обновления безопасности выключены", "sudo lite security updates")
+			add("auto-updates", plugin.LevelWarn, "automatic security updates are off", "sudo lite security updates")
 		}
 		if res, err := s.run("apt-get", "-s", "upgrade"); err == nil && res.ExitCode == 0 {
 			n := 0
@@ -673,19 +673,19 @@ func (s *sec) findings() []plugin.Finding {
 				}
 			}
 			if n > 0 {
-				add("pending-updates", plugin.LevelWarn, fmt.Sprintf("ждут установки обновления безопасности: %d", n), "sudo apt-get upgrade")
+				add("pending-updates", plugin.LevelWarn, fmt.Sprintf("security updates waiting to be installed: %d", n), "sudo apt-get upgrade")
 			} else {
-				add("pending-updates", plugin.LevelOK, "обновлений безопасности в очереди нет", "")
+				add("pending-updates", plugin.LevelOK, "no security updates are waiting", "")
 			}
 		}
 	case "dnf":
 		if _, err := s.env.FS.ReadFile(dnfAutoFile); err == nil {
 			if res, err := s.run("systemctl", "is-enabled", "dnf-automatic-install.timer"); err == nil && res.ExitCode == 0 {
-				add("auto-updates", plugin.LevelOK, "обновления безопасности ставятся автоматически", "")
+				add("auto-updates", plugin.LevelOK, "security updates are installed automatically", "")
 				break
 			}
 		}
-		add("auto-updates", plugin.LevelWarn, "автоматические обновления безопасности выключены", "sudo lite security updates")
+		add("auto-updates", plugin.LevelWarn, "automatic security updates are off", "sudo lite security updates")
 	}
 
 	// параметры ядра
@@ -696,14 +696,14 @@ func (s *sec) findings() []plugin.Finding {
 		}
 	}
 	if len(bad) > 0 {
-		add("sysctl", plugin.LevelWarn, "защитные параметры ядра не применены: "+strings.Join(bad, ", "), "sudo lite security sysctl")
+		add("sysctl", plugin.LevelWarn, "protective kernel parameters are not applied: "+strings.Join(bad, ", "), "sudo lite security sysctl")
 	} else {
-		add("sysctl", plugin.LevelOK, "защитные параметры ядра применены", "")
+		add("sysctl", plugin.LevelOK, "protective kernel parameters are applied", "")
 	}
 
 	// администраторы
 	if adm := s.admins(); len(adm) == 0 {
-		add("admins", plugin.LevelWarn, "в группах sudo и wheel никого нет", "sudo lite init --user ИМЯ")
+		add("admins", plugin.LevelWarn, "the sudo and wheel groups are empty", "sudo lite init --user NAME")
 	} else {
 		var nokey []string
 		for _, a := range adm {
@@ -712,9 +712,9 @@ func (s *sec) findings() []plugin.Finding {
 			}
 		}
 		if len(nokey) > 0 {
-			add("admins", plugin.LevelWarn, "администраторы (sudo): "+strings.Join(adm, ", ")+"; без SSH-ключа: "+strings.Join(nokey, ", "), "")
+			add("admins", plugin.LevelWarn, "administrators (sudo): "+strings.Join(adm, ", ")+"; without an SSH key: "+strings.Join(nokey, ", "), "")
 		} else {
-			add("admins", plugin.LevelOK, "администраторы (sudo): "+strings.Join(adm, ", "), "")
+			add("admins", plugin.LevelOK, "administrators (sudo): "+strings.Join(adm, ", "), "")
 		}
 	}
 
@@ -762,12 +762,12 @@ func (s *sec) portFindings() []plugin.Finding {
 		}
 	}
 	if len(open) == 0 {
-		return []plugin.Finding{s.finding("ports", plugin.LevelOK, "наружу слушают только SSH и веб-порты", "")}
+		return []plugin.Finding{s.finding("ports", plugin.LevelOK, "only SSH and web ports listen to the outside", "")}
 	}
 	sort.Strings(open)
 	st, _ := (&firewall.Manager{Runner: s.env.Runner}).Status(s.ctx)
 	if st == nil || !st.Active {
-		return []plugin.Finding{s.finding("ports", plugin.LevelFail, "слушают на всех интерфейсах и не закрыты файерволом: "+strings.Join(open, ", "), "sudo lite firewall enable (или режим max в lite init --ufw max)")}
+		return []plugin.Finding{s.finding("ports", plugin.LevelFail, "listening on all interfaces and not closed by the firewall: "+strings.Join(open, ", "), "sudo lite firewall enable (or mode max in lite init --ufw max)")}
 	}
 	var exposed []string
 	for _, k := range open {
@@ -781,9 +781,9 @@ func (s *sec) portFindings() []plugin.Finding {
 		}
 	}
 	if len(exposed) > 0 {
-		return []plugin.Finding{s.finding("ports", plugin.LevelWarn, "лишние порты открыты наружу: "+strings.Join(exposed, ", "), "sudo lite firewall remove ПОРТ --yes")}
+		return []plugin.Finding{s.finding("ports", plugin.LevelWarn, "extra ports are open to the outside: "+strings.Join(exposed, ", "), "sudo lite firewall remove PORT --yes")}
 	}
-	return []plugin.Finding{s.finding("ports", plugin.LevelOK, "лишние порты слушают, но файервол их закрывает: "+strings.Join(open, ", "), "")}
+	return []plugin.Finding{s.finding("ports", plugin.LevelOK, "extra ports are listening but the firewall closes them: "+strings.Join(open, ", "), "")}
 }
 
 func (Security) Check(ctx context.Context, env plugin.Env) []plugin.Finding {

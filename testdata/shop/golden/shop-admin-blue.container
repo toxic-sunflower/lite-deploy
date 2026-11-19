@@ -1,5 +1,5 @@
 [Unit]
-Description=shop admin (слот blue)
+Description=shop admin (slot blue)
 After=network-online.target
 Wants=network-online.target
 

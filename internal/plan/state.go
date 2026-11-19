@@ -37,10 +37,10 @@ func LoadState(fsys host.FS, p Paths) (State, error) {
 	var st State
 	mid, err := fsys.ReadFile(p.MachineID)
 	if err != nil {
-		return st, fmt.Errorf("не удалось прочитать %s: %w", p.MachineID, err)
+		return st, fmt.Errorf("could not read %s: %w", p.MachineID, err)
 	}
 	if strings.TrimSpace(string(mid)) == "" {
-		return st, fmt.Errorf("%s пуст", p.MachineID)
+		return st, fmt.Errorf("%s is empty", p.MachineID)
 	}
 	st.ServerID = ServerID(string(mid))
 
@@ -48,7 +48,7 @@ func LoadState(fsys host.FS, p Paths) (State, error) {
 	dir := p.StateDir + "/projects"
 	names, err := fsys.ReadDir(dir)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return st, fmt.Errorf("не удалось прочитать %s: %w", dir, err)
+		return st, fmt.Errorf("could not read %s: %w", dir, err)
 	}
 	for _, n := range names {
 		if !strings.HasSuffix(n, ".json") {
@@ -56,12 +56,12 @@ func LoadState(fsys host.FS, p Paths) (State, error) {
 		}
 		raw, err := fsys.ReadFile(dir + "/" + n)
 		if err != nil {
-			return st, fmt.Errorf("не удалось прочитать %s: %w", n, err)
+			return st, fmt.Errorf("could not read %s: %w", n, err)
 		}
 		var ps ProjectState
 		dec := json.NewDecoder(bytes.NewReader(raw))
 		if err := dec.Decode(&ps); err != nil {
-			return st, fmt.Errorf("состояние проекта %s повреждено: %w", n, err)
+			return st, fmt.Errorf("the state of project %s is corrupt: %w", n, err)
 		}
 		st.Projects[strings.TrimSuffix(n, ".json")] = ps
 	}

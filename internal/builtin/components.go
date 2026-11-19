@@ -20,13 +20,13 @@ func (Podman) Name() string       { return "podman" }
 func (Podman) Kind() string       { return "builtin" }
 func (Podman) Requires() []string { return nil }
 func (Podman) Description() string {
-	return "контейнеры проектов: podman (rootless, службы systemd)"
+	return "project containers: podman (rootless, systemd services)"
 }
 func (Podman) Commands() []plugin.Command {
 	return []plugin.Command{
-		{Name: "install", Help: "поставить podman", Confirm: true},
-		{Name: "status", Help: "версия podman"},
-		{Name: "ps", Root: true, Args: "[ПРОЕКТ]", Help: "контейнеры проектов (у каждого проекта свой rootless podman)"},
+		{Name: "install", Help: "install podman", Confirm: true},
+		{Name: "status", Help: "podman version"},
+		{Name: "ps", Root: true, Args: "[PROJECT]", Help: "project containers (each project has its own rootless podman)"},
 	}
 }
 
@@ -40,7 +40,7 @@ func projectsOf(env plugin.Env, args []string) ([]string, error) {
 			return []string{p}, nil
 		}
 	}
-	return nil, plugin.Errorf("usage", "нет проекта %q", args[0])
+	return nil, plugin.Errorf("usage", "no project %q", args[0])
 }
 
 func podmanPackages(manager string) []string {
@@ -53,7 +53,7 @@ func podmanPackages(manager string) []string {
 // InstallPodman ставит podman.
 func InstallPodman(ctx context.Context, env plugin.Env, say Say) error {
 	t := tools{ctx, env}
-	say.say("Плагин podman: ставлю пакеты...")
+	say.say("Plugin podman: installing packages...")
 	return t.install(podmanPackages(t.manager())...)
 }
 
@@ -61,7 +61,7 @@ func (Podman) Run(ctx context.Context, env plugin.Env, cmd string, args []string
 	t := tools{ctx, env}
 	if cmd == "ps" {
 		if len(args) > 1 {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: lite podman ps [ПРОЕКТ]")
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite podman ps [PROJECT]")
 		}
 		list, err := projectsOf(env, args)
 		if err != nil {
@@ -72,8 +72,8 @@ func (Podman) Run(ctx context.Context, env plugin.Env, cmd string, args []string
 		for _, p := range list {
 			res, err := t.run("runuser", "-u", p, "--", "podman", "ps", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}")
 			if err != nil || res.ExitCode != 0 {
-				data[p] = "ошибка"
-				fmt.Fprintf(&sb, "%s: не удалось получить список контейнеров\n", p)
+				data[p] = "error"
+				fmt.Fprintf(&sb, "%s: could not list containers\n", p)
 				continue
 			}
 			out := strings.TrimSpace(string(res.Stdout))
@@ -94,41 +94,41 @@ func (Podman) Run(ctx context.Context, env plugin.Env, cmd string, args []string
 		if err := InstallPodman(ctx, env, nil); err != nil {
 			return plugin.Output{}, err
 		}
-		return textOut("podman установлен.\n"), nil
+		return textOut("podman is installed.\n"), nil
 	case "status":
 		res, err := t.run("podman", "--version")
 		if err != nil || res.ExitCode != 0 {
-			e := plugin.Errorf("precondition_failed", "podman не установлен")
+			e := plugin.Errorf("precondition_failed", "podman is not installed")
 			e.Hint = "sudo lite podman install"
 			return plugin.Output{}, e
 		}
 		return textOut(string(res.Stdout)), nil
 	}
-	return plugin.Output{}, plugin.Errorf("usage", "у плагина podman нет команды %q", cmd)
+	return plugin.Output{}, plugin.Errorf("usage", "plugin podman has no command %q", cmd)
 }
 
 func (Podman) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	t := tools{ctx, env}
 	res, err := t.run("podman", "--version")
 	if err != nil || res.ExitCode != 0 {
-		return []plugin.Finding{finding("podman", "installed", plugin.LevelOK, "podman не установлен (не используется)", "")}
+		return []plugin.Finding{finding("podman", "installed", plugin.LevelOK, "podman is not installed (not in use)", "")}
 	}
 	v := strings.TrimSpace(string(res.Stdout))
 	// podman 4.4+ допустим, ниже 5.0 есть предупреждение (как в verify_host)
 	var maj, min int
 	if _, err := fmt.Sscanf(v, "podman version %d.%d", &maj, &min); err == nil && (maj < 4 || (maj == 4 && min < 4)) {
-		return []plugin.Finding{finding("podman", "version", plugin.LevelFail, v+": нужна версия 4.4 или новее", "sudo lite package update podman")}
+		return []plugin.Finding{finding("podman", "version", plugin.LevelFail, v+": version 4.4 or newer is required", "sudo lite package update podman")}
 	} else if err == nil && maj < 5 {
-		return []plugin.Finding{finding("podman", "version", plugin.LevelWarn, v+": версия ниже 5.0, часть возможностей недоступна", "")}
+		return []plugin.Finding{finding("podman", "version", plugin.LevelWarn, v+": version is below 5.0, some features are unavailable", "")}
 	}
 	out := []plugin.Finding{finding("podman", "version", plugin.LevelOK, v, "")}
 	if t.ok("docker", "--version") {
-		out = append(out, finding("podman", "docker", plugin.LevelWarn, "на сервере установлен Docker: lite его не использует; доступ к демону Docker равен root, лучше удалить", "sudo apt-get remove docker.io docker-ce"))
+		out = append(out, finding("podman", "docker", plugin.LevelWarn, "Docker is installed on the server: lite does not use it; access to the Docker daemon is root-equivalent, better remove it", "sudo apt-get remove docker.io docker-ce"))
 	}
 	for _, p := range env.Projects {
 		res, err := t.run("loginctl", "show-user", p, "-p", "Linger", "--value")
 		if err == nil && res.ExitCode == 0 && strings.TrimSpace(string(res.Stdout)) != "yes" {
-			out = append(out, finding("podman", "linger-"+p, plugin.LevelFail, "у пользователя "+p+" не включён linger: контейнеры остановятся при выходе и не поднимутся после перезагрузки", "sudo loginctl enable-linger "+p))
+			out = append(out, finding("podman", "linger-"+p, plugin.LevelFail, "user "+p+" has no linger: containers stop when the user logs out and do not start after a reboot", "sudo loginctl enable-linger "+p))
 		}
 	}
 	return out
@@ -141,25 +141,25 @@ func (PG) Name() string       { return "pg" }
 func (PG) Kind() string       { return "builtin" }
 func (PG) Requires() []string { return nil }
 func (PG) Description() string {
-	return "PostgreSQL на хосте: общий сервер, у проекта своя база и роль"
+	return "PostgreSQL on the host: one shared server, each project gets its own database and role"
 }
 func (PG) Commands() []plugin.Command {
 	return []plugin.Command{
-		{Name: "install", Help: "поставить PostgreSQL", Confirm: true},
-		{Name: "status", Help: "версия и состояние службы"},
-		{Name: "databases", Root: true, Help: "список баз"},
-		{Name: "roles", Root: true, Help: "список ролей"},
-		{Name: "create-db", Confirm: true, Args: "БАЗА [РОЛЬ] [--password-stdin]", Help: "создать базу и роль (пароль в /etc/lite-deploy/secrets/pg-РОЛЬ, только root; свой пароль из stdin)"},
-		{Name: "drop-db", Confirm: true, Args: "БАЗА", Help: "удалить базу (роль остаётся)"},
-		{Name: "backup", Root: true, Args: "[БАЗА]", Help: "снять копию базы (или всех баз) в /var/backups/lite-deploy/pg, хранится 7 последних"},
-		{Name: "backups", Root: true, Help: "список копий"},
-		{Name: "restore", Confirm: true, Args: "БАЗА ФАЙЛ [--identity-stdin]", Help: "вернуть данные базы из копии (текущие данные заменяются); для .age закрытый ключ со stdin"},
-		{Name: "schedule", Confirm: true, Args: "on|off", Help: "ежедневная копия по таймеру systemd"},
-		{Name: "password", Confirm: true, Args: "РОЛЬ --password-stdin", Help: "задать пароль роли (из стандартного ввода)"},
-		{Name: "listen", Confirm: true, Args: "АДРЕС|localhost", Help: "принимать соединения ещё и на адресе этого сервера (перезапускает PostgreSQL)"},
-		{Name: "allow", Confirm: true, Args: "БАЗА РОЛЬ ОТКУДА", Help: "пустить роль к базе с другого сервера (ssl, пароль, порт 5432 только для этого адреса)"},
-		{Name: "deny", Confirm: true, Args: "БАЗА РОЛЬ ОТКУДА", Help: "убрать такое разрешение"},
-		{Name: "access", Root: true, Help: "кому открыт удалённый доступ"},
+		{Name: "install", Help: "install PostgreSQL", Confirm: true},
+		{Name: "status", Help: "version and service state"},
+		{Name: "databases", Root: true, Help: "list of databases"},
+		{Name: "roles", Root: true, Help: "list of roles"},
+		{Name: "create-db", Confirm: true, Args: "DATABASE [ROLE] [--password-stdin]", Help: "create a database and a role (password in /etc/lite-deploy/secrets/pg-ROLE, root only; or your own password from stdin)"},
+		{Name: "drop-db", Confirm: true, Args: "DATABASE", Help: "delete a database (the role stays)"},
+		{Name: "backup", Root: true, Args: "[DATABASE]", Help: "back up a database (or all databases) into /var/backups/lite-deploy/pg, the latest 7 are kept"},
+		{Name: "backups", Root: true, Help: "list of backups"},
+		{Name: "restore", Confirm: true, Args: "DATABASE FILE [--identity-stdin]", Help: "restore a database from a backup (current data is replaced); for .age give the private key on stdin"},
+		{Name: "schedule", Confirm: true, Args: "on|off", Help: "daily backup with a systemd timer"},
+		{Name: "password", Confirm: true, Args: "ROLE --password-stdin", Help: "set a role password (from standard input)"},
+		{Name: "listen", Confirm: true, Args: "ADDRESS|localhost", Help: "also accept connections on this server's address (restarts PostgreSQL)"},
+		{Name: "allow", Confirm: true, Args: "DATABASE ROLE FROM", Help: "let a role reach a database from another server (ssl, password, port 5432 only for this address)"},
+		{Name: "deny", Confirm: true, Args: "DATABASE ROLE FROM", Help: "remove such a permission"},
+		{Name: "access", Root: true, Help: "who has remote access"},
 	}
 }
 
@@ -179,7 +179,7 @@ func randomHex(n int) (string, error) {
 // createDB создаёт роль (с паролем из файла, который создаётся при необходимости) и базу. Повторный вызов безопасен.
 func (t tools) createDB(db, role, given string) error {
 	if !pgNameRe.MatchString(db) || !pgNameRe.MatchString(role) {
-		return plugin.Errorf("usage", "имя базы и роли: строчные латинские буквы, цифры и _, до 40 знаков, начинается с буквы")
+		return plugin.Errorf("usage", "database and role names: lowercase Latin letters, digits and _, up to 40 characters, starting with a letter")
 	}
 	secret := pgSecretDir + "/pg-" + role
 	pass := given
@@ -192,15 +192,15 @@ func (t tools) createDB(db, role, given string) error {
 		if given == "" {
 			p, err := randomHex(24)
 			if err != nil {
-				return plugin.Errorf("internal", "не удалось получить случайные байты: %v", err)
+				return plugin.Errorf("internal", "could not get random bytes: %v", err)
 			}
 			pass = p
 		}
 		if err := t.env.FS.MkdirAll(pgSecretDir, 0o700); err != nil {
-			return plugin.Errorf("step_failed", "каталог %s: %v", pgSecretDir, err)
+			return plugin.Errorf("step_failed", "directory %s: %v", pgSecretDir, err)
 		}
 		if err := t.env.FS.WriteFile(secret, []byte(pass+"\n"), 0o600); err != nil {
-			return plugin.Errorf("step_failed", "файл %s: %v", secret, err)
+			return plugin.Errorf("step_failed", "file %s: %v", secret, err)
 		}
 	}
 	// имена проверены выше, пароль шестнадцатеричный: подстановка в SQL безопасна
@@ -240,7 +240,7 @@ func pgPackages(manager string) []string {
 // InstallPG ставит PostgreSQL.
 func InstallPG(ctx context.Context, env plugin.Env, say Say) error {
 	t := tools{ctx, env}
-	say.say("Плагин pg: ставлю пакеты...")
+	say.say("Plugin pg: installing packages...")
 	return t.install(pgPackages(t.manager())...)
 }
 
@@ -278,7 +278,7 @@ func (PG) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (p
 		return t.pgDeny(args)
 	case "access":
 		if len(args) != 0 {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: lite pg access")
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg access")
 		}
 		return t.pgAccess()
 	case "backup":
@@ -292,7 +292,7 @@ func (PG) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (p
 	case "password":
 		rest, stdin := extractPasswordFlag(args)
 		if len(rest) != 1 || !stdin || !pgNameRe.MatchString(rest[0]) {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: echo ПАРОЛЬ | lite pg password РОЛЬ --password-stdin")
+			return plugin.Output{}, plugin.Errorf("usage", "usage: echo PASSWORD | lite pg password ROLE --password-stdin")
 		}
 		pass, err := readPassword(env.Stdin)
 		if err != nil {
@@ -301,11 +301,11 @@ func (PG) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (p
 		if err := t.setPassword(rest[0], pass); err != nil {
 			return plugin.Output{}, err
 		}
-		return textOut("Пароль роли " + rest[0] + " изменён.\n"), nil
+		return textOut("Password of role " + rest[0] + " changed.\n"), nil
 	case "create-db":
 		args, stdin := extractPasswordFlag(args)
 		if len(args) < 1 || len(args) > 2 {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: lite pg create-db БАЗА [РОЛЬ] [--password-stdin]")
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg create-db DATABASE [ROLE] [--password-stdin]")
 		}
 		role := args[0]
 		if len(args) == 2 {
@@ -321,16 +321,16 @@ func (PG) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (p
 		if err := t.createDB(args[0], role, given); err != nil {
 			return plugin.Output{}, err
 		}
-		return plugin.Output{Text: fmt.Sprintf("База %s и роль %s готовы; пароль: %s/pg-%s\n", args[0], role, pgSecretDir, role),
+		return plugin.Output{Text: fmt.Sprintf("Database %s and role %s are ready; password: %s/pg-%s\n", args[0], role, pgSecretDir, role),
 			Data: map[string]any{"database": args[0], "role": role, "secret": pgSecretDir + "/pg-" + role}}, nil
 	case "drop-db":
 		if len(args) != 1 || !pgNameRe.MatchString(args[0]) {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: lite pg drop-db БАЗА")
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg drop-db DATABASE")
 		}
 		if _, err := t.psql("drop database " + args[0]); err != nil {
 			return plugin.Output{}, err
 		}
-		return textOut("База " + args[0] + " удалена.\n"), nil
+		return textOut("Database " + args[0] + " deleted.\n"), nil
 	}
 	if err := noArgs(args, cmd, "pg"); err != nil {
 		return plugin.Output{}, err
@@ -340,17 +340,17 @@ func (PG) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (p
 		if err := InstallPG(ctx, env, nil); err != nil {
 			return plugin.Output{}, err
 		}
-		return textOut("PostgreSQL установлен.\n"), nil
+		return textOut("PostgreSQL is installed.\n"), nil
 	case "status":
 		if !t.ok("psql", "--version") {
-			e := plugin.Errorf("precondition_failed", "PostgreSQL не установлен")
+			e := plugin.Errorf("precondition_failed", "PostgreSQL is not installed")
 			e.Hint = "sudo lite pg install"
 			return plugin.Output{}, e
 		}
 		res, _ := t.run("psql", "--version")
 		active := t.ok("systemctl", "is-active", "--quiet", "postgresql")
 		v := strings.TrimSpace(string(res.Stdout))
-		return plugin.Output{Text: fmt.Sprintf("%s, служба %s\n", v, map[bool]string{true: "работает", false: "не работает"}[active]),
+		return plugin.Output{Text: fmt.Sprintf("%s, service %s\n", v, map[bool]string{true: "running", false: "not working"}[active]),
 			Data: map[string]any{"version": v, "active": active}}, nil
 	case "databases", "roles":
 		sql := "select datname from pg_database where not datistemplate order by 1"
@@ -369,25 +369,25 @@ func (PG) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (p
 		}
 		return plugin.Output{Text: out, Data: map[string]any{cmd: list}}, nil
 	}
-	return plugin.Output{}, plugin.Errorf("usage", "у плагина pg нет команды %q", cmd)
+	return plugin.Output{}, plugin.Errorf("usage", "plugin pg has no command %q", cmd)
 }
 
 func (PG) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	t := tools{ctx, env}
 	if !t.ok("psql", "--version") {
-		return []plugin.Finding{finding("pg", "installed", plugin.LevelOK, "PostgreSQL не установлен (не используется)", "")}
+		return []plugin.Finding{finding("pg", "installed", plugin.LevelOK, "PostgreSQL is not installed (not in use)", "")}
 	}
 	if !t.ok("systemctl", "is-active", "--quiet", "postgresql") {
-		return []plugin.Finding{finding("pg", "service", plugin.LevelFail, "служба PostgreSQL не работает", "sudo systemctl enable --now postgresql")}
+		return []plugin.Finding{finding("pg", "service", plugin.LevelFail, "the PostgreSQL service is not running", "sudo systemctl enable --now postgresql")}
 	}
-	out := []plugin.Finding{finding("pg", "service", plugin.LevelOK, "служба PostgreSQL работает", "")}
+	out := []plugin.Finding{finding("pg", "service", plugin.LevelOK, "the PostgreSQL service is running", "")}
 	out = append(out, t.backupFindings()...)
 	if la, err := t.psql("show listen_addresses"); err == nil {
 		la = strings.TrimSpace(la)
 		if bindLocalOnly(strings.ReplaceAll(la, ",", " ")) || la == "localhost" {
-			out = append(out, finding("pg", "listen", plugin.LevelOK, "PostgreSQL слушает только localhost", ""))
+			out = append(out, finding("pg", "listen", plugin.LevelOK, "PostgreSQL listens on localhost only", ""))
 		} else {
-			out = append(out, finding("pg", "listen", plugin.LevelWarn, "PostgreSQL слушает "+la+": убедитесь, что порт закрыт файрволом для чужих адресов", "lite firewall status"))
+			out = append(out, finding("pg", "listen", plugin.LevelWarn, "PostgreSQL listens on "+la+": make sure the port is closed by the firewall for foreign addresses", "lite firewall status"))
 		}
 	}
 	return out
@@ -412,11 +412,11 @@ func InstallPlugin(ctx context.Context, env plugin.Env, name string, say Say) er
 	case "backblaze", "s3", "sftp":
 		return InstallRclone(ctx, env, say)
 	case "security":
-		say.say("Плагин security: включаю защиту сервера...")
+		say.say("Plugin security: enabling server protection...")
 		_, err := Security{}.Run(ctx, env, "enable", nil)
 		return err
 	}
-	return plugin.Errorf("usage", "неизвестный плагин %q (есть: %s)", name, strings.Join(PluginNames(), ", "))
+	return plugin.Errorf("usage", "unknown plugin %q (available: %s)", name, strings.Join(PluginNames(), ", "))
 }
 
 // setPassword меняет пароль существующей роли и обновляет файл секрета.
@@ -426,13 +426,13 @@ func (t tools) setPassword(role, pass string) error {
 		return err
 	}
 	if strings.TrimSpace(have) == "" {
-		return plugin.Errorf("precondition_failed", "роли %s нет", role)
+		return plugin.Errorf("precondition_failed", "role %s does not exist", role)
 	}
 	if err := t.env.FS.MkdirAll(pgSecretDir, 0o700); err != nil {
-		return plugin.Errorf("step_failed", "каталог %s: %v", pgSecretDir, err)
+		return plugin.Errorf("step_failed", "directory %s: %v", pgSecretDir, err)
 	}
 	if err := t.env.FS.WriteFile(pgSecretDir+"/pg-"+role, []byte(pass+"\n"), 0o600); err != nil {
-		return plugin.Errorf("step_failed", "файл секрета: %v", err)
+		return plugin.Errorf("step_failed", "secret file: %v", err)
 	}
 	return t.psqlSecret(fmt.Sprintf("alter role %s password '%s'", role, pass))
 }

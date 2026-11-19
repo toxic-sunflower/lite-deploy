@@ -58,7 +58,7 @@ func Load(fsys host.FS, path string) (Config, []schema.Issue, error) {
 		return def, nil, nil
 	}
 	if err != nil {
-		return def, nil, fmt.Errorf("не удалось прочитать %s: %w", path, err)
+		return def, nil, fmt.Errorf("could not read %s: %w", path, err)
 	}
 	var c Config
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -67,11 +67,11 @@ func Load(fsys host.FS, path string) (Config, []schema.Issue, error) {
 		return def, []schema.Issue{{Path: "/", Code: "syntax", Message: err.Error()}}, nil
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return def, []schema.Issue{{Path: "/", Code: "syntax", Message: "лишние данные после JSON"}}, nil
+		return def, []schema.Issue{{Path: "/", Code: "syntax", Message: "extra data after the JSON"}}, nil
 	}
 	issues := schema.Check(&c)
 	if pr := c.Limits.PortRange; len(pr) == 2 && pr[0] > pr[1] {
-		issues = append(issues, schema.Issue{Path: "/limits/port_range", Code: "range", Message: "начало диапазона больше конца"})
+		issues = append(issues, schema.Issue{Path: "/limits/port_range", Code: "range", Message: "the start of the range is greater than the end"})
 	}
 	if len(issues) > 0 {
 		return def, issues, nil

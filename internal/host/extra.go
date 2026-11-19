@@ -11,7 +11,7 @@ import (
 )
 
 // ErrLocked блокировка уже занята другим процессом.
-var ErrLocked = errors.New("блокировка занята")
+var ErrLocked = errors.New("lock is held")
 
 // Locker неблокирующая исключающая блокировка по файлу (flock). Нужна, чтобы два деплоя не шли одновременно.
 type Locker interface {

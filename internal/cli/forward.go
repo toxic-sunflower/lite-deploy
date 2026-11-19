@@ -38,7 +38,7 @@ func callAgent(env Env, method, path string, body any) ([]byte, *ErrorBody) {
 	out, err := call(context.Background(), env.agentSock(), method, path, raw)
 	if err != nil {
 		return nil, &ErrorBody{Code: "precondition_failed", Message: err.Error(),
-			Hint: "агент ставится при установке сервера (install.sh); пользователь должен быть администратором (группа sudo или wheel). Либо запустите команду через sudo"}
+			Hint: "the agent is installed with the server (install.sh); the user must be a system administrator (group sudo or wheel). Or run the command with sudo"}
 	}
 	return []byte(strings.TrimSpace(string(out))), nil
 }
@@ -47,7 +47,7 @@ func callAgent(env Env, method, path string, body any) ([]byte, *ErrorBody) {
 func fromEnvelope(raw []byte, command string) result {
 	var e Envelope
 	if err := json.Unmarshal(raw, &e); err != nil {
-		return fail(command, CodeIO, "агент вернул не JSON")
+		return fail(command, CodeIO, "the agent returned something that is not JSON")
 	}
 	if e.Command != "" && command == "" {
 		command = e.Command
@@ -62,7 +62,7 @@ func fromEnvelope(raw []byte, command string) result {
 func renderData(d any) string {
 	switch v := d.(type) {
 	case nil:
-		return "Готово.\n"
+		return "Done.\n"
 	case map[string]any:
 		if s, ok := v["output"].(string); ok {
 			return strings.TrimRight(s, "\n") + "\n"
@@ -82,7 +82,7 @@ func pipedStdin(env Env) (string, error) {
 		return "", err
 	}
 	if len(b) > agent.MaxPluginStdin {
-		return "", fmt.Errorf("стандартный ввод больше %d байт", agent.MaxPluginStdin)
+		return "", fmt.Errorf("standard input is larger than %d bytes", agent.MaxPluginStdin)
 	}
 	return string(b), nil
 }
@@ -121,17 +121,17 @@ func forwardProjectCreate(env Env, file string, yes, rotate bool, cts []string) 
 	const command = "project.create"
 	data, err := readInput(env, file)
 	if err != nil {
-		return fail(command, CodeIO, "не удалось прочитать описание проекта: "+err.Error())
+		return fail(command, CodeIO, "could not read the project description: "+err.Error())
 	}
 	ciphertexts := map[string]string{}
 	for _, c := range cts {
 		name, path, ok := strings.Cut(c, "=")
 		if !ok || name == "" || path == "" {
-			return fail(command, CodeUsage, "--ciphertext ожидает имя=файл")
+			return fail(command, CodeUsage, "--ciphertext expects name=file")
 		}
 		b, err := env.FS.ReadFile(path)
 		if err != nil {
-			return fail(command, CodeIO, "не удалось прочитать шифртекст "+name+": "+err.Error())
+			return fail(command, CodeIO, "could not read the ciphertext "+name+": "+err.Error())
 		}
 		ciphertexts[name] = strings.TrimSpace(string(b))
 	}
@@ -146,12 +146,12 @@ func forwardProjectCreate(env Env, file string, yes, rotate bool, cts []string) 
 	}
 	if !yes {
 		if env.Interactive == nil || !env.Interactive() {
-			return fail(command, "confirmation_required", "без терминала применение требует флага --yes")
+			return fail(command, "confirmation_required", "without a terminal, applying requires the --yes flag")
 		}
-		_, _ = fmt.Fprint(env.Stderr, "Предпросмотр (ничего не изменено):\n"+previewSteps(prev.data)+"\nВведите yes, чтобы применить: ")
+		_, _ = fmt.Fprint(env.Stderr, "Preview (nothing changed):\n"+previewSteps(prev.data)+"\nType yes to apply: ")
 		line, _ := bufio.NewReader(env.Stdin).ReadString('\n')
 		if strings.TrimSpace(line) != "yes" {
-			return fail(command, "confirmation_required", "применение отменено: подтверждение не получено")
+			return fail(command, "confirmation_required", "applying was canceled: no confirmation received")
 		}
 	}
 	if m, ok := prev.data.(map[string]any); ok {
@@ -224,9 +224,9 @@ func forwardProject(env Env, command, path string, body map[string]string) resul
 	if m, ok := r.data.(map[string]any); ok && r.err == nil {
 		switch command {
 		case "deploy":
-			r.text = fmt.Sprintf("Выкачено %v, проект %v, слот %v (был %v). Трафик переключён.\n", short(fmt.Sprint(m["version"])), m["project"], m["slot"], m["previous_slot"])
+			r.text = fmt.Sprintf("Deployed %v, project %v, slot %v (was %v). Traffic switched.\n", short(fmt.Sprint(m["version"])), m["project"], m["slot"], m["previous_slot"])
 		case "rollback":
-			r.text = fmt.Sprintf("Откат выполнен: проект %v, слот %v (был %v), версия %v.\n", m["project"], m["slot"], m["previous_slot"], short(fmt.Sprint(m["version"])))
+			r.text = fmt.Sprintf("Rollback done: project %v, slot %v (was %v), version %v.\n", m["project"], m["slot"], m["previous_slot"], short(fmt.Sprint(m["version"])))
 		}
 	}
 	return r

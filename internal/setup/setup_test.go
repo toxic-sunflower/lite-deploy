@@ -205,7 +205,7 @@ func TestDeclinedPlanChangesNothing(t *testing.T) {
 	if len(w.calls) != 0 || len(w.created) != 0 {
 		t.Fatalf("после отказа ничего не меняется: %v", w.calls)
 	}
-	if !strings.Contains(w.out.String(), "будет создан") {
+	if !strings.Contains(w.out.String(), "will be created") {
 		t.Fatalf("план должен быть показан: %s", w.out.String())
 	}
 }
@@ -347,7 +347,7 @@ func TestFirewallKeepDoesNotTouchUfw(t *testing.T) {
 		return host.Result{}, nil
 	}}}
 	p, err := e.Plan(Options{Firewall: "keep"}, nil)
-	if err != nil || !strings.Contains(strings.Join(p, "\n"), "не менять") {
+	if err != nil || !strings.Contains(strings.Join(p, "\n"), "leave unchanged") {
 		t.Fatalf("%v %v", p, err)
 	}
 	if _, err := e.Plan(Options{Firewall: "bogus"}, nil); err == nil {

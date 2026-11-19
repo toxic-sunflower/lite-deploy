@@ -64,7 +64,7 @@ func TestDeployUnitRejectsBadSignature(t *testing.T) {
 	}
 	m := open(t, env)
 	_, e := m.Deploy(context.Background(), sha1)
-	if e == nil || e.Code != CodeFailed || !strings.Contains(e.Message, "подпись архива не подтверждена") {
+	if e == nil || e.Code != CodeFailed || !strings.Contains(e.Message, "the archive signature is not confirmed") {
 		t.Fatalf("ошибка: %+v", e)
 	}
 	all := strings.Join(calls, "\n")
@@ -85,7 +85,7 @@ func TestDeployUnitDownloadFailureKeepsTraffic(t *testing.T) {
 	s.fail["curl --fail"] = true
 	m := open(t, env)
 	_, e := m.Deploy(context.Background(), sha1)
-	if e == nil || e.Code != CodeFailed || !strings.Contains(e.Message, "скачивание релиза") {
+	if e == nil || e.Code != CodeFailed || !strings.Contains(e.Message, "downloading the release") {
 		t.Fatalf("ошибка: %+v", e)
 	}
 	if m.Active() != "none" || strings.Contains(s.upstream(), "reverse_proxy") {

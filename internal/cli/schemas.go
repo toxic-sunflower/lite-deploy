@@ -15,10 +15,10 @@ var SchemaNames = []string{"project", "plan", "result", "error"}
 // Schemas строит все JSON Schema из Go-типов. Закоммиченные файлы обязаны совпадать с результатом (тест).
 func Schemas() map[string][]byte {
 	raw := map[string]map[string]any{
-		"project": schema.Reflect(project.Project{}, project.SchemaID, "Описание проекта lite-deploy"),
-		"plan":    schema.Reflect(plan.Plan{}, plan.SchemaID, "План lite-deploy"),
-		"result":  schema.Reflect(Envelope{}, "lite-deploy/result/v1", "Конверт ответа CLI и API (успех или ошибка)"),
-		"error":   schema.Reflect(ErrorBody{}, "lite-deploy/error/v1", "Тело ошибки"),
+		"project": schema.Reflect(project.Project{}, project.SchemaID, "lite-deploy project description"),
+		"plan":    schema.Reflect(plan.Plan{}, plan.SchemaID, "lite-deploy plan"),
+		"result":  schema.Reflect(Envelope{}, "lite-deploy/result/v1", "CLI and API response envelope (success or error)"),
+		"error":   schema.Reflect(ErrorBody{}, "lite-deploy/error/v1", "Error body"),
 	}
 	out := map[string][]byte{}
 	names := make([]string, 0, len(raw))

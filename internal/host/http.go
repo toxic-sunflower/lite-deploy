@@ -42,7 +42,7 @@ func (NetHTTP) Get(ctx context.Context, url, hostHeader string) (HTTPResponse, e
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if err != nil {
-		return HTTPResponse{}, fmt.Errorf("чтение ответа: %w", err)
+		return HTTPResponse{}, fmt.Errorf("read the response: %w", err)
 	}
 	return HTTPResponse{Status: resp.StatusCode, Header: resp.Header, Body: body}, nil
 }
@@ -57,7 +57,7 @@ type FakeHTTP struct {
 func (f *FakeHTTP) Get(_ context.Context, url, hostHeader string) (HTTPResponse, error) {
 	f.Calls = append(f.Calls, url+" Host="+hostHeader)
 	if f.Handler == nil {
-		return HTTPResponse{}, fmt.Errorf("FakeHTTP: нет обработчика для %s", url)
+		return HTTPResponse{}, fmt.Errorf("FakeHTTP: no handler for %s", url)
 	}
 	return f.Handler(url, hostHeader)
 }

@@ -16,9 +16,9 @@ import (
 
 // Issue описывает одну найденную ошибку (SPEC-v0.md, 2.2).
 type Issue struct {
-	Path    string `json:"path" maxLen:"512" doc:"JSON Pointer к полю; «/» для документа целиком"`
-	Code    string `json:"code" maxLen:"32" doc:"код ошибки"`
-	Message string `json:"message" maxLen:"1024" doc:"описание для человека"`
+	Path    string `json:"path" maxLen:"512" doc:"JSON Pointer to the field; slash for the whole document"`
+	Code    string `json:"code" maxLen:"32" doc:"error code"`
+	Message string `json:"message" maxLen:"1024" doc:"human-readable description"`
 }
 
 type rules struct {
@@ -43,7 +43,7 @@ func intTag(tag reflect.StructTag, name string) *int {
 	}
 	n, err := strconv.Atoi(s)
 	if err != nil {
-		panic(fmt.Sprintf("schema: тег %s=%q не число", name, s))
+		panic(fmt.Sprintf("schema: tag %s=%q is not a number", name, s))
 	}
 	return &n
 }
@@ -120,7 +120,7 @@ func checkValue(v reflect.Value, r rules, required bool, path string, out *[]Iss
 	case reflect.Pointer:
 		if v.IsNil() {
 			if required {
-				add(out, path, "required", "поле обязательно")
+				add(out, path, "required", "the field is required")
 			}
 			return
 		}
@@ -139,7 +139,7 @@ func checkValue(v reflect.Value, r rules, required bool, path string, out *[]Iss
 		s := v.String()
 		if s == "" {
 			if required {
-				add(out, path, "required", "поле обязательно")
+				add(out, path, "required", "the field is required")
 			}
 			return
 		}
@@ -150,20 +150,20 @@ func checkValue(v reflect.Value, r rules, required bool, path string, out *[]Iss
 			return
 		}
 		if r.min != nil && n < *r.min {
-			add(out, path, "minimum", "значение %d меньше %d", n, *r.min)
+			add(out, path, "minimum", "value %d is less than %d", n, *r.min)
 		}
 		if r.max != nil && n > *r.max {
-			add(out, path, "maximum", "значение %d больше %d", n, *r.max)
+			add(out, path, "maximum", "value %d is greater than %d", n, *r.max)
 		}
 	case reflect.Slice:
 		if v.Len() == 0 && !required {
 			return
 		}
 		if r.minItems != nil && v.Len() < *r.minItems {
-			add(out, path, "minItems", "элементов %d, нужно не меньше %d", v.Len(), *r.minItems)
+			add(out, path, "minItems", "%d elements, at least %d are required", v.Len(), *r.minItems)
 		}
 		if r.maxItems != nil && v.Len() > *r.maxItems {
-			add(out, path, "maxItems", "элементов %d, нужно не больше %d", v.Len(), *r.maxItems)
+			add(out, path, "maxItems", "%d elements, at most %d are allowed", v.Len(), *r.maxItems)
 		}
 		for i := 0; i < v.Len(); i++ {
 			e := v.Index(i)
@@ -179,17 +179,17 @@ func checkValue(v reflect.Value, r rules, required bool, path string, out *[]Iss
 			return
 		}
 		if r.minProps != nil && v.Len() < *r.minProps {
-			add(out, path, "minProperties", "записей %d, нужно не меньше %d", v.Len(), *r.minProps)
+			add(out, path, "minProperties", "%d entries, at least %d are required", v.Len(), *r.minProps)
 		}
 		if r.maxProps != nil && v.Len() > *r.maxProps {
-			add(out, path, "maxProperties", "записей %d, нужно не больше %d", v.Len(), *r.maxProps)
+			add(out, path, "maxProperties", "%d entries, at most %d are allowed", v.Len(), *r.maxProps)
 		}
 		keys := v.MapKeys()
 		sort.Slice(keys, func(i, j int) bool { return keys[i].String() < keys[j].String() })
 		for _, k := range keys {
 			kp := ptr(path, k.String())
 			if r.keyPattern != "" && !re(r.keyPattern).MatchString(k.String()) {
-				add(out, kp, "pattern", "имя %q не подходит под шаблон %s", k.String(), r.keyPattern)
+				add(out, kp, "pattern", "the name %q does not match the pattern %s", k.String(), r.keyPattern)
 			}
 			e := v.MapIndex(k)
 			if e.Kind() == reflect.String {
@@ -212,7 +212,7 @@ func checkStringAllowEmpty(s, pattern string, maxLen *int, path string, out *[]I
 
 func checkString(s, pattern string, enum []string, maxLen *int, path string, out *[]Issue) {
 	if maxLen != nil && utf8.RuneCountInString(s) > *maxLen {
-		add(out, path, "maxLength", "длина больше %d", *maxLen)
+		add(out, path, "maxLength", "length is greater than %d", *maxLen)
 	}
 	if len(enum) > 0 {
 		for _, e := range enum {
@@ -220,11 +220,11 @@ func checkString(s, pattern string, enum []string, maxLen *int, path string, out
 				return
 			}
 		}
-		add(out, path, "enum", "допустимо: %s", strings.Join(enum, ", "))
+		add(out, path, "enum", "allowed: %s", strings.Join(enum, ", "))
 		return
 	}
 	if pattern != "" && !re(pattern).MatchString(s) {
-		add(out, path, "pattern", "значение не подходит под шаблон %s", pattern)
+		add(out, path, "pattern", "the value does not match the pattern %s", pattern)
 	}
 }
 
@@ -313,7 +313,7 @@ func reflectType(t reflect.Type, r rules) map[string]any {
 			out["maxProperties"] = *r.maxProps
 		}
 	default:
-		panic("schema: неподдерживаемый тип " + t.String())
+		panic("schema: unsupported type " + t.String())
 	}
 	return out
 }

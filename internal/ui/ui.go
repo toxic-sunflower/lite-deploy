@@ -46,10 +46,10 @@ type Server struct {
 // Validate проверяет настройки.
 func (s *Server) Validate() error {
 	if s.Host != "" && !hostRe.MatchString(s.Host) {
-		return errors.New("неверный адрес сервера, ожидается пользователь@сервер")
+		return errors.New("invalid server address, expected user@server")
 	}
 	if len(s.Token) < 16 {
-		return errors.New("токен слишком короткий")
+		return errors.New("the token is too short")
 	}
 	return nil
 }
@@ -86,10 +86,10 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 		msg = err.Error()
 	}
 	if msg == "" {
-		msg = "команда не вернула ответа"
+		msg = "the command returned no answer"
 	}
 	b, _ := json.Marshal(map[string]any{"ok": false, "api_version": "v1", "command": "ui",
-		"error": map[string]string{"code": "internal", "message": msg, "hint": "на сервере должен работать агент: он ставится при установке сервера (install.sh), а пользователь должен быть администратором (sudo или wheel)"}})
+		"error": map[string]string{"code": "internal", "message": msg, "hint": "the agent must be running on the server: it is installed with the server (install.sh), and the user must be a system administrator (sudo or wheel)"}})
 	return b
 }
 
@@ -115,23 +115,23 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/deploy", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		var in struct{ Project, SHA string }
 		if code := readBody(r, &in); code != 0 {
-			return errBody("usage", "неверный запрос"), code
+			return errBody("usage", "invalid request"), code
 		}
 		if !projectRe.MatchString(in.Project) {
-			return errBody("usage", "неверное имя проекта"), 400
+			return errBody("usage", "invalid project name"), 400
 		}
 		if !shaRe.MatchString(in.SHA) {
-			return errBody("invalid_sha", "нужен полный хэш коммита: 40 символов 0-9a-f"), 400
+			return errBody("invalid_sha", "the full commit hash is required: 40 characters 0-9a-f"), 400
 		}
 		return s.call(r.Context(), "POST", "/v1/deploy", map[string]string{"project": in.Project, "sha": in.SHA}), 200
 	}))
 	mux.HandleFunc("/api/rollback", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		var in struct{ Project string }
 		if code := readBody(r, &in); code != 0 {
-			return errBody("usage", "неверный запрос"), code
+			return errBody("usage", "invalid request"), code
 		}
 		if !projectRe.MatchString(in.Project) {
-			return errBody("usage", "неверное имя проекта"), 400
+			return errBody("usage", "invalid project name"), 400
 		}
 		return s.call(r.Context(), "POST", "/v1/rollback", map[string]string{"project": in.Project}), 200
 	}))
@@ -144,7 +144,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/fix", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		var in struct{}
 		if code := readBody(r, &in); code != 0 {
-			return errBody("usage", "неверный запрос"), code
+			return errBody("usage", "invalid request"), code
 		}
 		return s.call(r.Context(), "POST", "/v1/fix", map[string]string{}), 200
 	}))
@@ -155,10 +155,10 @@ func (s *Server) Handler() http.Handler {
 			Args    []string `json:"args"`
 		}
 		if code := readBody(r, &in); code != 0 {
-			return errBody("usage", "неверный запрос"), code
+			return errBody("usage", "invalid request"), code
 		}
 		if !pluginRe.MatchString(in.Plugin) || !pluginRe.MatchString(in.Command) || !plugin.ValidArgs(in.Args) {
-			return errBody("usage", "неверный плагин, команда или аргументы"), 400
+			return errBody("usage", "invalid plugin, command or arguments"), 400
 		}
 		if in.Args == nil {
 			in.Args = []string{}
@@ -171,24 +171,24 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/firewall/allow", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		in, code := fwRule(r)
 		if code != 0 {
-			return errBody("usage", "неверное правило: порт 1-65535, протокол tcp или udp, источник адрес или сеть"), code
+			return errBody("usage", "invalid rule: port 1-65535, protocol tcp or udp, source an address or a network"), code
 		}
 		return s.call(r.Context(), "POST", "/v1/firewall/allow", in), 200
 	}))
 	mux.HandleFunc("/api/firewall/remove", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		in, code := fwRule(r)
 		if code != 0 {
-			return errBody("usage", "неверное правило: порт 1-65535, протокол tcp или udp, источник адрес или сеть"), code
+			return errBody("usage", "invalid rule: port 1-65535, protocol tcp or udp, source an address or a network"), code
 		}
 		if in.Action != "allow" && in.Action != "limit" && in.Action != "deny" {
-			return errBody("usage", "неверное действие правила"), 400
+			return errBody("usage", "invalid rule action"), 400
 		}
 		return s.call(r.Context(), "POST", "/v1/firewall/remove", in), 200
 	}))
 	mux.HandleFunc("/api/firewall/enable", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		var in struct{}
 		if code := readBody(r, &in); code != 0 {
-			return errBody("usage", "неверный запрос"), code
+			return errBody("usage", "invalid request"), code
 		}
 		return s.call(r.Context(), "POST", "/v1/firewall/enable", struct{}{}), 200
 	}))
@@ -236,13 +236,13 @@ func readBody(r *http.Request, v any) int {
 func (s *Server) api(method string, h func(*http.Request) ([]byte, int)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != method {
-			http.Error(w, "метод не разрешён", http.StatusMethodNotAllowed)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Token")), []byte(s.Token)) != 1 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write(errBody("permission_denied", "нужен токен из адреса, который напечатала команда lite-deploy ui"))
+			_, _ = w.Write(errBody("permission_denied", "a token from the address printed by lite-deploy ui is required"))
 			return
 		}
 		b, code := h(r)
@@ -262,11 +262,11 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			h = r.Host
 		}
 		if h != "127.0.0.1" && h != "localhost" && h != "[::1]" && h != "::1" {
-			http.Error(w, "неверный Host", http.StatusForbidden)
+			http.Error(w, "invalid Host", http.StatusForbidden)
 			return
 		}
 		if o := r.Header.Get("Origin"); o != "" && o != "http://"+r.Host {
-			http.Error(w, "чужой Origin", http.StatusForbidden)
+			http.Error(w, "foreign Origin", http.StatusForbidden)
 			return
 		}
 		w.Header().Set("X-Frame-Options", "DENY")

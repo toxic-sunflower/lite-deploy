@@ -73,7 +73,7 @@ func (m *Manager) run(ctx context.Context, name string, args ...string) (host.Re
 func (m *Manager) ufw(ctx context.Context, args ...string) (string, *Error) {
 	res, err := m.run(ctx, "ufw", args...)
 	if err != nil {
-		return "", fail(CodePrecondition, "не удалось запустить ufw (он установлен?): %v", err)
+		return "", fail(CodePrecondition, "could not run ufw (is it installed?): %v", err)
 	}
 	out := strings.TrimSpace(string(res.Stdout) + "\n" + string(res.Stderr))
 	if res.ExitCode != 0 {
@@ -174,15 +174,15 @@ func (m *Manager) Status(ctx context.Context) (*State, *Error) {
 // ValidateRule проверяет порт, протокол и источник.
 func ValidateRule(port int, proto, from string) *Error {
 	if port < 1 || port > 65535 {
-		return fail(CodeUsage, "порт должен быть от 1 до 65535")
+		return fail(CodeUsage, "the port must be from 1 to 65535")
 	}
 	if proto != "tcp" && proto != "udp" {
-		return fail(CodeUsage, "протокол: tcp или udp")
+		return fail(CodeUsage, "protocol: tcp or udp")
 	}
 	if from != "" && from != "any" {
 		if net.ParseIP(from) == nil {
 			if _, _, err := net.ParseCIDR(from); err != nil {
-				return fail(CodeUsage, "источник: адрес или сеть вида 10.0.0.0/8, либо пусто для любого")
+				return fail(CodeUsage, "source: an address or a network like 10.0.0.0/8, or empty for any")
 			}
 		}
 	}
@@ -213,14 +213,14 @@ func (m *Manager) Remove(ctx context.Context, port int, proto, from, action stri
 		return nil, e
 	}
 	if action != "allow" && action != "limit" && action != "deny" {
-		return nil, fail(CodeUsage, "действие правила: allow, limit или deny")
+		return nil, fail(CodeUsage, "rule action: allow, limit or deny")
 	}
 	st, e := m.Status(ctx)
 	if e != nil {
 		return nil, e
 	}
 	if port == st.SSHPort || port == 80 || port == 443 {
-		return nil, fail(CodeProtected, "порт %d защищён (SSH или входящий трафик Caddy): закрыть его через lite-deploy нельзя", port)
+		return nil, fail(CodeProtected, "port %d is protected (SSH or Caddy incoming traffic): it cannot be closed through lite-deploy", port)
 	}
 	want := from
 	if want == "" {
@@ -233,7 +233,7 @@ func (m *Manager) Remove(ctx context.Context, port int, proto, from, action stri
 		}
 	}
 	if !found {
-		return nil, fail(CodeNotFound, "правила %s %d/%s от %s нет", action, port, proto, want)
+		return nil, fail(CodeNotFound, "there is no %s rule for %d/%s from %s", action, port, proto, want)
 	}
 	args := append([]string{"delete", action}, ruleArgs("", port, proto, from)[1:]...)
 	if _, e := m.ufw(ctx, args...); e != nil {
@@ -288,7 +288,7 @@ func ModeSteps(mode string, sshPort int) ([][]string, *Error) {
 		}
 		return append(steps, []string{"--force", "enable"}), nil
 	}
-	return nil, fail(CodeUsage, "режим файервола: off, http или max")
+	return nil, fail(CodeUsage, "firewall mode: off, http or max")
 }
 
 // SSHPort порт sshd (22, если прочитать не удалось).

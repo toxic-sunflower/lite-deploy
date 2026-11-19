@@ -212,7 +212,7 @@ func TestSSHRollbacks(t *testing.T) {
 	}
 	s = newServer()
 	s.override = true // cloud-init или другой файл побеждает
-	if _, err := runSec(s, "anna", "ssh"); code(err) != "step_failed" || !strings.Contains(err.Error(), "переопределяет") {
+	if _, err := runSec(s, "anna", "ssh"); code(err) != "step_failed" || !strings.Contains(err.Error(), "overrides") {
 		t.Fatalf("%v", err)
 	}
 	if _, err := s.fs.ReadFile(SSHSecurity); err == nil {

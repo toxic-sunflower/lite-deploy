@@ -31,7 +31,7 @@ type Plan struct {
 	Project     string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	ProjectHash string `json:"project_hash" pattern:"^sha256:[0-9a-f]{64}$"`
 	Steps       []Step `json:"steps" minItems:"1" maxItems:"200"`
-	Hash        string `json:"hash" pattern:"^sha256:[0-9a-f]{64}$" doc:"sha256 от канонического JSON плана без поля hash"`
+	Hash        string `json:"hash" pattern:"^sha256:[0-9a-f]{64}$" doc:"sha256 of the canonical plan JSON without the hash field"`
 }
 
 // Step одно действие исполнителя. Исполнитель смотрит только на Action и Params, Summary нужен людям.
@@ -125,50 +125,50 @@ func Verify(data []byte, o VerifyOptions) (*Plan, *VerifyError) {
 		o.Limits = DefaultLimits()
 	}
 	if len(data) > o.Limits.PlanBytes {
-		return nil, invalid(fmt.Sprintf("план больше %d байт", o.Limits.PlanBytes))
+		return nil, invalid(fmt.Sprintf("the plan is larger than %d bytes", o.Limits.PlanBytes))
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	var p Plan
 	if err := dec.Decode(&p); err != nil {
-		return nil, invalid("план не разобран: " + err.Error())
+		return nil, invalid("the plan could not be parsed: " + err.Error())
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return nil, invalid("после плана есть лишние данные")
+		return nil, invalid("extra data after the plan")
 	}
 	issues := schema.Check(&p)
 	if len(p.Steps) > o.Limits.PlanSteps {
-		issues = append(issues, schema.Issue{Path: "/steps", Code: "maxItems", Message: fmt.Sprintf("шагов больше %d", o.Limits.PlanSteps)})
+		issues = append(issues, schema.Issue{Path: "/steps", Code: "maxItems", Message: fmt.Sprintf("more than %d steps", o.Limits.PlanSteps)})
 	}
 	if len(issues) > 0 {
-		return nil, invalid("план не прошёл проверку", issues...)
+		return nil, invalid("the plan did not pass validation", issues...)
 	}
 
 	want, err := p.ComputeHash()
 	if err != nil {
-		return nil, invalid("хэш не посчитан: " + err.Error())
+		return nil, invalid("hash was not computed: " + err.Error())
 	}
 	if want != p.Hash {
-		return nil, &VerifyError{Code: CodeHashMismatch, Message: fmt.Sprintf("хэш плана не совпадает: в файле %s, посчитан %s", p.Hash, want)}
+		return nil, &VerifyError{Code: CodeHashMismatch, Message: fmt.Sprintf("plan hash does not match: the file says %s, computed %s", p.Hash, want)}
 	}
 
 	created, err1 := time.Parse(time.RFC3339, p.CreatedAt)
 	expires, err2 := time.Parse(time.RFC3339, p.ExpiresAt)
 	if err1 != nil || err2 != nil {
-		return nil, invalid("время в плане не разобрано")
+		return nil, invalid("time in the plan could not be parsed")
 	}
 	if !expires.After(created) || expires.Sub(created) > time.Duration(o.Limits.PlanTTLHours)*time.Hour {
-		return nil, invalid(fmt.Sprintf("срок жизни плана должен быть положительным и не больше %d ч", o.Limits.PlanTTLHours))
+		return nil, invalid(fmt.Sprintf("the plan lifetime must be positive and at most %d h", o.Limits.PlanTTLHours))
 	}
 	if !o.Now.Before(expires) {
-		return nil, &VerifyError{Code: CodeExpired, Message: "срок действия плана истёк: " + p.ExpiresAt}
+		return nil, &VerifyError{Code: CodeExpired, Message: "the plan has expired: " + p.ExpiresAt}
 	}
 	if p.ServerID != o.ServerID {
-		return nil, &VerifyError{Code: CodeWrongServer, Message: "план построен для другого сервера"}
+		return nil, &VerifyError{Code: CodeWrongServer, Message: "the plan was built for another server"}
 	}
 	// Шаги проверяются последними: к этому моменту план целый, свежий и для этого сервера.
 	if issues := checkSteps(&p); len(issues) > 0 {
-		return nil, invalid("шаги плана не прошли проверку", issues...)
+		return nil, invalid("the plan steps did not pass validation", issues...)
 	}
 	return &p, nil
 }
@@ -178,15 +178,15 @@ func checkSteps(p *Plan) []schema.Issue {
 	for i, s := range p.Steps {
 		base := fmt.Sprintf("/steps/%d", i)
 		if want := fmt.Sprintf("s%02d", i+1); s.ID != want {
-			out = append(out, schema.Issue{Path: base + "/id", Code: "sequence", Message: "ожидался id " + want})
+			out = append(out, schema.Issue{Path: base + "/id", Code: "sequence", Message: "expected id " + want})
 		}
 		def, ok := actions.Lookup(s.Action)
 		if !ok {
-			out = append(out, schema.Issue{Path: base + "/action", Code: "unknown_action", Message: fmt.Sprintf("действие %q не входит в список исполнителя", s.Action)})
+			out = append(out, schema.Issue{Path: base + "/action", Code: "unknown_action", Message: fmt.Sprintf("action %q is not in the executor list", s.Action)})
 			continue
 		}
 		if def.Class != s.Class {
-			out = append(out, schema.Issue{Path: base + "/class", Code: "class_mismatch", Message: fmt.Sprintf("класс действия %s: %s", s.Action, def.Class)})
+			out = append(out, schema.Issue{Path: base + "/class", Code: "class_mismatch", Message: fmt.Sprintf("action class %s: %s", s.Action, def.Class)})
 		}
 		if _, iss := actions.Decode(s.Action, s.Params); len(iss) > 0 {
 			for _, is := range iss {
@@ -198,7 +198,7 @@ func checkSteps(p *Plan) []schema.Issue {
 		var m map[string]any
 		_ = json.Unmarshal(s.Params, &m)
 		if prj, ok := m["project"]; ok && prj != p.Project {
-			out = append(out, schema.Issue{Path: base + "/params/project", Code: "foreign_project", Message: "шаг относится к другому проекту, чем план"})
+			out = append(out, schema.Issue{Path: base + "/params/project", Code: "foreign_project", Message: "the step belongs to a different project than the plan"})
 		}
 	}
 	return out

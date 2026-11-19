@@ -40,7 +40,7 @@ func cmdDeploy(args []string, env Env) result {
 	fs := flag.NewFlagSet("deploy", flag.ContinueOnError)
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 2 {
-		return fail("deploy", CodeUsage, "использование: lite-deploy deploy <проект> <хэш коммита из 40 символов>")
+		return fail("deploy", CodeUsage, "usage: lite-deploy deploy <project> <40-character commit hash>")
 	}
 	return doDeploy(pos[0], pos[1], env)
 }
@@ -58,14 +58,14 @@ func doDeploy(name, sha string, env Env) result {
 		return deployFail("deploy", e)
 	}
 	return result{command: "deploy", data: res,
-		text: fmt.Sprintf("Выкачено %s, проект %s, слот %s (был %s). Трафик переключён.\n", short(res.Version), res.Project, res.Slot, res.PreviousSlot)}
+		text: fmt.Sprintf("Deployed %s, project %s, slot %s (was %s). Traffic switched.\n", short(res.Version), res.Project, res.Slot, res.PreviousSlot)}
 }
 
 func cmdRollback(args []string, env Env) result {
 	fs := flag.NewFlagSet("rollback", flag.ContinueOnError)
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 1 {
-		return fail("rollback", CodeUsage, "использование: lite-deploy rollback <проект>")
+		return fail("rollback", CodeUsage, "usage: lite-deploy rollback <project>")
 	}
 	return doRollback(pos[0], env)
 }
@@ -83,14 +83,14 @@ func doRollback(name string, env Env) result {
 		return deployFail("rollback", e)
 	}
 	return result{command: "rollback", data: res,
-		text: fmt.Sprintf("Откат выполнен: проект %s, слот %s (был %s), версия %s.\n", res.Project, res.Slot, res.PreviousSlot, short(res.Version))}
+		text: fmt.Sprintf("Rollback done: project %s, slot %s (was %s), version %s.\n", res.Project, res.Slot, res.PreviousSlot, short(res.Version))}
 }
 
 func cmdStatus(args []string, env Env) result {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) > 1 {
-		return fail("status", CodeUsage, "использование: lite-deploy status [проект]")
+		return fail("status", CodeUsage, "usage: lite-deploy status [project]")
 	}
 	return doStatus(pos, env)
 }
@@ -106,7 +106,7 @@ func doStatus(pos []string, env Env) result {
 	} else {
 		entries, err := env.FS.ReadDir(deploy.DefaultProjectsDir)
 		if err != nil {
-			return fail("status", CodeProjectMissing, "проектов ещё нет")
+			return fail("status", CodeProjectMissing, "there are no projects yet")
 		}
 		for _, e := range entries {
 			if n, ok := strings.CutSuffix(e, ".json"); ok {
@@ -137,7 +137,7 @@ func doStatus(pos []string, env Env) result {
 
 func statusText(st *deploy.StatusResult) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "Проект %s, активный слот: %s\n", st.Project, st.Active)
+	fmt.Fprintf(&sb, "Project %s, active slot: %s\n", st.Project, st.Active)
 	for _, slot := range deploy.Slots {
 		var svcs []string
 		for s := range st.Slots[slot] {
@@ -146,18 +146,18 @@ func statusText(st *deploy.StatusResult) string {
 		sort.Strings(svcs)
 		for _, s := range svcs {
 			x := st.Slots[slot][s]
-			state := "не отвечает"
+			state := "not responding"
 			if x.Up {
-				state = "работает"
+				state = "running"
 				if x.Version != nil {
-					state += ", версия " + short(*x.Version)
+					state += ", version " + short(*x.Version)
 				}
 			}
-			fmt.Fprintf(&sb, "  %-5s %-10s порт %d: %s\n", slot, s, x.Port, state)
+			fmt.Fprintf(&sb, "  %-5s %-10s port %d: %s\n", slot, s, x.Port, state)
 		}
 	}
 	for _, h := range st.History {
-		fmt.Fprintf(&sb, "  %s %s %s слот %s\n", h.Time, h.Event, short(h.Version), h.Slot)
+		fmt.Fprintf(&sb, "  %s %s %s slot %s\n", h.Time, h.Event, short(h.Version), h.Slot)
 	}
 	return sb.String()
 }
@@ -168,7 +168,7 @@ func cmdGate(args []string, env Env) result {
 	name := fs.String("project", "", "")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 0 || *name == "" {
-		return fail("gate", CodeUsage, "использование: lite-deploy gate --project <проект> (команду даёт SSH_ORIGINAL_COMMAND)")
+		return fail("gate", CodeUsage, "usage: lite-deploy gate --project <project> (the command comes from SSH_ORIGINAL_COMMAND)")
 	}
 	cmd := ""
 	if env.Getenv != nil {

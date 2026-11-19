@@ -20,7 +20,7 @@ type bundle struct {
 	ExpectHash     string            `json:"expect_project_hash"`
 }
 
-const bundleUsage = "использование: lite-deploy project bundle --dry-run|--yes (пакет JSON со стандартного ввода)"
+const bundleUsage = "usage: lite-deploy project bundle --dry-run|--yes (a JSON bundle on standard input)"
 
 // cmdProjectBundle: project.json, шифртексты и флаги одним JSON со стандартного ввода. С --dry-run возвращает предпросмотр шагов
 // и хэш описания, с --yes применяет план. Запускается исполнителем (root) по запросу агента.
@@ -34,7 +34,7 @@ func cmdProjectBundle(args []string, env Env) result {
 		return fail(command, CodeUsage, bundleUsage)
 	}
 	if !env.root() {
-		return fail(command, "permission_denied", "project bundle выполняется от root через исполнителя")
+		return fail(command, "permission_denied", "project bundle runs as root through the executor")
 	}
 	cfg, bad := loadConfig(env, command)
 	if bad != nil {
@@ -51,24 +51,24 @@ func cmdProjectBundle(args []string, env Env) result {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&b); err != nil || len(b.Project) == 0 {
-		return fail(command, CodeUsage, "пакет: неверный JSON или нет поля project")
+		return fail(command, CodeUsage, "bundle: invalid JSON or no project field")
 	}
 	var p *project.Project
 	var issues []schema.Issue
 	if len(b.Project) > cfg.Limits.ProjectBytes {
-		issues = []schema.Issue{{Path: "/project", Code: "too_large", Message: fmt.Sprintf("описание больше %d байт", cfg.Limits.ProjectBytes)}}
+		issues = []schema.Issue{{Path: "/project", Code: "too_large", Message: fmt.Sprintf("the description is larger than %d bytes", cfg.Limits.ProjectBytes)}}
 	} else if p, issues = project.Parse(b.Project); len(issues) == 0 {
 		issues = project.Validate(p)
 	}
 	if len(issues) > 0 {
-		return result{command: command, err: &ErrorBody{Code: plan.CodeInvalidProject, Message: "описание проекта не прошло проверку", Details: issues, Hint: "исправьте поля из details"}}
+		return result{command: command, err: &ErrorBody{Code: plan.CodeInvalidProject, Message: "the project description did not pass validation", Details: issues, Hint: "fix the fields listed in details"}}
 	}
 	pr, badPlan := buildPlan(command, p, "", b.RotatePassword, b.Ciphertexts, env)
 	if badPlan != nil {
 		return *badPlan
 	}
 	if b.ExpectHash != "" && b.ExpectHash != pr.pl.ProjectHash {
-		return fail(command, plan.CodePrecondition, "описание изменилось после просмотра: сделайте предпросмотр заново")
+		return fail(command, plan.CodePrecondition, "the description changed after the preview: build the preview again")
 	}
 	planBytes, err := json.Marshal(pr.pl)
 	if err != nil {

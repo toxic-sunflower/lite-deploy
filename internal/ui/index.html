@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -53,15 +53,15 @@
 <div class="wrap">
   <header><h1>lite-deploy</h1><span class="srv" id="srv"></span></header>
   <div id="msg"></div>
-  <div id="list"><p class="empty">Загрузка…</p></div>
-  <h3>Новый проект</h3>
+  <div id="list"><p class="empty">Loading…</p></div>
+  <h3>New project</h3>
   <div id="np"></div>
-  <h3>Файервол</h3>
-  <div id="fw"><p class="empty">Загрузка…</p></div>
-  <h3>Проверка сервера</h3>
-  <div id="vf"><button id="vfgo" class="primary">Проверить</button><div id="vfout"></div></div>
-  <h3>Пакеты и плагины</h3>
-  <div id="pl"><p class="empty">Загрузка…</p></div>
+  <h3>Firewall</h3>
+  <div id="fw"><p class="empty">Loading…</p></div>
+  <h3>Server check</h3>
+  <div id="vf"><button id="vfgo" class="primary">Check</button><div id="vfout"></div></div>
+  <h3>Packages and plugins</h3>
+  <div id="pl"><p class="empty">Loading…</p></div>
 </div>
 <script>
 (function () {
@@ -82,47 +82,47 @@
   function card(p) {
     var c = el('div', 'card');
     c.appendChild(el('h2', null, p.project));
-    var active = p.active === 'none' ? 'ещё не выкатывали' : 'активный слот: ' + p.active;
+    var active = p.active === 'none' ? 'not deployed yet' : 'active slot: ' + p.active;
     c.appendChild(el('div', 'meta', active));
     var t = el('table'), h = el('tr');
-    ['Слот', 'Сервис', 'Порт', 'Состояние'].forEach(function (x) { h.appendChild(el('th', null, x)); });
+    ['Slot', 'Service', 'Port', 'State'].forEach(function (x) { h.appendChild(el('th', null, x)); });
     t.appendChild(h);
     ['blue', 'green'].forEach(function (slot) {
       Object.keys(p.slots[slot] || {}).sort().forEach(function (svc) {
         var s = p.slots[slot][svc], r = el('tr');
-        r.appendChild(el('td', slot === p.active ? 'act' : null, slot + (slot === p.active ? ' (активный)' : '')));
+        r.appendChild(el('td', slot === p.active ? 'act' : null, slot + (slot === p.active ? ' (active)' : '')));
         r.appendChild(el('td', null, svc));
         r.appendChild(el('td', null, String(s.port)));
-        r.appendChild(el('td', s.up ? 'up' : 'down', s.up ? 'работает' + (s.version ? ', версия ' + short(s.version) : '') : 'не отвечает'));
+        r.appendChild(el('td', s.up ? 'up' : 'down', s.up ? 'running' + (s.version ? ', version ' + short(s.version) : '') : 'not responding'));
         t.appendChild(r);
       });
     });
     c.appendChild(t);
 
-    var f = el('form'), inp = el('input'), go = el('button', 'primary', 'Выкатить'), rb = el('button', null, 'Откатить');
-    inp.type = 'text'; inp.placeholder = 'хэш коммита (40 символов)'; inp.maxLength = 40; inp.spellcheck = false; inp.autocomplete = 'off';
+    var f = el('form'), inp = el('input'), go = el('button', 'primary', 'Deploy'), rb = el('button', null, 'Roll back');
+    inp.type = 'text'; inp.placeholder = 'commit hash (40 characters)'; inp.maxLength = 40; inp.spellcheck = false; inp.autocomplete = 'off';
     go.type = 'submit'; rb.type = 'button';
     f.appendChild(inp); f.appendChild(go); f.appendChild(rb);
     f.addEventListener('submit', function (e) {
       e.preventDefault();
       var sha = inp.value.trim().toLowerCase();
-      if (!/^[0-9a-f]{40}$/.test(sha)) { msg('err', 'Нужен полный хэш коммита: 40 символов 0-9a-f.'); return; }
-      if (!confirm('Выкатить ' + sha.slice(0, 12) + ' в проект ' + p.project + '?')) return;
-      run('Выкатка идёт, это может занять несколько минут…', '/api/deploy', { project: p.project, sha: sha }, function (d) {
-        return 'Выкачено ' + short(d.version) + ', слот ' + d.slot + '. Трафик переключён.';
+      if (!/^[0-9a-f]{40}$/.test(sha)) { msg('err', 'The full commit hash is required: 40 characters 0-9a-f.'); return; }
+      if (!confirm('Deploy ' + sha.slice(0, 12) + ' to project ' + p.project + '?')) return;
+      run('Deploying, this may take a few minutes…', '/api/deploy', { project: p.project, sha: sha }, function (d) {
+        return 'Deployed ' + short(d.version) + ', slot ' + d.slot + '. Traffic switched.';
       });
     });
     rb.addEventListener('click', function () {
-      if (!confirm('Откатить проект ' + p.project + ' на прежнюю версию?')) return;
-      run('Откат…', '/api/rollback', { project: p.project }, function (d) {
-        return 'Откат выполнен: слот ' + d.slot + ', версия ' + short(d.version) + '.';
+      if (!confirm('Roll back project ' + p.project + ' to the previous version?')) return;
+      run('Rolling back…', '/api/rollback', { project: p.project }, function (d) {
+        return 'Rolled back: slot ' + d.slot + ', version ' + short(d.version) + '.';
       });
     });
     c.appendChild(f);
 
     if (p.history && p.history.length) {
       var hist = el('div', 'hist');
-      p.history.slice().reverse().forEach(function (x) { hist.appendChild(el('div', null, x.time + '  ' + x.event + '  ' + short(x.version) + '  слот ' + x.slot)); });
+      p.history.slice().reverse().forEach(function (x) { hist.appendChild(el('div', null, x.time + '  ' + x.event + '  ' + short(x.version) + '  slot ' + x.slot)); });
       c.appendChild(hist);
     }
     return c;
@@ -136,22 +136,22 @@
     api(path, body).then(function (r) {
       if (r.ok) { msg('ok', okText(r.data)); }
       else { msg('err', r.error.message + (r.error.hint ? '\n' + r.error.hint : '')); }
-    }).catch(function (e) { msg('err', 'Нет связи: ' + e); }).then(function () { setBusy(false); (reload || load)(); });
+    }).catch(function (e) { msg('err', 'No connection: ' + e); }).then(function () { setBusy(false); (reload || load)(); });
   }
 
   function fwCard(st) {
     var c = el('div', 'card');
-    c.appendChild(el('div', 'meta', (st.active ? 'Включён' : 'Выключен') + ', порт SSH: ' + st.ssh_port));
+    c.appendChild(el('div', 'meta', (st.active ? 'On' : 'Off') + ', SSH port: ' + st.ssh_port));
     if (!st.active) {
-      var eb = el('button', 'primary', 'Включить');
+      var eb = el('button', 'primary', 'Enable');
       eb.addEventListener('click', function () {
-        if (!confirm('Включить файервол? Будут открыты SSH (порт ' + st.ssh_port + '), 80 и 443, остальное входящее закроется.')) return;
-        run('Включаю…', '/api/firewall/enable', {}, function () { return 'Файервол включён.'; }, loadFw);
+        if (!confirm('Enable the firewall? SSH (port ' + st.ssh_port + '), 80 and 443 will be open, other incoming traffic will be closed.')) return;
+        run('Enabling…', '/api/firewall/enable', {}, function () { return 'Firewall enabled.'; }, loadFw);
       });
       c.appendChild(eb);
     }
     var t = el('table'), h = el('tr');
-    ['Порт', 'Действие', 'Откуда', ''].forEach(function (x) { h.appendChild(el('th', null, x)); });
+    ['Port', 'Action', 'From', ''].forEach(function (x) { h.appendChild(el('th', null, x)); });
     t.appendChild(h);
     (st.rules || []).forEach(function (r) {
       var row = el('tr');
@@ -159,12 +159,12 @@
       row.appendChild(el('td', null, r.action));
       row.appendChild(el('td', null, r.from));
       var cell = el('td');
-      if (r.protected) cell.appendChild(el('span', 'tag', 'защищено'));
+      if (r.protected) cell.appendChild(el('span', 'tag', 'protected'));
       else if (r.port) {
-        var del = el('button', null, 'Закрыть');
+        var del = el('button', null, 'Close');
         del.addEventListener('click', function () {
-          if (!confirm('Закрыть ' + r.port + '/' + r.proto + (r.from !== 'any' ? ' для ' + r.from : '') + '?')) return;
-          run('Закрываю…', '/api/firewall/remove', { port: r.port, proto: r.proto, from: r.from === 'any' ? '' : r.from, action: r.action }, function () { return 'Порт ' + r.port + ' закрыт.'; }, loadFw);
+          if (!confirm('Close ' + r.port + '/' + r.proto + (r.from !== 'any' ? ' for ' + r.from : '') + '?')) return;
+          run('Closing…', '/api/firewall/remove', { port: r.port, proto: r.proto, from: r.from === 'any' ? '' : r.from, action: r.action }, function () { return 'Port ' + r.port + ' closed.'; }, loadFw);
         });
         cell.appendChild(del);
       }
@@ -172,19 +172,19 @@
       t.appendChild(row);
     });
     c.appendChild(t);
-    var f = el('form'), port = el('input', 'num'), proto = el('select'), src = el('input', 'src'), add = el('button', 'primary', 'Открыть порт');
-    port.type = 'text'; port.placeholder = 'порт'; port.maxLength = 5; port.inputMode = 'numeric'; port.autocomplete = 'off';
+    var f = el('form'), port = el('input', 'num'), proto = el('select'), src = el('input', 'src'), add = el('button', 'primary', 'Open port');
+    port.type = 'text'; port.placeholder = 'port'; port.maxLength = 5; port.inputMode = 'numeric'; port.autocomplete = 'off';
     ['tcp', 'udp'].forEach(function (x) { var o = el('option', null, x); o.value = x; proto.appendChild(o); });
-    src.type = 'text'; src.placeholder = 'только с адреса (необязательно)'; src.autocomplete = 'off'; src.spellcheck = false;
+    src.type = 'text'; src.placeholder = 'only from this address (optional)'; src.autocomplete = 'off'; src.spellcheck = false;
     add.type = 'submit';
     f.appendChild(port); f.appendChild(proto); f.appendChild(src); f.appendChild(add);
     f.addEventListener('submit', function (e) {
       e.preventDefault();
       var n = parseInt(port.value, 10);
-      if (!(n >= 1 && n <= 65535)) { msg('err', 'Порт: число от 1 до 65535.'); return; }
+      if (!(n >= 1 && n <= 65535)) { msg('err', 'Port: a number from 1 to 65535.'); return; }
       var from = src.value.trim();
-      if (!confirm('Открыть ' + n + '/' + proto.value + (from ? ' для ' + from : ' для всех') + '?')) return;
-      run('Открываю…', '/api/firewall/allow', { port: n, proto: proto.value, from: from }, function () { return 'Порт ' + n + '/' + proto.value + ' открыт.'; }, loadFw);
+      if (!confirm('Open ' + n + '/' + proto.value + (from ? ' for ' + from : ' for everyone') + '?')) return;
+      run('Opening…', '/api/firewall/allow', { port: n, proto: proto.value, from: from }, function () { return 'Port ' + n + '/' + proto.value + ' opened.'; }, loadFw);
     });
     c.appendChild(f);
     return c;
@@ -197,36 +197,36 @@
       if (!r.ok) { box.appendChild(el('p', r.error.code === 'permission_denied' ? 'empty' : 'down', r.error.message)); return; }
       box.appendChild(fwCard(r.data));
       if (busy) setBusy(true);
-    }).catch(function (e) { document.getElementById('fw').textContent = 'Нет связи: ' + e; });
+    }).catch(function (e) { document.getElementById('fw').textContent = 'No connection: ' + e; });
   }
 
   function pluginCard(p) {
     var c = el('div', 'card');
     c.appendChild(el('h2', null, p.name));
-    c.appendChild(el('div', 'meta', p.description + ' · ' + (p.kind === 'builtin' ? 'встроенный' : 'внешний') + (p.requires && p.requires.length ? ' · нужны пакеты: ' + p.requires.join(', ') : '')));
+    c.appendChild(el('div', 'meta', p.description + ' · ' + (p.kind === 'builtin' ? 'built-in' : 'external') + (p.requires && p.requires.length ? ' · needs packages: ' + p.requires.join(', ') : '')));
     var out = el('pre', 'out'); out.style.display = 'none';
     (p.commands || []).forEach(function (cm) {
       var row = el('div', 'cmd');
       row.appendChild(el('code', null, 'lite ' + p.name + ' ' + cm.name + (cm.args ? ' ' + cm.args : '')));
       row.appendChild(el('span', 'help', ' — ' + cm.help));
-      var f = el('form'), inp = el('input'), go = el('button', cm.confirm ? null : 'primary', 'Выполнить');
+      var f = el('form'), inp = el('input'), go = el('button', cm.confirm ? null : 'primary', 'Run');
       if (cm.args) { inp.type = 'text'; inp.placeholder = cm.args; inp.autocomplete = 'off'; inp.spellcheck = false; f.appendChild(inp); }
       go.type = 'submit'; f.appendChild(go);
       f.addEventListener('submit', function (e) {
         e.preventDefault();
         var args = cm.args ? inp.value.trim().split(/\s+/).filter(Boolean) : [];
-        if (cm.args && cm.args.indexOf('…') < 0 && args.length !== cm.args.split(/\s+/).length) { msg('err', 'Нужно: ' + cm.args); return; }
-        if (cm.args && !args.length) { msg('err', 'Нужно: ' + cm.args); return; }
-        if (cm.confirm && !confirm('Выполнить: lite ' + p.name + ' ' + cm.name + ' ' + args.join(' ') + '?')) return;
+        if (cm.args && cm.args.indexOf('…') < 0 && args.length !== cm.args.split(/\s+/).length) { msg('err', 'Required: ' + cm.args); return; }
+        if (cm.args && !args.length) { msg('err', 'Required: ' + cm.args); return; }
+        if (cm.confirm && !confirm('Run: lite ' + p.name + ' ' + cm.name + ' ' + args.join(' ') + '?')) return;
         if (busy) return;
-        setBusy(true); msg('ok', 'Выполняю…');
+        setBusy(true); msg('ok', 'Running…');
         api('/api/plugin', { plugin: p.name, command: cm.name, args: args }).then(function (r) {
           if (r.ok) {
             clearMsg();
             out.style.display = 'block';
             out.textContent = pluginText(r.data);
           } else { msg('err', r.error.message + (r.error.hint ? '\n' + r.error.hint : '')); }
-        }).catch(function (e) { msg('err', 'Нет связи: ' + e); }).then(function () { setBusy(false); });
+        }).catch(function (e) { msg('err', 'No connection: ' + e); }).then(function () { setBusy(false); });
       });
       row.appendChild(f);
       c.appendChild(row);
@@ -235,10 +235,10 @@
     return c;
   }
   function pluginText(d) {
-    if (!d) return 'Готово.';
-    if (Array.isArray(d.packages) && !d.action) return d.packages.length ? d.packages.map(function (x) { return x.name + '  ' + x.version + '  ' + x.installed_at; }).join('\n') : 'Через lite пакеты пока не ставились.';
-    if (d.packages && d.action) return 'Готово: ' + d.action + ' ' + d.packages.join(', ');
-    if ('installed' in d) return d.name + ': ' + (d.installed ? 'установлен, версия ' + d.version + (d.by_lite ? ' (через lite)' : ' (не через lite)') : 'не установлен');
+    if (!d) return 'Done.';
+    if (Array.isArray(d.packages) && !d.action) return d.packages.length ? d.packages.map(function (x) { return x.name + '  ' + x.version + '  ' + x.installed_at; }).join('\n') : 'No packages have been installed through lite yet.';
+    if (d.packages && d.action) return 'Done: ' + d.action + ' ' + d.packages.join(', ');
+    if ('installed' in d) return d.name + ': ' + (d.installed ? 'installed, version ' + d.version + (d.by_lite ? ' (through lite)' : ' (not through lite)') : 'not installed');
     if (d.output !== undefined) return d.output;
     return JSON.stringify(d, null, 2);
   }
@@ -249,36 +249,36 @@
       if (!r.ok) { box.appendChild(el('p', r.error.code === 'permission_denied' ? 'empty' : 'down', r.error.message)); return; }
       (r.data.plugins || []).forEach(function (p) { box.appendChild(pluginCard(p)); });
       (r.data.load_errors || []).forEach(function (m) { box.appendChild(el('p', 'down', m)); });
-    }).catch(function (e) { document.getElementById('pl').textContent = 'Нет связи: ' + e; });
+    }).catch(function (e) { document.getElementById('pl').textContent = 'No connection: ' + e; });
   }
   function verify() {
     var box = document.getElementById('vfout');
     if (busy) return;
-    setBusy(true); box.textContent = 'Проверяю…';
+    setBusy(true); box.textContent = 'Checking…';
     api('/api/verify').then(function (r) {
       box.textContent = '';
       if (!r.data) { box.appendChild(el('p', 'down', r.error.message)); return; }
       var t = el('table');
       r.data.findings.forEach(function (f) {
         var row = el('tr');
-        row.appendChild(el('td', f.level === 'ok' ? 'up' : (f.level === 'warn' ? 'warn' : 'down'), f.level === 'ok' ? 'ок' : (f.level === 'warn' ? 'внимание' : 'ошибка')));
+        row.appendChild(el('td', f.level === 'ok' ? 'up' : (f.level === 'warn' ? 'warn' : 'down'), f.level === 'ok' ? 'ok' : (f.level === 'warn' ? 'warning' : 'error')));
         row.appendChild(el('td', null, f.plugin + '/' + f.check));
         row.appendChild(el('td', null, f.message + (f.fix && f.level !== 'ok' ? '  →  ' + f.fix : '')));
         t.appendChild(row);
       });
       box.appendChild(t);
-      box.appendChild(el('div', 'meta', 'Итого: ок ' + r.data.ok + ', предупреждений ' + r.data.warnings + ', ошибок ' + r.data.failures));
+      box.appendChild(el('div', 'meta', 'Total: ok ' + r.data.ok + ', warnings ' + r.data.warnings + ', errors ' + r.data.failures));
       if (r.data.warnings + r.data.failures > 0) {
-        var fx = el('button', null, 'Исправить то, что можно автоматически');
+        var fx = el('button', null, 'Fix what can be fixed automatically');
         fx.addEventListener('click', function () {
-          if (!confirm('Выполнить безопасные исправления из lite fix (настройка SSH, обновлений, fail2ban, sysctl, таймеры копий, установка нужных плагинов)? Файервол, пользователи и ключи не затрагиваются.')) return;
-          run('Исправляю…', '/api/fix', {}, function (d) {
-            return d.applied.length ? 'Выполнено: ' + d.applied.join('; ') + (d.manual.length ? '\nВручную: ' + d.manual.join('; ') : '') : 'Автоматически исправлять нечего.' + (d.manual.length ? '\nВручную: ' + d.manual.join('; ') : '');
+          if (!confirm('Run the safe fixes from lite fix (SSH and update settings, fail2ban, sysctl, backup timers, installing the plugins projects need)? The firewall, users and keys are not touched.')) return;
+          run('Fixing…', '/api/fix', {}, function (d) {
+            return d.applied.length ? 'Done: ' + d.applied.join('; ') + (d.manual.length ? '\nManual: ' + d.manual.join('; ') : '') : 'Nothing to fix automatically.' + (d.manual.length ? '\nManual: ' + d.manual.join('; ') : '');
           }, verify);
         });
         box.appendChild(fx);
       }
-    }).catch(function (e) { box.textContent = 'Нет связи: ' + e; }).then(function () { setBusy(false); });
+    }).catch(function (e) { box.textContent = 'No connection: ' + e; }).then(function () { setBusy(false); });
   }
   document.getElementById('vfgo').addEventListener('click', verify);
 
@@ -288,18 +288,18 @@
       list.textContent = '';
       if (!r.ok) {
         if (r.error.code === 'permission_denied') { list.appendChild(el('p', 'empty', r.error.message)); return; }
-        if (r.error.code === 'project_not_found') { list.appendChild(el('p', 'empty', 'Проектов ещё нет. Создайте проект: lite-deploy project create.')); return; }
+        if (r.error.code === 'project_not_found') { list.appendChild(el('p', 'empty', 'No projects yet. Create one: lite project create.')); return; }
         list.appendChild(el('p', 'down', r.error.message)); return;
       }
       var ps = ('projects' in r.data) ? (r.data.projects || []) : [r.data];
-      if (!ps.length) { list.appendChild(el('p', 'empty', 'Проектов ещё нет.')); return; }
+      if (!ps.length) { list.appendChild(el('p', 'empty', 'No projects yet.')); return; }
       ps.forEach(function (p) { list.appendChild(card(p)); });
       if (busy) setBusy(true);
-    }).catch(function (e) { document.getElementById('list').textContent = 'Нет связи: ' + e; });
+    }).catch(function (e) { document.getElementById('list').textContent = 'No connection: ' + e; });
   }
 
 
-  // ---- Новый проект: форма собирает описание, секреты шифруются на этом компьютере перед отправкой ----
+  // ---- New project: the form builds the description, secrets are encrypted on this computer before sending ----
   function newProject() {
     var root = document.getElementById('np'), box = el('div', 'card np');
     root.appendChild(box);
@@ -325,55 +325,55 @@
     function row(parent) { var r = el('div', 'row'); parent.appendChild(r); return r; }
     function sub(parent, title) { var b = el('div', 'box'); b.appendChild(el('div', 'meta', title)); parent.appendChild(b); return b; }
 
-    var top = row(box), name = field(top, 'Имя проекта (латиница, цифры, «-»)', 'shop'), desc = field(top, 'Описание (необязательно)', '');
+    var top = row(box), name = field(top, 'Project name (Latin letters, digits, "-")', 'shop'), desc = field(top, 'Description (optional)', '');
 
-    var dbOn = check(box, 'База PostgreSQL'), dbBox = sub(box, 'База'), dbRow = row(dbBox);
-    var dbServer = field(dbRow, 'Сервер (пусто: этот; иначе имя из lite server add)', ''), dbPort = field(dbRow, 'Порт (для другого сервера)', '5432'),
-      dbFmt = select(dbRow, 'Формат строки подключения', [['url', 'url'], ['npgsql', 'npgsql (.NET)'], ['libpq', 'libpq']]),
-      dbPass = field(dbBox, 'Пароль роли (только для базы на другом сервере)', '');
+    var dbOn = check(box, 'PostgreSQL database'), dbBox = sub(box, 'Database'), dbRow = row(dbBox);
+    var dbServer = field(dbRow, 'Server (empty: this one; otherwise a name from lite server add)', ''), dbPort = field(dbRow, 'Port (for another server)', '5432'),
+      dbFmt = select(dbRow, 'Connection string format', [['url', 'url'], ['npgsql', 'npgsql (.NET)'], ['libpq', 'libpq']]),
+      dbPass = field(dbBox, 'Role password (only for a database on another server)', '');
     dbPass.type = 'password'; dbBox.style.display = 'none';
     dbOn.addEventListener('change', function () { dbBox.style.display = dbOn.checked ? '' : 'none'; });
 
-    var regOn = check(box, 'Приватный реестр образов'), regBox = sub(box, 'Реестр'), regRow = row(regBox);
-    var regHost = field(regRow, 'Хост реестра', 'ghcr.io'), regUser = field(regRow, 'Пользователь', ''), regTok = field(regBox, 'Токен на чтение', '');
+    var regOn = check(box, 'Private image registry'), regBox = sub(box, 'Registry'), regRow = row(regBox);
+    var regHost = field(regRow, 'Registry host', 'ghcr.io'), regUser = field(regRow, 'User', ''), regTok = field(regBox, 'Read-only token', '');
     regTok.type = 'password'; regBox.style.display = 'none';
     regOn.addEventListener('change', function () { regBox.style.display = regOn.checked ? '' : 'none'; });
 
-    box.appendChild(el('h3', null, 'Компоненты'));
+    box.appendChild(el('h3', null, 'Components'));
     var svcBox = el('div'); box.appendChild(svcBox);
-    var addSvc = el('button', null, '+ Компонент'); addSvc.type = 'button'; box.appendChild(addSvc);
-    box.appendChild(el('h3', null, 'Сайты'));
+    var addSvc = el('button', null, '+ Component'); addSvc.type = 'button'; box.appendChild(addSvc);
+    box.appendChild(el('h3', null, 'Sites'));
     var siteBox = el('div'); box.appendChild(siteBox);
-    var addSite = el('button', null, '+ Сайт'); addSite.type = 'button'; box.appendChild(addSite);
-    var keyArea = area(box, 'Ключ CI (ssh-ed25519, необязательно)', 'ssh-ed25519 AAAA… github-actions');
+    var addSite = el('button', null, '+ Site'); addSite.type = 'button'; box.appendChild(addSite);
+    var keyArea = area(box, 'CI key (ssh-ed25519, optional)', 'ssh-ed25519 AAAA… github-actions');
 
     function addService() {
-      var b = sub(svcBox, 'Компонент'), s = {};
+      var b = sub(svcBox, 'Component'), s = {};
       var r1 = row(b);
-      s.name = field(r1, 'Имя', 'api');
-      s.kind = select(r1, 'Как запускается', [['quadlet', 'контейнер (podman)'], ['unit', 'процесс на сервере (systemd)']]);
+      s.name = field(r1, 'Name', 'api');
+      s.kind = select(r1, 'How it runs', [['quadlet', 'container (podman)'], ['unit', 'process on the server (systemd)']]);
       var cont = el('div'), unit = el('div'); b.appendChild(cont); b.appendChild(unit); unit.style.display = 'none';
-      var rc = row(cont); s.image = field(rc, 'Образ без тега', 'ghcr.io/owner/app'); s.cport = field(rc, 'Порт приложения в контейнере', '8080');
-      var ru = row(unit); s.exec = field(ru, 'Команда (аргументы через пробел; путь от каталога релиза)', './bin/app');
-      s.rurl = field(ru, 'Адрес архива tar.gz (https, {sha} подставляется)', 'https://example.com/app-{sha}.tar.gz');
-      s.rkey = field(unit, 'Открытый ключ minisign, которым CI подписывает архив (подпись: адрес архива + .minisig)', 'RWQ…');
-      s.rtok = field(unit, 'Токен для скачивания (необязательно)', ''); s.rtok.type = 'password';
-      var r2 = row(b); s.mem = field(r2, 'Память', '512m'); s.health = field(r2, 'Путь проверки готовности', '/health/ready');
-      s.env = area(b, 'Переменные (по строке: ИМЯ=значение)', 'ASPNETCORE_ENVIRONMENT=Production');
-      s.sec = area(b, 'Секреты (по строке: ИМЯ=значение; хранятся на сервере, в описание не попадают)', 'Auth__SessionSecret=…');
-      s.dbenv = field(b, 'Переменная со строкой подключения к базе (необязательно)', 'ConnectionStrings__Default');
-      var del = el('button', null, 'Убрать компонент'); del.type = 'button'; b.appendChild(del);
+      var rc = row(cont); s.image = field(rc, 'Image without a tag', 'ghcr.io/owner/app'); s.cport = field(rc, 'Application port in the container', '8080');
+      var ru = row(unit); s.exec = field(ru, 'Command (arguments separated by spaces; path from the release directory)', './bin/app');
+      s.rurl = field(ru, 'tar.gz archive URL (https, {sha} is substituted)', 'https://example.com/app-{sha}.tar.gz');
+      s.rkey = field(unit, 'minisign public key that CI signs the archive with (signature: archive URL + .minisig)', 'RWQ…');
+      s.rtok = field(unit, 'Download token (optional)', ''); s.rtok.type = 'password';
+      var r2 = row(b); s.mem = field(r2, 'Memory', '512m'); s.health = field(r2, 'Readiness check path', '/health/ready');
+      s.env = area(b, 'Variables (one per line: NAME=value)', 'ASPNETCORE_ENVIRONMENT=Production');
+      s.sec = area(b, 'Secrets (one per line: NAME=value; stored on the server, not part of the description)', 'Auth__SessionSecret=…');
+      s.dbenv = field(b, 'Variable with the database connection string (optional)', 'ConnectionStrings__Default');
+      var del = el('button', null, 'Remove component'); del.type = 'button'; b.appendChild(del);
       s.box = b;
       s.kind.addEventListener('change', function () { var u = s.kind.value === 'unit'; cont.style.display = u ? 'none' : ''; unit.style.display = u ? '' : 'none'; });
       del.addEventListener('click', function () { b.remove(); services = services.filter(function (x) { return x !== s; }); });
       services.push(s);
     }
     function addSiteBox() {
-      var b = sub(siteBox, 'Сайт'), s = {}, r1 = row(b);
-      s.name = field(r1, 'Имя', 'main'); s.host = field(r1, 'Домен', 'shop.example.com'); s.svc = field(r1, 'Компонент', 'api');
+      var b = sub(siteBox, 'Site'), s = {}, r1 = row(b);
+      s.name = field(r1, 'Name', 'main'); s.host = field(r1, 'Domain', 'shop.example.com'); s.svc = field(r1, 'Component', 'api');
       var r2 = row(b);
-      s.proxy = select(r2, 'Доверенный прокси', [['none', 'нет'], ['cloudflare', 'Cloudflare']]); s.body = field(r2, 'Максимальное тело запроса', '5MB');
-      var del = el('button', null, 'Убрать сайт'); del.type = 'button'; b.appendChild(del);
+      s.proxy = select(r2, 'Trusted proxy', [['none', 'none'], ['cloudflare', 'Cloudflare']]); s.body = field(r2, 'Maximum request body', '5MB');
+      var del = el('button', null, 'Remove site'); del.type = 'button'; b.appendChild(del);
       del.addEventListener('click', function () { b.remove(); sites = sites.filter(function (x) { return x !== s; }); });
       sites.push(s);
     }
@@ -385,7 +385,7 @@
     function secretName(parts) { var n = parts.join('_').toLowerCase().replace(/[^a-z0-9_]/g, '_'); return /^[a-z]/.test(n) ? n : 's_' + n; }
     function opt(o, k, v) { if (v !== '' && v !== undefined && v !== null) o[k] = v; }
 
-    // Собирает описание проекта и значения секретов; при ошибке в форме возвращает строку.
+    // Builds the project description and the secret values; returns a string if the form has an error.
     function build() {
       var p = { schema: 'lite-deploy/project/v2', name: name.value.trim() }, sec = {}, errs = [];
       opt(p, 'description', desc.value.trim());
@@ -412,9 +412,9 @@
         }
         var lim = {}; opt(lim, 'memory', s.mem.value.trim()); if (Object.keys(lim).length) o.limits = lim;
         if (s.health.value.trim()) o.health = { path: s.health.value.trim() };
-        var env = {}; lines(s.env.value).forEach(function (l) { var kv = pair(l); if (kv) env[kv[0]] = kv[1]; else errs.push('Переменная «' + l + '»: нужно ИМЯ=значение'); });
+        var env = {}; lines(s.env.value).forEach(function (l) { var kv = pair(l); if (kv) env[kv[0]] = kv[1]; else errs.push('Variable "' + l + '": NAME=value is required'); });
         if (Object.keys(env).length) o.env = env;
-        var sc = {}; lines(s.sec.value).forEach(function (l) { var kv = pair(l); if (kv) { var sn = secretName([n, kv[0]]); sc[kv[0]] = 'secret://' + sn; sec[sn] = kv[1]; } else errs.push('Секрет «' + l.split('=')[0] + '»: нужно ИМЯ=значение'); });
+        var sc = {}; lines(s.sec.value).forEach(function (l) { var kv = pair(l); if (kv) { var sn = secretName([n, kv[0]]); sc[kv[0]] = 'secret://' + sn; sec[sn] = kv[1]; } else errs.push('Secret "' + l.split('=')[0] + '": NAME=value is required'); });
         if (Object.keys(sc).length) o.secrets = sc;
         opt(o, 'database_env', s.dbenv.value.trim());
         p.services[n] = o;
@@ -427,7 +427,7 @@
       return errs.length ? errs.join('\n') : { project: p, secrets: sec };
     }
 
-    var go = el('button', 'primary', 'Проверить план'), create = el('button', null, 'Создать проект'), out = el('div');
+    var go = el('button', 'primary', 'Preview plan'), create = el('button', null, 'Create project'), out = el('div');
     go.type = 'button'; create.type = 'button'; create.disabled = true;
     var btns = el('div', 'row'); btns.style.marginTop = '14px'; btns.appendChild(go); btns.appendChild(create); box.appendChild(btns); box.appendChild(out);
 
@@ -439,7 +439,7 @@
         return false;
       }
       var t = el('table'), h = el('tr');
-      ['Шаг', 'Действие', 'Что будет'].forEach(function (x) { h.appendChild(el('th', null, x)); }); t.appendChild(h);
+      ['Step', 'Action', 'What will happen'].forEach(function (x) { h.appendChild(el('th', null, x)); }); t.appendChild(h);
       (r.data.steps || []).forEach(function (s) {
         var tr = el('tr'); tr.appendChild(el('td', null, s.id)); tr.appendChild(el('td', null, s.action)); tr.appendChild(el('td', s.state === 'failed' ? 'down' : null, (s.state || '') + (s.detail ? '  ' + s.detail : '') + (s.error ? '  ' + s.error : ''))); t.appendChild(tr);
       });
@@ -453,25 +453,25 @@
       var body = { project: b.project, secrets: b.secrets };
       if (path.indexOf('create') >= 0 && lastHash) body.expect_project_hash = lastHash;
       setBusy(true); msg('ok', wait);
-      api(path, body).then(function (r) { done(r, show(r)); }).catch(function (e) { msg('err', 'Нет связи: ' + e); }).then(function () { setBusy(false); create.disabled = !lastHash; });
+      api(path, body).then(function (r) { done(r, show(r)); }).catch(function (e) { msg('err', 'No connection: ' + e); }).then(function () { setBusy(false); create.disabled = !lastHash; });
     }
     go.addEventListener('click', function () {
       lastHash = '';
-      send('/api/project/preview', 'Строю план…', function (r, ok) {
-        if (ok) { lastHash = r.data.project_hash; msg('ok', 'План построен, на сервере ничего не изменено. Проверьте шаги и создайте проект.'); } else { clearMsg(); }
+      send('/api/project/preview', 'Building the plan…', function (r, ok) {
+        if (ok) { lastHash = r.data.project_hash; msg('ok', 'The plan is built, nothing on the server has changed. Review the steps, then create the project.'); } else { clearMsg(); }
       });
     });
     create.addEventListener('click', function () {
-      if (!lastHash || !confirm('Создать проект ' + name.value.trim() + ' на сервере по показанному плану?')) return;
-      send('/api/project/create', 'Создаю проект, это может занять несколько минут…', function (r, ok) {
-        if (ok) { msg('ok', 'Проект создан. Выкатите версию кнопкой «Выкатить» в карточке проекта.'); lastHash = ''; load(); } else { clearMsg(); }
+      if (!lastHash || !confirm('Create project ' + name.value.trim() + ' on the server using the plan shown?')) return;
+      send('/api/project/create', 'Creating the project, this may take a few minutes…', function (r, ok) {
+        if (ok) { msg('ok', 'Project created. Deploy a version with the "Deploy" button on the project card.'); lastHash = ''; load(); } else { clearMsg(); }
       });
     });
     [name, desc, dbServer, dbPort, dbPass, regHost, regUser, regTok, keyArea].forEach(function (x) { x.addEventListener('input', function () { lastHash = ''; create.disabled = true; }); });
   }
 
   newProject();
-  api('/api/info').then(function (i) { document.getElementById('srv').textContent = i.host ? 'сервер: ' + i.host : 'этот компьютер'; }).catch(function () {});
+  api('/api/info').then(function (i) { document.getElementById('srv').textContent = i.host ? 'server: ' + i.host : 'this computer'; }).catch(function () {});
   load(); loadFw(); loadPlugins();
   setInterval(function () { if (!busy && document.activeElement.tagName !== 'INPUT') { load(); loadFw(); } }, 10000);
 })();

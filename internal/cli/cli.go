@@ -110,10 +110,12 @@ func RunEnv(args []string, env Env) int {
 		jsonOut = true
 	}
 	var r result
-	if cmd := directRoot(rest, env); cmd != "" {
+	if isHelp(rest) {
+		r = cmdHelp(env)
+	} else if cmd := directRoot(rest, env); cmd != "" {
 		r = result{command: cmd, err: &ErrorBody{Code: "permission_denied",
-			Message: "lite не работает при входе под root: зайдите обычным пользователем и запускайте через sudo",
-			Hint:    "нет такого пользователя: создайте его командой lite init --user имя (init единственная команда, которая работает от root)"}}
+			Message: "lite does not work when logged in as root: log in as a regular user and use sudo",
+			Hint:    "no such user: create it with lite init --user NAME (init is the only command that runs as root)"}}
 	} else {
 		r = dispatch(rest, env)
 	}
@@ -129,17 +131,17 @@ func RunEnv(args []string, env Env) int {
 		writeJSON(env.Stdout, Envelope{OK: r.err == nil, APIVersion: APIVersion, Command: r.command, Data: r.data, Warnings: r.warn, Error: r.err})
 	} else if r.err != nil {
 		_, _ = fmt.Fprint(env.Stdout, r.text)
-		_, _ = fmt.Fprintf(env.Stderr, "ОШИБКА [%s]: %s\n", r.err.Code, r.err.Message)
+		_, _ = fmt.Fprintf(env.Stderr, "ERROR [%s]: %s\n", r.err.Code, r.err.Message)
 		for _, d := range r.err.Details {
 			_, _ = fmt.Fprintf(env.Stderr, "  %s: %s (%s)\n", d.Path, d.Message, d.Code)
 		}
 		if r.err.Hint != "" {
-			_, _ = fmt.Fprintf(env.Stderr, "Подсказка: %s\n", r.err.Hint)
+			_, _ = fmt.Fprintf(env.Stderr, "Hint: %s\n", r.err.Hint)
 		}
 	} else {
 		_, _ = fmt.Fprint(env.Stdout, r.text)
 		for _, w := range r.warn {
-			_, _ = fmt.Fprintf(env.Stderr, "Предупреждение [%s]: %s\n", w.Code, w.Message)
+			_, _ = fmt.Fprintf(env.Stderr, "Warning [%s]: %s\n", w.Code, w.Message)
 		}
 	}
 	if r.err != nil {
@@ -165,19 +167,22 @@ func directRoot(args []string, env Env) string {
 }
 
 func dispatch(args []string, env Env) result {
+	if isHelp(args) {
+		return cmdHelp(env)
+	}
 	if len(args) == 0 {
-		return fail("usage", CodeUsage, "использование: lite-deploy <команда>; команды: version, schema, project validate|plan|create|list, apply, deploy, rollback, status, firewall, ui")
+		return fail("usage", CodeUsage, "usage: lite-deploy <command>; commands: version, schema, project validate|plan|create|list, apply, deploy, rollback, status, firewall, ui (lite --help lists everything)")
 	}
 	switch args[0] {
 	case "version":
 		return result{command: "version",
 			data: map[string]any{"version": Version, "schemas": []string{ProjectSchema, PlanSchema}},
-			text: fmt.Sprintf("lite-deploy %s\nсхемы: %s, %s\n", Version, ProjectSchema, PlanSchema)}
+			text: fmt.Sprintf("lite-deploy %s\n", Version)}
 	case "schema":
 		return cmdSchema(args[1:])
 	case "project":
 		if len(args) < 2 {
-			return fail("project", CodeUsage, "использование: lite-deploy project validate|plan|list")
+			return fail("project", CodeUsage, "usage: lite-deploy project validate|plan|list")
 		}
 		switch args[1] {
 		case "validate":
@@ -191,7 +196,7 @@ func dispatch(args []string, env Env) result {
 		case "bundle":
 			return cmdProjectBundle(args[2:], env)
 		}
-		return fail("project", CodeUsage, "неизвестная подкоманда project: "+args[1])
+		return fail("project", CodeUsage, "unknown project subcommand: "+args[1])
 	case "apply":
 		return cmdApply(args[1:], env)
 	case "init":
@@ -232,7 +237,7 @@ func dispatch(args []string, env Env) result {
 			return cmdPluginRun(args[0], args[1:], env)
 		}
 	}
-	return fail("usage", CodeUsage, "неизвестная команда: "+args[0]+" (плагины: lite plugin list)")
+	return fail("usage", CodeUsage, "unknown command: "+args[0]+" (plugins: lite plugin list)")
 }
 
 // listFlag повторяемый флаг.
@@ -270,7 +275,7 @@ func loadConfig(env Env, command string) (config.Config, *result) {
 		return c, &r
 	}
 	if len(issues) > 0 {
-		r := result{command: command, err: &ErrorBody{Code: plan.CodePrecondition, Message: "файл " + path + " не прошёл проверку", Details: issues}}
+		r := result{command: command, err: &ErrorBody{Code: plan.CodePrecondition, Message: "file " + path + " did not pass validation", Details: issues}}
 		return c, &r
 	}
 	return c, nil
@@ -285,11 +290,11 @@ func readInput(env Env, path string) ([]byte, error) {
 
 func cmdSchema(args []string) result {
 	if len(args) != 1 {
-		return fail("schema", CodeUsage, "использование: lite-deploy schema <project|plan|result|error>")
+		return fail("schema", CodeUsage, "usage: lite-deploy schema <project|plan|result|error>")
 	}
 	b, ok := Schemas()[args[0]]
 	if !ok {
-		return fail("schema", CodeUsage, "неизвестная схема "+args[0]+"; есть: "+strings.Join(SchemaNames, ", "))
+		return fail("schema", CodeUsage, "unknown schema "+args[0]+"; available: "+strings.Join(SchemaNames, ", "))
 	}
 	var data any
 	_ = json.Unmarshal(b, &data)
@@ -304,12 +309,12 @@ func loadProject(env Env, command string, args []string) (*project.Project, []st
 	fs.Var(&cts, "ciphertext", "")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 1 {
-		r := fail(command, CodeUsage, "использование: lite-deploy "+strings.ReplaceAll(command, ".", " ")+" <project.json|-> [--out файл] [--ciphertext имя=файл] [--rotate-password]")
+		r := fail(command, CodeUsage, "usage: lite-deploy "+strings.ReplaceAll(command, ".", " ")+" <project.json|-> [--out file] [--ciphertext name=file] [--rotate-password]")
 		return nil, nil, &r
 	}
 	data, err := readInput(env, pos[0])
 	if err != nil {
-		r := fail(command, CodeIO, "не удалось прочитать описание проекта: "+err.Error())
+		r := fail(command, CodeIO, "could not read the project description: "+err.Error())
 		return nil, nil, &r
 	}
 	cfg, bad := loadConfig(env, command)
@@ -319,7 +324,7 @@ func loadProject(env Env, command string, args []string) (*project.Project, []st
 	var p *project.Project
 	var issues []schema.Issue
 	if len(data) > cfg.Limits.ProjectBytes {
-		issues = []schema.Issue{{Path: "/", Code: "too_large", Message: fmt.Sprintf("файл больше %d байт", cfg.Limits.ProjectBytes)}}
+		issues = []schema.Issue{{Path: "/", Code: "too_large", Message: fmt.Sprintf("the file is larger than %d bytes", cfg.Limits.ProjectBytes)}}
 	} else {
 		p, issues = project.Parse(data)
 	}
@@ -327,7 +332,7 @@ func loadProject(env Env, command string, args []string) (*project.Project, []st
 		issues = project.Validate(p)
 	}
 	if len(issues) > 0 {
-		r := result{command: command, err: &ErrorBody{Code: plan.CodeInvalidProject, Message: "описание проекта не прошло проверку", Details: issues, Hint: "исправьте поля из details"}}
+		r := result{command: command, err: &ErrorBody{Code: plan.CodeInvalidProject, Message: "the project description did not pass validation", Details: issues, Hint: "fix the fields listed in details"}}
 		return nil, nil, &r
 	}
 	extra := append([]string{*out, fmt.Sprint(*rotate)}, cts...)
@@ -340,7 +345,7 @@ func cmdValidate(args []string, env Env) result {
 		return *bad
 	}
 	return result{command: "project.validate", data: map[string]any{"valid": true},
-		text: fmt.Sprintf("Описание проекта %s верно: сервисов %d, сайтов %d.\n", p.Name, len(p.Services), len(p.Sites))}
+		text: fmt.Sprintf("Project %s is valid: services %d, sites %d.\n", p.Name, len(p.Services), len(p.Sites))}
 }
 
 type stepView struct {
@@ -369,12 +374,12 @@ func preparePlan(command string, args []string, env Env) (*prepared, *result) {
 	for _, c := range cts {
 		name, path, ok := strings.Cut(c, "=")
 		if !ok || name == "" || path == "" {
-			r := fail(command, CodeUsage, "--ciphertext ожидает имя=файл")
+			r := fail(command, CodeUsage, "--ciphertext expects name=file")
 			return nil, &r
 		}
 		b, err := os.ReadFile(path)
 		if err != nil {
-			r := fail(command, CodeIO, "не удалось прочитать шифртекст "+name+": "+err.Error())
+			r := fail(command, CodeIO, "could not read the ciphertext "+name+": "+err.Error())
 			return nil, &r
 		}
 		ciphertexts[name] = strings.TrimSpace(string(b))
@@ -417,18 +422,18 @@ func cmdPlan(args []string, env Env) result {
 	if out != "" {
 		b, _ := json.MarshalIndent(pl, "", "  ")
 		if err := os.WriteFile(out, append(b, '\n'), 0o600); err != nil {
-			return fail("project.plan", CodeIO, "не удалось записать план: "+err.Error())
+			return fail("project.plan", CodeIO, "could not write the plan: "+err.Error())
 		}
 	}
 	steps := make([]stepView, 0, len(pl.Steps))
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "План %s для проекта %s\nХэш: %s\nДействует до: %s\n\n", pl.ID, pl.Project, pl.Hash, pl.ExpiresAt)
+	fmt.Fprintf(&sb, "Plan %s for project %s\nHash: %s\nValid until: %s\n\n", pl.ID, pl.Project, pl.Hash, pl.ExpiresAt)
 	for _, s := range pl.Steps {
 		steps = append(steps, stepView{ID: s.ID, Action: s.Action, Class: s.Class, Summary: s.Summary})
 		fmt.Fprintf(&sb, "  %s  %-20s %s\n", s.ID, s.Action, s.Summary)
 	}
 	if out != "" {
-		fmt.Fprintf(&sb, "\nПлан записан в %s. Изменений на сервере нет: план только описывает их.\n", out)
+		fmt.Fprintf(&sb, "\nPlan written to %s. Nothing on the server has changed: a plan only describes the changes.\n", out)
 	}
 	return result{command: "project.plan", data: map[string]any{"plan": pl, "steps": steps}, text: sb.String()}
 }
@@ -440,19 +445,19 @@ func cmdApply(args []string, env Env) result {
 	projFile := fs.String("project-file", "", "")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 1 {
-		return fail("apply", CodeUsage, "использование: lite-deploy apply <plan.json|-> [--dry-run] [--yes] [--project-file project.json]")
+		return fail("apply", CodeUsage, "usage: lite-deploy apply <plan.json|-> [--dry-run] [--yes] [--project-file project.json]")
 	}
 	if !env.root() {
-		return fail("apply", "permission_denied", "apply выполняется от root: sudo lite-deploy apply …")
+		return fail("apply", "permission_denied", "apply must run as root: sudo lite-deploy apply …")
 	}
 	data, err := readInput(env, pos[0])
 	if err != nil {
-		return fail("apply", CodeIO, "не удалось прочитать план: "+err.Error())
+		return fail("apply", CodeIO, "could not read the plan: "+err.Error())
 	}
 	var projJSON []byte
 	if *projFile != "" {
 		if projJSON, err = os.ReadFile(*projFile); err != nil {
-			return fail("apply", CodeIO, "не удалось прочитать описание проекта: "+err.Error())
+			return fail("apply", CodeIO, "could not read the project description: "+err.Error())
 		}
 	}
 	return applyPlan("apply", env, data, *dry, *yes, projJSON)
@@ -491,17 +496,17 @@ func applyPlan(command string, env Env, data []byte, dry, yes bool, projJSON []b
 	if !dry {
 		if !yes {
 			if env.Interactive == nil || !env.Interactive() {
-				return fail(command, "confirmation_required", "без терминала применение требует флага --yes")
+				return fail(command, "confirmation_required", "without a terminal, applying requires the --yes flag")
 			}
 			preview, err := executor.Apply(ctx, ex, pl, true)
 			if err != nil {
 				return fail(command, CodeInternal, err.Error())
 			}
-			_, _ = fmt.Fprint(env.Stderr, renderReport(preview, "Предпросмотр (ничего не изменено):"))
-			_, _ = fmt.Fprint(env.Stderr, "\nВведите yes, чтобы применить: ")
+			_, _ = fmt.Fprint(env.Stderr, renderReport(preview, "Preview (nothing changed):"))
+			_, _ = fmt.Fprint(env.Stderr, "\nType yes to apply: ")
 			line, _ := bufio.NewReader(env.Stdin).ReadString('\n')
 			if strings.TrimSpace(line) != "yes" {
-				return fail(command, "confirmation_required", "применение отменено: подтверждение не получено")
+				return fail(command, "confirmation_required", "applying was canceled: no confirmation received")
 			}
 		}
 	}
@@ -518,12 +523,12 @@ func applyPlan(command string, env Env, data []byte, dry, yes bool, projJSON []b
 				details = append(details, schema.Issue{Path: "/steps/" + s.ID, Code: s.Action, Message: s.Error})
 			}
 		}
-		return result{command: command, text: text, err: &ErrorBody{Code: "step_failed", Message: "шаг " + rep.Failed + " завершился ошибкой; уже выполненные шаги остались, повторный apply продолжит", Details: details,
-			Hint: "исправьте причину и запустите apply с тем же планом (пока он не истёк)"}, data: data2}
+		return result{command: command, text: text, err: &ErrorBody{Code: "step_failed", Message: "step " + rep.Failed + " failed; steps already done stay in place, running apply again will continue", Details: details,
+			Hint: "fix the cause and run apply with the same plan (while it has not expired)"}, data: data2}
 	}
 	r := result{command: command, data: data2, text: text}
 	if rep.Failed != "" {
-		r.warn = append(r.warn, Warning{Code: "would_fail", Message: "шаг " + rep.Failed + " завершился бы ошибкой"})
+		r.warn = append(r.warn, Warning{Code: "would_fail", Message: "step " + rep.Failed + " would have failed"})
 	}
 	return r
 }
@@ -533,7 +538,7 @@ func renderReport(rep *executor.Report, title string) string {
 	if title != "" {
 		sb.WriteString(title + "\n")
 	}
-	fmt.Fprintf(&sb, "План %s, хэш %s\n\n", rep.PlanID, rep.PlanHash)
+	fmt.Fprintf(&sb, "Plan %s, hash %s\n\n", rep.PlanID, rep.PlanHash)
 	for _, s := range rep.Steps {
 		fmt.Fprintf(&sb, "  %s  %-20s %-13s %s\n", s.ID, s.Action, s.State, joinNonEmpty(s.Detail, s.Error))
 	}
@@ -560,7 +565,7 @@ func cmdProjectCreate(args []string, env Env) result {
 	fs.Var(&cts, "ciphertext", "")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 1 {
-		return fail("project.create", CodeUsage, "использование: lite-deploy project create <project.json|-> [--yes] [--ciphertext имя=файл] [--rotate-password]")
+		return fail("project.create", CodeUsage, "usage: lite-deploy project create <project.json|-> [--yes] [--ciphertext name=file] [--rotate-password]")
 	}
 	if !env.root() {
 		return forwardProjectCreate(env, pos[0], *yes, *rotate, cts)
@@ -605,7 +610,7 @@ func cmdList(env Env) result {
 		fmt.Fprintf(&sb, "%s\t%s\n", n, ps.Hash)
 	}
 	if len(items) == 0 {
-		sb.WriteString("Проектов под управлением lite-deploy нет.\n")
+		sb.WriteString("No projects are managed by lite-deploy.\n")
 	}
 	return result{command: "project.list", data: map[string]any{"projects": items}, text: sb.String()}
 }

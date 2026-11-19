@@ -24,7 +24,7 @@ func Canonical(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return nil, errors.New("лишние данные после JSON")
+		return nil, errors.New("extra data after the JSON")
 	}
 	var buf bytes.Buffer
 	if err := writeCanon(&buf, v); err != nil {
@@ -57,7 +57,7 @@ func writeCanon(buf *bytes.Buffer, v any) error {
 	case json.Number:
 		n, err := strconv.ParseInt(x.String(), 10, 64)
 		if err != nil {
-			return fmt.Errorf("число %q не целое", x.String())
+			return fmt.Errorf("the number %q is not an integer", x.String())
 		}
 		buf.WriteString(strconv.FormatInt(n, 10))
 	case string:
@@ -93,7 +93,7 @@ func writeCanon(buf *bytes.Buffer, v any) error {
 		}
 		buf.WriteByte('}')
 	default:
-		return fmt.Errorf("неподдерживаемый тип %T", v)
+		return fmt.Errorf("unsupported type %T", v)
 	}
 	return nil
 }

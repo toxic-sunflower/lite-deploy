@@ -32,12 +32,12 @@ func ValidName(n string) bool { return nameRe.MatchString(n) && n != Local }
 func ValidAddress(a string) error {
 	if ip, err := netip.ParseAddr(a); err == nil {
 		if ip.IsUnspecified() || ip.IsLoopback() || ip.IsMulticast() {
-			return fmt.Errorf("адрес %s не годится для обращения с другого сервера", a)
+			return fmt.Errorf("address %s is not usable from another server", a)
 		}
 		return nil
 	}
 	if len(a) > 253 || !hostRe.MatchString(a) {
-		return errors.New("адрес: IP или имя хоста")
+		return errors.New("address: an IP or a host name")
 	}
 	return nil
 }
@@ -55,7 +55,7 @@ func Load(f host.FS) (map[string]string, error) {
 		Servers map[string]string `json:"servers"`
 	}
 	if err := json.Unmarshal(b, &j); err != nil {
-		return nil, fmt.Errorf("реестр серверов %s повреждён: %w", Path, err)
+		return nil, fmt.Errorf("the server registry %s is corrupt: %w", Path, err)
 	}
 	if j.Servers == nil {
 		j.Servers = map[string]string{}

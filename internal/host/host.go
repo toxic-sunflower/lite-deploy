@@ -49,7 +49,7 @@ type ExecRunner struct{}
 // Run запускает команду; ненулевой код выхода возвращается в Result, а не как ошибка.
 func (ExecRunner) Run(ctx context.Context, c Cmd) (Result, error) {
 	if c.Name == "" {
-		return Result{}, errors.New("пустое имя команды")
+		return Result{}, errors.New("empty command name")
 	}
 	t := c.Timeout
 	if t == 0 {
@@ -70,7 +70,7 @@ func (ExecRunner) Run(ctx context.Context, c Cmd) (Result, error) {
 	err := cmd.Run()
 	res := Result{Stdout: out.Bytes(), Stderr: errb.Bytes()}
 	if ctx.Err() != nil {
-		return res, fmt.Errorf("команда %s остановлена по таймауту %s: %w", c.Name, t, ctx.Err())
+		return res, fmt.Errorf("command %s was stopped by the timeout %s: %w", c.Name, t, ctx.Err())
 	}
 	var ee *exec.ExitError
 	if errors.As(err, &ee) {
@@ -280,7 +280,7 @@ type FakeRunner struct {
 func (f *FakeRunner) Run(_ context.Context, c Cmd) (Result, error) {
 	f.Calls = append(f.Calls, c)
 	if f.Handler == nil {
-		return Result{}, fmt.Errorf("FakeRunner: нет обработчика для %s", c.Name)
+		return Result{}, fmt.Errorf("FakeRunner: no handler for %s", c.Name)
 	}
 	return f.Handler(c)
 }

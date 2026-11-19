@@ -29,15 +29,15 @@ var passwordRe = regexp.MustCompile(`^[A-Za-z0-9_.~-]{16,128}$`)
 // readPassword читает пароль из стандартного ввода (одна строка).
 func readPassword(in io.Reader) (string, error) {
 	if in == nil {
-		return "", plugin.Errorf("usage", "пароль читается из стандартного ввода: echo ПАРОЛЬ | lite pg ... --password-stdin")
+		return "", plugin.Errorf("usage", "the password is read from standard input: echo PASSWORD | lite pg ... --password-stdin")
 	}
 	b, err := io.ReadAll(io.LimitReader(in, 1024))
 	if err != nil {
-		return "", plugin.Errorf("step_failed", "чтение пароля: %v", err)
+		return "", plugin.Errorf("step_failed", "read the password: %v", err)
 	}
 	p := strings.TrimRight(string(b), "\r\n")
 	if !passwordRe.MatchString(p) {
-		return "", plugin.Errorf("usage", "пароль: 16–128 знаков из A-Z a-z 0-9 _ . ~ -")
+		return "", plugin.Errorf("usage", "password: 16–128 characters from A-Z a-z 0-9 _ . ~ -")
 	}
 	return p, nil
 }
@@ -113,7 +113,7 @@ func (t tools) userDBs() ([]string, error) {
 // pgBackup снимает копию указанной базы (или всех баз) и удаляет копии сверх pgKeep.
 func (t tools) pgBackup(args []string) (plugin.Output, error) {
 	if len(args) > 1 {
-		return plugin.Output{}, plugin.Errorf("usage", "использование: lite pg backup [БАЗА]")
+		return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg backup [DATABASE]")
 	}
 	dbs := args
 	if len(args) == 0 {
@@ -122,20 +122,20 @@ func (t tools) pgBackup(args []string) (plugin.Output, error) {
 			return plugin.Output{}, err
 		}
 	} else if !pgNameRe.MatchString(args[0]) {
-		return plugin.Output{}, plugin.Errorf("usage", "неверное имя базы")
+		return plugin.Output{}, plugin.Errorf("usage", "invalid database name")
 	}
 	// postgres должен дойти до своего каталога: родителю нужно право входа (x) для остальных, читать его содержимое по-прежнему нельзя
 	if err := t.env.FS.MkdirAll(backupRoot, 0o711); err != nil {
-		return plugin.Output{}, plugin.Errorf("step_failed", "каталог %s: %v", backupRoot, err)
+		return plugin.Output{}, plugin.Errorf("step_failed", "directory %s: %v", backupRoot, err)
 	}
 	if err := t.env.FS.Chmod(backupRoot, 0o711); err != nil {
-		return plugin.Output{}, plugin.Errorf("step_failed", "права %s: %v", backupRoot, err)
+		return plugin.Output{}, plugin.Errorf("step_failed", "permissions %s: %v", backupRoot, err)
 	}
 	if err := t.env.FS.MkdirAll(PGBackupDir, 0o750); err != nil {
-		return plugin.Output{}, plugin.Errorf("step_failed", "каталог %s: %v", PGBackupDir, err)
+		return plugin.Output{}, plugin.Errorf("step_failed", "directory %s: %v", PGBackupDir, err)
 	}
 	if err := t.env.FS.Chown(PGBackupDir, "postgres", "postgres"); err != nil {
-		return plugin.Output{}, plugin.Errorf("step_failed", "владелец %s: %v", PGBackupDir, err)
+		return plugin.Output{}, plugin.Errorf("step_failed", "owner %s: %v", PGBackupDir, err)
 	}
 	var sb strings.Builder
 	var made []string
@@ -151,23 +151,23 @@ func (t tools) pgBackup(args []string) (plugin.Output, error) {
 			} else {
 				msg = strings.TrimSpace(string(res.Stderr))
 			}
-			return plugin.Output{}, plugin.Errorf("step_failed", "копия базы %s не снята: %s", db, msg)
+			return plugin.Output{}, plugin.Errorf("step_failed", "the backup of database %s was not taken: %s", db, msg)
 		}
 		if cfg, cerr := t.backupConfig(); cerr == nil && cfg.EncryptDumps {
 			if _, err := t.encryptFile(path, path+".age", cfg.Recipient); err != nil {
 				_ = t.env.FS.Remove(path + ".age")
 				_ = t.env.FS.Remove(path)
-				return plugin.Output{}, plugin.Errorf("step_failed", "шифрование копии базы %s: %v", db, err)
+				return plugin.Output{}, plugin.Errorf("step_failed", "encrypting the backup of database %s: %v", db, err)
 			}
 			_ = t.env.FS.Remove(path) // открытая копия не остаётся
 			name += ".age"
 		}
 		made = append(made, name)
-		fmt.Fprintf(&sb, "Копия %s\n", name)
+		fmt.Fprintf(&sb, "Backup %s\n", name)
 	}
 	removed := t.rotate()
 	if len(removed) > 0 {
-		fmt.Fprintf(&sb, "Удалено старых копий: %d\n", len(removed))
+		fmt.Fprintf(&sb, "Old backups removed: %d\n", len(removed))
 	}
 	if made == nil {
 		made = []string{}
@@ -198,7 +198,7 @@ func (t tools) pgBackupsList() (plugin.Output, error) {
 		list = append(list, map[string]string{"database": b.DB, "file": b.Name, "at": b.At.Format(time.RFC3339)})
 	}
 	if sb.Len() == 0 {
-		sb.WriteString("Копий нет.\n")
+		sb.WriteString("No backups.\n")
 	}
 	return plugin.Output{Text: sb.String(), Data: map[string]any{"backups": list}}, nil
 }
@@ -207,26 +207,26 @@ func (t tools) pgBackupsList() (plugin.Output, error) {
 func (t tools) pgRestore(args []string) (plugin.Output, error) {
 	args, identStdin := extractFlag(args, "--identity-stdin")
 	if len(args) != 2 || !pgNameRe.MatchString(args[0]) {
-		return plugin.Output{}, plugin.Errorf("usage", "использование: lite pg restore БАЗА ФАЙЛ [--identity-stdin] (файлы: lite pg backups; для .age закрытый ключ age со stdin)")
+		return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg restore DATABASE FILE [--identity-stdin] (files: lite pg backups; for .age give the age private key on stdin)")
 	}
 	m := backupFileRe.FindStringSubmatch(args[1])
 	if m == nil || m[1] != args[0] {
-		return plugin.Output{}, plugin.Errorf("usage", "файл должен быть копией базы %s из lite pg backups (имя без пути)", args[0])
+		return plugin.Output{}, plugin.Errorf("usage", "the file must be a backup of database %s from lite pg backups (a name without a path)", args[0])
 	}
 	if _, err := t.env.FS.Stat(PGBackupDir + "/" + args[1]); err != nil {
-		return plugin.Output{}, plugin.Errorf("precondition_failed", "файла %s нет", args[1])
+		return plugin.Output{}, plugin.Errorf("precondition_failed", "file %s does not exist", args[1])
 	}
 	have, err := t.psql(fmt.Sprintf("select 1 from pg_database where datname='%s'", args[0]))
 	if err != nil {
 		return plugin.Output{}, err
 	}
 	if strings.TrimSpace(have) == "" {
-		return plugin.Output{}, plugin.Errorf("precondition_failed", "базы %s нет: создайте её (lite pg create-db %s)", args[0], args[0])
+		return plugin.Output{}, plugin.Errorf("precondition_failed", "database %s does not exist: create it first (lite pg create-db %s)", args[0], args[0])
 	}
 	src := PGBackupDir + "/" + args[1]
 	if m[3] == ".age" {
 		if !identStdin {
-			return plugin.Output{}, plugin.Errorf("usage", "копия зашифрована: передайте закрытый ключ age со stdin и флагом --identity-stdin")
+			return plugin.Output{}, plugin.Errorf("usage", "the backup is encrypted: give the age private key on stdin with the --identity-stdin flag")
 		}
 		tmp, err := t.decryptToTemp(src, args[0])
 		if err != nil {
@@ -238,7 +238,7 @@ func (t tools) pgRestore(args []string) (plugin.Output, error) {
 	if err := t.must("runuser", "-u", "postgres", "--", "pg_restore", "--clean", "--if-exists", "-d", args[0], src); err != nil {
 		return plugin.Output{}, err
 	}
-	return textOut("База " + args[0] + " восстановлена из " + args[1] + ".\n"), nil
+	return textOut("Database " + args[0] + " restored from " + args[1] + ".\n"), nil
 }
 
 const (
@@ -249,17 +249,17 @@ const (
 // pgSchedule включает или выключает ежедневную копию (таймер systemd).
 func (t tools) pgSchedule(args []string) (plugin.Output, error) {
 	if len(args) != 1 || (args[0] != "on" && args[0] != "off") {
-		return plugin.Output{}, plugin.Errorf("usage", "использование: lite pg schedule on|off")
+		return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg schedule on|off")
 	}
 	if args[0] == "off" {
 		_ = t.must("systemctl", "disable", "--now", "lite-pg-backup.timer")
 		_ = t.env.FS.Remove(backupTimer)
 		_ = t.env.FS.Remove(backupService)
 		_ = t.must("systemctl", "daemon-reload")
-		return textOut("Ежедневная копия выключена.\n"), nil
+		return textOut("The daily backup is off.\n"), nil
 	}
-	svc := "[Unit]\nDescription=lite-deploy: копии баз PostgreSQL\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/lite-deploy pg backup\n"
-	tm := "[Unit]\nDescription=lite-deploy: ежедневная копия баз PostgreSQL\n\n[Timer]\nOnCalendar=*-*-* 03:30:00\nRandomizedDelaySec=15min\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n"
+	svc := "[Unit]\nDescription=lite-deploy: PostgreSQL backups\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/lite-deploy pg backup\n"
+	tm := "[Unit]\nDescription=lite-deploy: daily PostgreSQL backup\n\n[Timer]\nOnCalendar=*-*-* 03:30:00\nRandomizedDelaySec=15min\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n"
 	if err := t.env.FS.WriteFile(backupService, []byte(svc), 0o644); err != nil {
 		return plugin.Output{}, plugin.Errorf("step_failed", "%s: %v", backupService, err)
 	}
@@ -272,7 +272,7 @@ func (t tools) pgSchedule(args []string) (plugin.Output, error) {
 	if err := t.must("systemctl", "enable", "--now", "lite-pg-backup.timer"); err != nil {
 		return plugin.Output{}, err
 	}
-	return textOut("Копии баз будут сниматься ежедневно около 03:30; хранится по " + fmt.Sprint(pgKeep) + " последних.\n"), nil
+	return textOut("Database backups will run daily around 03:30; the latest ones are kept: " + fmt.Sprint(pgKeep) + " latest.\n"), nil
 }
 
 // backupFindings проверки свежести копий.
@@ -313,15 +313,15 @@ func (t tools) backupFindings() []plugin.Finding {
 		at, ok := newest[db]
 		switch {
 		case !ok:
-			out = append(out, finding("pg", "backup-"+db, plugin.LevelWarn, "у базы "+db+" нет копий", "sudo lite pg backup "+db+"; sudo lite pg schedule on"))
+			out = append(out, finding("pg", "backup-"+db, plugin.LevelWarn, "database "+db+" has no backups", "sudo lite pg backup "+db+"; sudo lite pg schedule on"))
 		case t.now().Sub(at) > pgStale:
-			out = append(out, finding("pg", "backup-"+db, plugin.LevelFail, "последняя копия базы "+db+" старше 36 часов ("+at.Format(time.RFC3339)+")", "sudo lite pg schedule on"))
+			out = append(out, finding("pg", "backup-"+db, plugin.LevelFail, "the latest backup of database "+db+" is older than 36 hours ("+at.Format(time.RFC3339)+")", "sudo lite pg schedule on"))
 		default:
-			out = append(out, finding("pg", "backup-"+db, plugin.LevelOK, "копия базы "+db+" свежая ("+at.Format(time.RFC3339)+")", ""))
+			out = append(out, finding("pg", "backup-"+db, plugin.LevelOK, "backup of database "+db+" is fresh ("+at.Format(time.RFC3339)+")", ""))
 		}
 	}
 	if others > 0 {
-		out = append(out, finding("pg", "backup-others", plugin.LevelOK, fmt.Sprintf("ещё баз вне проектов lite: %d (копии не проверяются; снять: lite pg backup БАЗА)", others), ""))
+		out = append(out, finding("pg", "backup-others", plugin.LevelOK, fmt.Sprintf("more databases outside lite projects: %d (backups are not checked; take one: lite pg backup DATABASE)", others), ""))
 	}
 	return out
 }
@@ -373,15 +373,15 @@ func (t tools) encryptFile(src, dst, recipient string) (string, error) {
 // decryptToTemp расшифровывает копию во временный файл, доступный postgres, закрытый ключ читается из stdin команды.
 func (t tools) decryptToTemp(src, db string) (string, error) {
 	if t.env.Stdin == nil {
-		return "", plugin.Errorf("usage", "закрытый ключ age читается из stdin")
+		return "", plugin.Errorf("usage", "the age private key is read from stdin")
 	}
 	keyText, err := io.ReadAll(io.LimitReader(t.env.Stdin, 4096))
 	if err != nil {
-		return "", plugin.Errorf("step_failed", "чтение ключа: %v", err)
+		return "", plugin.Errorf("step_failed", "read the key: %v", err)
 	}
 	id, err := parseIdentity(string(keyText))
 	if err != nil {
-		return "", plugin.Errorf("usage", "неверный закрытый ключ age")
+		return "", plugin.Errorf("usage", "invalid age private key")
 	}
 	in, err := t.env.FS.Open(src)
 	if err != nil {
@@ -390,7 +390,7 @@ func (t tools) decryptToTemp(src, db string) (string, error) {
 	defer func() { _ = in.Close() }()
 	dr, err := age.Decrypt(in, id)
 	if err != nil {
-		return "", plugin.Errorf("precondition_failed", "не удалось расшифровать копию этим ключом")
+		return "", plugin.Errorf("precondition_failed", "could not decrypt the backup with this key")
 	}
 	tmp := PGBackupDir + "/.restore-" + db + ".dump"
 	out, err := t.env.FS.Create(tmp, 0o600)
@@ -400,7 +400,7 @@ func (t tools) decryptToTemp(src, db string) (string, error) {
 	if _, err := io.Copy(out, dr); err != nil {
 		_ = out.Close()
 		_ = t.env.FS.Remove(tmp)
-		return "", plugin.Errorf("step_failed", "расшифровка: %v", err)
+		return "", plugin.Errorf("step_failed", "decryption: %v", err)
 	}
 	if err := out.Close(); err != nil {
 		return "", plugin.Errorf("step_failed", "%v", err)
@@ -421,5 +421,5 @@ func parseIdentity(text string) (*age.X25519Identity, error) {
 		}
 		return age.ParseX25519Identity(l)
 	}
-	return nil, errors.New("ключ не найден")
+	return nil, errors.New("key not found")
 }

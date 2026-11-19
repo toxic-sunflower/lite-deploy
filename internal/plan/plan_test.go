@@ -214,7 +214,7 @@ func TestPortsExhausted(t *testing.T) {
 	st := baseState()
 	st.PortRange = [2]int{18000, 18004} // нужно 6 портов, есть 5
 	_, err := Build(p, st)
-	if err == nil || err.Code != CodePrecondition || !strings.Contains(err.Message, "нет свободных портов") {
+	if err == nil || err.Code != CodePrecondition || !strings.Contains(err.Message, "no free ports") {
 		t.Fatalf("ожидали нехватку портов: %v", err)
 	}
 	st.PortRange = [2]int{18000, 18005}

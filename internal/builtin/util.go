@@ -63,7 +63,7 @@ func textOut(text string) plugin.Output {
 
 func noArgs(args []string, cmd, plug string) error {
 	if len(args) != 0 {
-		return plugin.Errorf("usage", "использование: lite %s %s", plug, cmd)
+		return plugin.Errorf("usage", "usage: lite %s %s", plug, cmd)
 	}
 	return nil
 }

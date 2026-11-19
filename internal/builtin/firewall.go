@@ -17,15 +17,15 @@ func (Firewall) Name() string       { return "firewall" }
 func (Firewall) Kind() string       { return "builtin" }
 func (Firewall) Requires() []string { return nil }
 func (Firewall) Description() string {
-	return "файервол (ufw): режим off, http, max; порты; SSH, 80 и 443 защищены от закрытия"
+	return "firewall (ufw): mode off, http, max; ports; SSH, 80 and 443 are protected from closing"
 }
 func (Firewall) Commands() []plugin.Command {
 	return []plugin.Command{
-		{Name: "status", Root: true, Help: "включён ли файервол, порт SSH, правила"},
-		{Name: "mode", Help: "режим: off (без фильтрации), http (SSH и веб-порты), max (только SSH); прежние правила сбрасываются", Args: "off|http|max", Confirm: true},
-		{Name: "allow", Help: "открыть порт", Args: "ПОРТ/tcp|udp [--from АДРЕС]", Confirm: true},
-		{Name: "remove", Help: "закрыть порт", Args: "ПОРТ/tcp|udp [--from АДРЕС] [--action allow|limit|deny]", Confirm: true},
-		{Name: "enable", Help: "включить файервол: открыты SSH, 80 и 443, остальное входящее закрыто", Confirm: true},
+		{Name: "status", Root: true, Help: "whether the firewall is on, the SSH port, the rules"},
+		{Name: "mode", Help: "mode: off (no filtering), http (SSH and web ports), max (SSH only); the previous rules are reset", Args: "off|http|max", Confirm: true},
+		{Name: "allow", Help: "open a port", Args: "PORT/tcp|udp [--from ADDRESS]", Confirm: true},
+		{Name: "remove", Help: "close a port", Args: "PORT/tcp|udp [--from ADDRESS] [--action allow|limit|deny]", Confirm: true},
+		{Name: "enable", Help: "enable the firewall: SSH, 80 and 443 are open, other incoming traffic is closed", Confirm: true},
 	}
 }
 
@@ -33,17 +33,17 @@ func fwErr(e *firewall.Error) error { return &plugin.Error{Code: e.Code, Message
 
 func fwOut(st *firewall.State) plugin.Output {
 	var sb strings.Builder
-	state := "выключен"
+	state := "off"
 	if st.Active {
-		state = "включён"
+		state = "on"
 	}
-	fmt.Fprintf(&sb, "Файервол %s, порт SSH %d\n", state, st.SSHPort)
+	fmt.Fprintf(&sb, "Firewall %s, SSH port %d\n", state, st.SSHPort)
 	for _, r := range st.Rules {
 		mark := ""
 		if r.Protected {
-			mark = "  (защищено)"
+			mark = "  (protected)"
 		}
-		fmt.Fprintf(&sb, "  %-6s %-14s от %s%s\n", r.Action, r.Raw0(), r.From, mark)
+		fmt.Fprintf(&sb, "  %-6s %-14s from %s%s\n", r.Action, r.Raw0(), r.From, mark)
 	}
 	return plugin.Output{Text: sb.String(), Data: st}
 }
@@ -55,7 +55,7 @@ func splitFlags(args []string) (pos []string, from, action string, err error) {
 		switch args[i] {
 		case "--from", "--action":
 			if i+1 >= len(args) {
-				return nil, "", "", plugin.Errorf("usage", "после %s нужно значение", args[i])
+				return nil, "", "", plugin.Errorf("usage", "%s needs a value", args[i])
 			}
 			if args[i] == "--from" {
 				from = args[i+1]
@@ -81,7 +81,7 @@ func (Firewall) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 	switch cmd {
 	case "status", "enable":
 		if len(pos) != 0 {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: lite firewall %s", cmd)
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite firewall %s", cmd)
 		}
 		if cmd == "status" {
 			st, fe = m.Status(ctx)
@@ -90,19 +90,19 @@ func (Firewall) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 		}
 	case "mode":
 		if len(pos) != 1 {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: lite firewall mode off|http|max")
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite firewall mode off|http|max")
 		}
 		if fe = m.SetMode(ctx, pos[0]); fe == nil {
 			st, fe = m.Status(ctx)
 		}
 	case "allow", "remove":
 		if len(pos) != 1 {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: lite firewall %s ПОРТ/tcp|udp [--from АДРЕС]", cmd)
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite firewall %s PORT/tcp|udp [--from ADDRESS]", cmd)
 		}
 		p, proto, ok := strings.Cut(pos[0], "/")
 		port, perr := strconv.Atoi(p)
 		if !ok || perr != nil {
-			return plugin.Output{}, plugin.Errorf("usage", "порт задаётся как 8080/tcp")
+			return plugin.Output{}, plugin.Errorf("usage", "the port is given as 8080/tcp")
 		}
 		if cmd == "allow" {
 			st, fe = m.Allow(ctx, port, proto, from)
@@ -110,7 +110,7 @@ func (Firewall) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 			st, fe = m.Remove(ctx, port, proto, from, action)
 		}
 	default:
-		return plugin.Output{}, plugin.Errorf("usage", "у плагина firewall нет команды %q", cmd)
+		return plugin.Output{}, plugin.Errorf("usage", "plugin firewall has no command %q", cmd)
 	}
 	if fe != nil {
 		return plugin.Output{}, fwErr(fe)
@@ -121,10 +121,10 @@ func (Firewall) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 func (Firewall) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	st, fe := (&firewall.Manager{Runner: env.Runner}).Status(ctx)
 	if fe != nil || st == nil {
-		return []plugin.Finding{finding("firewall", "status", plugin.LevelWarn, "файервол не установлен или недоступен (ufw)", "sudo lite firewall mode max")}
+		return []plugin.Finding{finding("firewall", "status", plugin.LevelWarn, "the firewall is not installed or unavailable (ufw)", "sudo lite firewall mode max")}
 	}
 	if !st.Active {
-		return []plugin.Finding{finding("firewall", "status", plugin.LevelWarn, "файервол выключен: входящий трафик не фильтруется", "sudo lite firewall mode max")}
+		return []plugin.Finding{finding("firewall", "status", plugin.LevelWarn, "the firewall is off: incoming traffic is not filtered", "sudo lite firewall mode max")}
 	}
-	return []plugin.Finding{finding("firewall", "status", plugin.LevelOK, fmt.Sprintf("файервол включён, порт SSH %d", st.SSHPort), "")}
+	return []plugin.Finding{finding("firewall", "status", plugin.LevelOK, fmt.Sprintf("the firewall is on, SSH port %d", st.SSHPort), "")}
 }

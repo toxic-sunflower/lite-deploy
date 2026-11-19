@@ -69,7 +69,7 @@ type State struct {
 // Ничего на системе не меняет и значений секретов не знает: на входе только шифртекст.
 func Build(p *project.Project, st State) (*Plan, *BuildError) {
 	if issues := project.Validate(p); len(issues) > 0 {
-		return nil, &BuildError{Code: CodeInvalidProject, Message: "описание проекта не прошло проверку", Issues: issues, Hint: "исправьте поля из details"}
+		return nil, &BuildError{Code: CodeInvalidProject, Message: "the project description did not pass validation", Issues: issues, Hint: "fix the fields listed in details"}
 	}
 	if st.Now.IsZero() {
 		st.Now = time.Now()
@@ -92,16 +92,16 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 
 	if !managed {
 		if st.ExistingUsers[name] && !p.Adopt {
-			return nil, &BuildError{Code: CodeUnmanaged, Message: fmt.Sprintf("пользователь %q уже есть, но проект не под управлением lite-deploy", name), Hint: `для проекта, настроенного вручную, задайте "adopt": true`}
+			return nil, &BuildError{Code: CodeUnmanaged, Message: fmt.Sprintf("user %q already exists, but the project is not managed by lite-deploy", name), Hint: `for a project set up by hand, set "adopt": true`}
 		}
 		if len(st.Projects) >= st.MaxProjects {
-			return nil, &BuildError{Code: CodeQuotaExceeded, Message: fmt.Sprintf("достигнут предел проектов: %d", st.MaxProjects)}
+			return nil, &BuildError{Code: CodeQuotaExceeded, Message: fmt.Sprintf("the project limit is reached: %d", st.MaxProjects)}
 		}
 	}
 
 	if db := p.Database; db != nil && !db.IsLocal() {
 		if _, ok := st.Servers[db.Server]; !ok {
-			return nil, &BuildError{Code: CodePrecondition, Message: fmt.Sprintf("сервера %q нет в реестре", db.Server), Hint: "sudo lite server add " + db.Server + " АДРЕС"}
+			return nil, &BuildError{Code: CodePrecondition, Message: fmt.Sprintf("server %q is not in the registry", db.Server), Hint: "sudo lite server add " + db.Server + " ADDRESS"}
 		}
 	}
 
@@ -126,39 +126,39 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 	for _, s := range d.Services {
 		hasContainers = hasContainers || s.KindOf() == project.KindQuadlet
 	}
-	b.add(actions.VerifyHostName, actions.VerifyHost{NoPodman: !hasContainers}, "Проверка сервера: ОС, podman, caddy, postgresql, правила Caddy и ufw")
-	b.add(actions.CreateProjectUserName, actions.CreateProjectUser{Project: name}, fmt.Sprintf("Пользователь %s без пароля и sudo, linger, каталоги конфигурации", name))
+	b.add(actions.VerifyHostName, actions.VerifyHost{NoPodman: !hasContainers}, "Server check: OS, podman, caddy, postgresql, Caddy rules and ufw")
+	b.add(actions.CreateProjectUserName, actions.CreateProjectUser{Project: name}, fmt.Sprintf("User %s without a password and sudo, linger, configuration directories", name))
 
 	// В режиме adopt пароль существующей роли должен быть записан до provision_postgres.
 	for _, s := range secretSteps {
 		if s.Name == DBPasswordSecret {
-			b.add(actions.SetSecretName, s, "Служебный секрет _db_password (существующий пароль роли), только шифртекст")
+			b.add(actions.SetSecretName, s, "Internal secret _db_password (the existing role password), ciphertext only")
 		}
 	}
 	if d.Database != nil && d.Database.IsLocal() {
 		b.add(actions.ProvisionPostgresName, actions.ProvisionPostgres{
 			Project: name, ConnectionFormat: d.Database.ConnectionFormat, RotatePassword: p.Adopt && !managed && st.RotatePassword,
-		}, fmt.Sprintf("Роль и база %s в PostgreSQL, правило pg_hba для этой пары, пароль создаётся на сервере", project.RoleName(name)))
+		}, fmt.Sprintf("Role and database %s in PostgreSQL, a pg_hba rule for this pair, the password is generated on the server", project.RoleName(name)))
 	}
 	for _, s := range secretSteps {
 		if s.Name != DBPasswordSecret {
-			b.add(actions.SetSecretName, s, fmt.Sprintf("Секрет %s (только запись, значение в плане зашифровано)", s.Name))
+			b.add(actions.SetSecretName, s, fmt.Sprintf("Secret %s (write-only, the value in the plan is encrypted)", s.Name))
 		}
 	}
 	if d.Registry != nil {
 		b.add(actions.RegistryLoginName, actions.RegistryLogin{
 			Project: name, Registry: d.Registry.Host, Username: d.Registry.Username, Secret: secretName(d.Registry.TokenSecret),
-		}, fmt.Sprintf("Вход в реестр %s от пользователя %s", d.Registry.Host, name))
+		}, fmt.Sprintf("Registry login %s as user %s", d.Registry.Host, name))
 	}
 
 	svcNames := sortedKeys(d.Services)
 	for _, sn := range svcNames {
 		s := d.Services[sn]
 		b.add(actions.WriteServiceEnvName, actions.WriteServiceEnv{Project: name, Service: sn, Env: envFor(s, d, st)},
-			fmt.Sprintf("Файл настроек сервиса %s (права 600)", sn))
+			fmt.Sprintf("Settings file of service %s (mode 600)", sn))
 		if s.KindOf() == project.KindUnit && s.Release != nil && s.Release.TokenSecret != "" {
 			b.add(actions.WriteReleaseAuthName, actions.WriteReleaseAuth{Project: name, Service: sn, Secret: secretName(s.Release.TokenSecret)},
-				fmt.Sprintf("Заголовок авторизации для скачивания релиза %s (права 600)", sn))
+				fmt.Sprintf("Authorization header for downloading the release %s (mode 600)", sn))
 		}
 	}
 	for _, sn := range svcNames {
@@ -168,45 +168,45 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 				b.add(actions.InstallUnitName, actions.InstallUnit{
 					Project: name, Service: sn, Slot: slot, HostPort: ports.Services[sn][i], Exec: s.Exec, Stop: s.Stop, Data: s.Data,
 					Memory: s.Limits.Memory, Pids: s.Limits.Pids,
-				}, fmt.Sprintf("Юнит systemd %s-%s-%s, порт 127.0.0.1:%d", name, sn, slot, ports.Services[sn][i]))
+				}, fmt.Sprintf("systemd unit %s-%s-%s, port 127.0.0.1:%d", name, sn, slot, ports.Services[sn][i]))
 				continue
 			}
 			b.add(actions.InstallQuadletName, actions.InstallQuadlet{
 				Project: name, Service: sn, Slot: slot, HostPort: ports.Services[sn][i], ContainerPort: s.ContainerPort,
 				Memory: s.Limits.Memory, Pids: s.Limits.Pids, DatabaseSocket: s.DatabaseEnv != "" && d.Database.IsLocal(), Data: s.Data,
-			}, fmt.Sprintf("Юнит Quadlet %s-%s-%s, порт 127.0.0.1:%d", name, sn, slot, ports.Services[sn][i]))
+			}, fmt.Sprintf("Quadlet unit %s-%s-%s, port 127.0.0.1:%d", name, sn, slot, ports.Services[sn][i]))
 		}
 	}
-	b.add(actions.ReloadUserUnitsName, actions.ReloadUserUnits{Project: name}, "Перечитать юниты пользователя "+name)
+	b.add(actions.ReloadUserUnitsName, actions.ReloadUserUnits{Project: name}, "Reload the units of user "+name)
 
 	for _, s := range d.Sites {
 		b.add(actions.InstallCaddySiteName, actions.InstallCaddySite{
 			Project: name, Site: s.Name, Host: s.Host, ListenPort: ports.Sites[s.Name], UpstreamInitial: "not_deployed",
 			TrustedProxy: s.TrustedProxy, MaxBody: s.MaxBody, Routes: siteRoutes(s),
-		}, fmt.Sprintf("Сайт %s: %s на 127.0.0.1:%d, upstream «not deployed» до первой выкатки", s.Name, s.Host, ports.Sites[s.Name]))
+		}, fmt.Sprintf("Site %s: %s on 127.0.0.1:%d, upstream \"not deployed\" until the first deploy", s.Name, s.Host, ports.Sites[s.Name]))
 	}
-	b.add(actions.InstallReloadRuleName, actions.InstallReloadRule{Project: name}, "Правило sudoers: пользователь "+name+" может только systemctl reload caddy")
-	b.add(actions.ReloadCaddyName, actions.ReloadCaddy{}, "Проверка конфигурации Caddy от пользователя caddy и reload")
+	b.add(actions.InstallReloadRuleName, actions.InstallReloadRule{Project: name}, "sudoers rule: user "+name+" may only run systemctl reload caddy")
+	b.add(actions.ReloadCaddyName, actions.ReloadCaddy{}, "Check the Caddy configuration as user caddy and reload")
 	expect := "not_deployed"
 	if cur.Deployed {
 		expect = "deployed"
 	}
 	for _, s := range d.Sites {
 		b.add(actions.ProbeSiteName, actions.ProbeSite{Host: s.Host, ListenPort: ports.Sites[s.Name], Expect: expect},
-			fmt.Sprintf("Проверка: Caddy отвечает на имя %s (%s)", s.Host, expect))
+			fmt.Sprintf("Check: Caddy answers for the name %s (%s)", s.Host, expect))
 	}
 	if d.DeployKey != nil {
 		b.add(actions.InstallDeployKeyName, actions.InstallDeployKey{Project: name, PublicKey: d.DeployKey.PublicKey},
-			"Ключ CI с привратником: только deploy <хэш>, rollback, status")
+			"CI key with a gatekeeper: only deploy <hash>, rollback, status")
 	}
-	b.add(actions.RecordProjectName, actions.RecordProject{Project: name, ProjectHash: projHash, Ports: ports}, "Запись метки управления и выбранных портов")
+	b.add(actions.RecordProjectName, actions.RecordProject{Project: name, ProjectHash: projHash, Ports: ports}, "Record the management mark and the chosen ports")
 	if b.err != nil {
 		return nil, &BuildError{Code: CodePrecondition, Message: b.err.Error()}
 	}
 
 	id, err := st.NewID(st.Now)
 	if err != nil {
-		return nil, &BuildError{Code: CodePrecondition, Message: "не удалось создать id плана: " + err.Error()}
+		return nil, &BuildError{Code: CodePrecondition, Message: "could not create a plan id: " + err.Error()}
 	}
 	pl := &Plan{
 		Schema: SchemaID, ID: id,
@@ -227,7 +227,7 @@ type builder struct {
 func (b *builder) add(action string, params any, summary string) {
 	def, ok := actions.Lookup(action)
 	if !ok {
-		b.err = fmt.Errorf("неизвестное действие %s", action)
+		b.err = fmt.Errorf("unknown action %s", action)
 		return
 	}
 	raw, err := json.Marshal(params)
@@ -308,7 +308,7 @@ func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) (
 
 	for _, n := range sortedKeys(st.Ciphertexts) {
 		if !secrets.ValidName(n) || !armorRe.MatchString(st.Ciphertexts[n]) || len(st.Ciphertexts[n]) > secrets.MaxCiphertextSize {
-			return nil, &BuildError{Code: CodeInvalidSecret, Message: "шифртекст секрета " + n + " не похож на вывод `secret encrypt` (age armor)"}
+			return nil, &BuildError{Code: CodeInvalidSecret, Message: "ciphertext of secret " + n + " does not look like `secret encrypt` output (age armor)"}
 		}
 	}
 	var steps []actions.SetSecret
@@ -316,7 +316,7 @@ func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) (
 	for _, n := range sortedKeys(st.Ciphertexts) {
 		if n == DBPasswordSecret {
 			if !d.Adopt {
-				return nil, &BuildError{Code: CodeInvalidProject, Message: "служебный секрет _db_password можно передать только в режиме adopt"}
+				return nil, &BuildError{Code: CodeInvalidProject, Message: "the internal secret _db_password can only be passed in adopt mode"}
 			}
 			continue
 		}
@@ -325,7 +325,7 @@ func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) (
 		}
 	}
 	if len(unused) > 0 {
-		return nil, &BuildError{Code: CodeUnusedSecret, Message: "переданы шифртексты секретов, которых проект не использует: " + strings.Join(unused, ", ")}
+		return nil, &BuildError{Code: CodeUnusedSecret, Message: "ciphertexts were passed for secrets the project does not use: " + strings.Join(unused, ", ")}
 	}
 	if ct, ok := st.Ciphertexts[DBPasswordSecret]; ok {
 		steps = append(steps, actions.SetSecret{Project: d.Name, Name: DBPasswordSecret, Ciphertext: ct})
@@ -338,12 +338,12 @@ func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) (
 		}
 	}
 	if len(missing) > 0 {
-		return nil, &BuildError{Code: CodeSecretMissing, Message: "не хватает секретов: " + strings.Join(missing, ", "),
-			Hint: "зашифруйте значения командой secret encrypt и передайте шифртексты в план"}
+		return nil, &BuildError{Code: CodeSecretMissing, Message: "missing secrets: " + strings.Join(missing, ", "),
+			Hint: "encrypt the values with secret encrypt and pass the ciphertexts into the plan"}
 	}
 	if d.Adopt && d.Database != nil && d.Database.IsLocal() && !managed && !st.RotatePassword && st.Ciphertexts[DBPasswordSecret] == "" && !have[DBPasswordSecret] {
-		return nil, &BuildError{Code: CodeAdoptPassword, Message: "пароль существующей роли неизвестен",
-			Hint: "задайте секрет _db_password или разрешите смену пароля (rotate_password)"}
+		return nil, &BuildError{Code: CodeAdoptPassword, Message: "the password of the existing role is unknown",
+			Hint: "set the _db_password secret or allow a password change (rotate_password)"}
 	}
 	return steps, nil
 }
@@ -378,10 +378,10 @@ func allocatePorts(d *project.Project, st State, cur ProjectState) (actions.Port
 	}
 	for port := range mine {
 		if owner, ok := taken[port]; ok {
-			return actions.Ports{}, &BuildError{Code: CodePrecondition, Message: fmt.Sprintf("порт %d уже занят проектом %s", port, owner)}
+			return actions.Ports{}, &BuildError{Code: CodePrecondition, Message: fmt.Sprintf("port %d is already used by project %s", port, owner)}
 		}
 		if port < lo || port > hi {
-			return actions.Ports{}, &BuildError{Code: CodePrecondition, Message: fmt.Sprintf("порт %d вне диапазона %d–%d", port, lo, hi)}
+			return actions.Ports{}, &BuildError{Code: CodePrecondition, Message: fmt.Sprintf("port %d is outside the range %d–%d", port, lo, hi)}
 		}
 	}
 	reserved := map[int]bool{}
@@ -406,7 +406,7 @@ func allocatePorts(d *project.Project, st State, cur ProjectState) (actions.Port
 		return 0, false
 	}
 	out := actions.Ports{Services: map[string][]int{}, Sites: map[string]int{}}
-	exhausted := &BuildError{Code: CodePrecondition, Message: fmt.Sprintf("нет свободных портов в диапазоне %d–%d", lo, hi)}
+	exhausted := &BuildError{Code: CodePrecondition, Message: fmt.Sprintf("no free ports in the range %d–%d", lo, hi)}
 	for _, sn := range sortedKeys(d.Services) {
 		s := d.Services[sn]
 		if len(s.HostPorts) == 2 {

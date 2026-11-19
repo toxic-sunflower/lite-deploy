@@ -12,7 +12,7 @@ import (
 func PeerUID(c net.Conn) (int, error) {
 	uc, ok := c.(*net.UnixConn)
 	if !ok {
-		return -1, errors.New("не unix-соединение")
+		return -1, errors.New("not a unix connection")
 	}
 	raw, err := uc.SyscallConn()
 	if err != nil {

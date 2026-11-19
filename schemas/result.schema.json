@@ -26,17 +26,17 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "код ошибки",
+                "description": "error code",
                 "maxLength": 32,
                 "type": "string"
               },
               "message": {
-                "description": "описание для человека",
+                "description": "human-readable description",
                 "maxLength": 1024,
                 "type": "string"
               },
               "path": {
-                "description": "JSON Pointer к полю; «/» для документа целиком",
+                "description": "JSON Pointer to the field; slash for the whole document",
                 "maxLength": 512,
                 "type": "string"
               }
@@ -95,6 +95,6 @@
     "api_version",
     "command"
   ],
-  "title": "Конверт ответа CLI и API (успех или ошибка)",
+  "title": "CLI and API response envelope (success or error)",
   "type": "object"
 }

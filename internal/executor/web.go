@@ -103,14 +103,14 @@ func reloadUserUnits(ctx context.Context, r *run, v any) (outcome, error) {
 		return outcome{}, err
 	}
 	if res.ExitCode != 0 {
-		return outcome{}, fmt.Errorf("daemon-reload: код %d: %s", res.ExitCode, trimErr(res))
+		return outcome{}, fmt.Errorf("daemon-reload: code %d: %s", res.ExitCode, trimErr(res))
 	}
 	ok, missing, err := visible()
 	if err != nil {
 		return outcome{}, err
 	}
 	if !ok {
-		return outcome{}, fmt.Errorf("после daemon-reload юниты не видны: %s", missing)
+		return outcome{}, fmt.Errorf("after daemon-reload the units are not visible: %s", missing)
 	}
 	return outcome{changed: true}, nil
 }
@@ -152,10 +152,10 @@ func installCaddySite(_ context.Context, r *run, v any) (outcome, error) {
 			}
 			for _, mp := range managed {
 				if mp != p.Project && strings.HasPrefix(n, mp+"-") {
-					return outcome{}, fmt.Errorf("адрес %s уже занят проектом %s (файл %s)", p.Host, mp, n)
+					return outcome{}, fmt.Errorf("address %s is already used by project %s (file %s)", p.Host, mp, n)
 				}
 			}
-			notes = append(notes, "заменён старый файл "+n)
+			notes = append(notes, "replaced the old file "+n)
 			changedAny = true
 			if !r.dry {
 				info, _ := r.FS.Stat(full)
@@ -260,7 +260,7 @@ func reloadCaddy(ctx context.Context, r *run, _ any) (outcome, error) {
 	}
 	res, err := r.Runner.Run(ctx, hostCmd("runuser", "-u", "caddy", "--", "caddy", "validate", "--config", CaddyfilePth))
 	if err == nil && res.ExitCode != 0 {
-		err = fmt.Errorf("caddy validate: код %d: %s", res.ExitCode, trimErr(res))
+		err = fmt.Errorf("caddy validate: code %d: %s", res.ExitCode, trimErr(res))
 	}
 	if err != nil {
 		var back []string
@@ -274,7 +274,7 @@ func reloadCaddy(ctx context.Context, r *run, _ any) (outcome, error) {
 			back = append(back, u.path)
 		}
 		r.undo = nil
-		return outcome{}, fmt.Errorf("конфигурация Caddy не прошла проверку, файлы возвращены (%d): %w", len(back), err)
+		return outcome{}, fmt.Errorf("the Caddy configuration failed validation, the files were restored (%d): %w", len(back), err)
 	}
 	if _, err := r.must(ctx, hostCmd("systemctl", "reload", "caddy")); err != nil {
 		return outcome{}, err
@@ -286,24 +286,24 @@ func reloadCaddy(ctx context.Context, r *run, _ any) (outcome, error) {
 func probeSite(ctx context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.ProbeSite)
 	if r.dry && r.sitesChanged {
-		return outcome{changed: true, detail: "будет проверено после reload"}, nil
+		return outcome{changed: true, detail: "will be checked after the reload"}, nil
 	}
 	resp, err := r.HTTP.Get(ctx, fmt.Sprintf("http://127.0.0.1:%d/", p.ListenPort), p.Host)
 	if err != nil {
-		return outcome{}, fmt.Errorf("запрос к 127.0.0.1:%d: %w", p.ListenPort, err)
+		return outcome{}, fmt.Errorf("request to 127.0.0.1:%d: %w", p.ListenPort, err)
 	}
 	notDeployed := resp.Status == 503 && strings.Contains(string(resp.Body), "not deployed")
 	switch p.Expect {
 	case "not_deployed":
 		if !notDeployed {
-			return outcome{}, fmt.Errorf("ожидался ответ 503 not deployed, получен код %d: Caddy не подхватил имя %s", resp.Status, p.Host)
+			return outcome{}, fmt.Errorf("expected the answer 503 not deployed, got code %d: Caddy did not pick up the name %s", resp.Status, p.Host)
 		}
 	case "deployed":
 		if notDeployed {
-			return outcome{}, fmt.Errorf("сайт %s отвечает «not deployed», хотя проект уже выкатывали", p.Host)
+			return outcome{}, fmt.Errorf("site %s answers \"not deployed\" although the project has been deployed", p.Host)
 		}
 		if resp.Status == 200 && len(resp.Body) == 0 && strings.Contains(resp.Header.Get("Server"), "Caddy") && resp.Header.Get("Strict-Transport-Security") == "" {
-			return outcome{}, fmt.Errorf("сервер Caddy отвечает пустым 200 без заголовков сайта: имя %s не подхвачено", p.Host)
+			return outcome{}, fmt.Errorf("the Caddy server answers an empty 200 without the site headers: the name %s was not picked up", p.Host)
 		}
 	}
 	return outcome{}, nil

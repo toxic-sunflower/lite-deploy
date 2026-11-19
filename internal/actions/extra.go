@@ -12,7 +12,7 @@ import (
 func reservedProject(v any) []schema.Issue {
 	p := v.(*CreateProjectUser)
 	if project.Reserved(p.Project) {
-		return []schema.Issue{{Path: "/project", Code: "reserved", Message: fmt.Sprintf("имя %q зарезервировано", p.Project)}}
+		return []schema.Issue{{Path: "/project", Code: "reserved", Message: fmt.Sprintf("the name %q is reserved", p.Project)}}
 	}
 	return nil
 }
@@ -26,35 +26,35 @@ func checkEnv(v any) []schema.Issue {
 	}
 	for i, e := range w.Env {
 		if seen[e.Name] {
-			bad(i, "/name", "duplicate", "переменная повторяется")
+			bad(i, "/name", "duplicate", "the variable is repeated")
 		}
 		seen[e.Name] = true
 		switch e.Kind {
 		case "literal":
 			if e.Secret != "" {
-				bad(i, "/secret", "unexpected", "для literal нужно value, не secret")
+				bad(i, "/secret", "unexpected", "literal needs value, not secret")
 			}
 		case "secret":
 			if e.Secret == "" {
-				bad(i, "/secret", "required", "для secret нужно имя секрета")
+				bad(i, "/secret", "required", "secret needs a secret name")
 			}
 			if e.Value != "" {
-				bad(i, "/value", "unexpected", "для secret значение не задаётся")
+				bad(i, "/value", "unexpected", "secret takes no value")
 			}
 		case "database":
 			if e.Value != "npgsql" && e.Value != "url" && e.Value != "libpq" {
-				bad(i, "/value", "enum", "для database нужен формат: npgsql, url или libpq")
+				bad(i, "/value", "enum", "database needs a format: npgsql, url or libpq")
 			}
 			if e.Host != "" {
 				if e.Secret == "" {
-					bad(i, "/secret", "required", "для базы на другом сервере нужен секрет с паролем")
+					bad(i, "/secret", "required", "a database on another server needs a secret with the password")
 				}
 			} else if e.Secret != "" || e.Port != 0 {
-				bad(i, "/host", "required", "secret и port задаются только вместе с host")
+				bad(i, "/host", "required", "secret and port are only allowed together with host")
 			}
 		}
 		if e.Kind != "database" && (e.Host != "" || e.Port != 0) {
-			bad(i, "/host", "unexpected", "host и port только для database")
+			bad(i, "/host", "unexpected", "host and port are only for database")
 		}
 	}
 	return out
@@ -65,18 +65,18 @@ func checkExec(v any) []schema.Issue {
 	var out []schema.Issue
 	for i, a := range u.Exec {
 		if a == "" || len(a) > 512 || strings.ContainsAny(a, "\r\n\x00") {
-			out = append(out, schema.Issue{Path: "/exec/" + strconv.Itoa(i), Code: "pattern", Message: "аргумент не пустой, без переводов строки, до 512 знаков"})
+			out = append(out, schema.Issue{Path: "/exec/" + strconv.Itoa(i), Code: "pattern", Message: "an argument must be non-empty, without line breaks, up to 512 characters"})
 		}
 	}
 	for i, a := range u.Stop {
 		if a == "" || len(a) > 512 || strings.ContainsAny(a, "\r\n\x00") {
-			out = append(out, schema.Issue{Path: "/stop/" + strconv.Itoa(i), Code: "pattern", Message: "аргумент не пустой, без переводов строки, до 512 знаков"})
+			out = append(out, schema.Issue{Path: "/stop/" + strconv.Itoa(i), Code: "pattern", Message: "an argument must be non-empty, without line breaks, up to 512 characters"})
 		}
 	}
 	if len(u.Exec) > 0 {
 		for _, part := range strings.Split(u.Exec[0], "/") {
 			if part == ".." {
-				out = append(out, schema.Issue{Path: "/exec/0", Code: "pattern", Message: "путь к программе не должен содержать «..»"})
+				out = append(out, schema.Issue{Path: "/exec/0", Code: "pattern", Message: "the program path must not contain \"..\""})
 			}
 		}
 	}

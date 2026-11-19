@@ -96,16 +96,16 @@ func (m *Manager) Detect(ctx context.Context) (string, error) {
 			return p[0], nil
 		}
 	}
-	return "", fail("precondition_failed", "не найден менеджер пакетов (apt, dnf, zypper, pacman)")
+	return "", fail("precondition_failed", "no package manager found (apt, dnf, zypper, pacman)")
 }
 
 func checkNames(names []string) *Error {
 	if len(names) == 0 {
-		return fail("usage", "не указан пакет")
+		return fail("usage", "no package given")
 	}
 	for _, n := range names {
 		if !nameRe.MatchString(n) {
-			return fail("usage", "неверное имя пакета %q", n)
+			return fail("usage", "invalid package name %q", n)
 		}
 	}
 	return nil
@@ -115,7 +115,7 @@ func checkNames(names []string) *Error {
 func checkAllowed(names []string) *Error {
 	for _, n := range names {
 		if forbidden.MatchString(n) {
-			return fail("protected_rule", "пакет %s не ставится: контейнеры только podman и Quadlet, доступ к демону Docker равен root на сервере", n)
+			return fail("protected_rule", "package %s is not installed: containers are podman and Quadlet only, access to the Docker daemon is root on the server", n)
 		}
 	}
 	return nil
@@ -132,7 +132,7 @@ func (m *Manager) Query(ctx context.Context, mgr, name string) (string, bool, er
 	case "pacman":
 		c = host.Cmd{Name: "pacman", Args: []string{"-Q", name}}
 	default:
-		return "", false, fail("internal", "неизвестный менеджер пакетов %q", mgr)
+		return "", false, fail("internal", "unknown package manager %q", mgr)
 	}
 	res, err := m.Runner.Run(ctx, c)
 	if err != nil {
@@ -168,7 +168,7 @@ func (m *Manager) loadJournal() ([]Entry, error) {
 		Packages []Entry `json:"packages"`
 	}
 	if err := json.Unmarshal(b, &j); err != nil {
-		return nil, fmt.Errorf("журнал пакетов %s повреждён: %w", m.journalPath(), err)
+		return nil, fmt.Errorf("the package journal %s is corrupt: %w", m.journalPath(), err)
 	}
 	return j.Packages, nil
 }
@@ -189,7 +189,7 @@ func (m *Manager) List() ([]Entry, error) { return m.loadJournal() }
 // Check показывает состояние пакета.
 func (m *Manager) Check(ctx context.Context, name string) (Info, error) {
 	if !nameRe.MatchString(name) {
-		return Info{}, fail("usage", "неверное имя пакета %q", name)
+		return Info{}, fail("usage", "invalid package name %q", name)
 	}
 	mgr, err := m.Detect(ctx)
 	if err != nil {
@@ -290,7 +290,7 @@ func (m *Manager) Install(ctx context.Context, names ...string) error {
 		}
 		ver, ok, _ := m.Query(ctx, mgr, n)
 		if !ok {
-			return fail("step_failed", "пакет %s не появился в системе после установки", n)
+			return fail("step_failed", "package %s did not appear in the system after installation", n)
 		}
 		es = append(es, Entry{Name: n, Version: ver, InstalledAt: m.now().UTC().Format(time.RFC3339), By: m.By})
 	}
@@ -311,7 +311,7 @@ func (m *Manager) Update(ctx context.Context, names ...string) error {
 	}
 	for _, n := range names {
 		if _, ok, _ := m.Query(ctx, mgr, n); !ok {
-			return fail("precondition_failed", "пакет %s не установлен", n)
+			return fail("precondition_failed", "package %s is not installed", n)
 		}
 	}
 	if err := m.exec(ctx, mgr, "update", names); err != nil {
@@ -340,7 +340,7 @@ func (m *Manager) Remove(ctx context.Context, names ...string) error {
 	}
 	for _, n := range names {
 		if protected[n] {
-			return fail("protected_rule", "пакет %s удалять нельзя: без него сервер перестанет работать", n)
+			return fail("protected_rule", "package %s cannot be removed: the server would stop working without it", n)
 		}
 	}
 	mgr, err := m.Detect(ctx)
@@ -349,7 +349,7 @@ func (m *Manager) Remove(ctx context.Context, names ...string) error {
 	}
 	for _, n := range names {
 		if _, ok, _ := m.Query(ctx, mgr, n); !ok {
-			return fail("precondition_failed", "пакет %s не установлен", n)
+			return fail("precondition_failed", "package %s is not installed", n)
 		}
 	}
 	if err := m.exec(ctx, mgr, "remove", names); err != nil {

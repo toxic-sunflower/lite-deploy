@@ -45,10 +45,10 @@ var (
 
 // Ошибки проверки.
 var (
-	ErrInvalid  = errors.New("secrets: недопустимое значение")
-	ErrBinding  = errors.New("secrets: шифртекст относится к другому проекту или имени")
-	ErrDecrypt  = errors.New("secrets: шифртекст не расшифрован")
-	ErrNotFound = errors.New("secrets: секрет не найден")
+	ErrInvalid  = errors.New("secrets: invalid value")
+	ErrBinding  = errors.New("secrets: the ciphertext belongs to another project or name")
+	ErrDecrypt  = errors.New("secrets: ciphertext could not be decrypted")
+	ErrNotFound = errors.New("secrets: secret not found")
 )
 
 type payload struct {
@@ -69,11 +69,11 @@ func ValidProject(p string) bool { return projectRe.MatchString(p) }
 func ValidateValue(v []byte) error {
 	switch {
 	case len(v) == 0:
-		return fmt.Errorf("%w: значение пусто", ErrInvalid)
+		return fmt.Errorf("%w: value is empty", ErrInvalid)
 	case len(v) > MaxValueBytes:
-		return fmt.Errorf("%w: значение больше %d байт", ErrInvalid, MaxValueBytes)
+		return fmt.Errorf("%w: value is larger than %d bytes", ErrInvalid, MaxValueBytes)
 	case bytes.IndexByte(v, 0) >= 0:
-		return fmt.Errorf("%w: значение содержит NUL", ErrInvalid)
+		return fmt.Errorf("%w: value contains NUL", ErrInvalid)
 	}
 	return nil
 }
@@ -90,20 +90,20 @@ func GenerateIdentity() (secret, public string, err error) {
 // Encrypt шифрует значение открытым ключом исполнителя (age1…) и привязывает его к проекту и имени.
 func Encrypt(pubkey, project, name string, value []byte, now time.Time) (string, error) {
 	if !ValidProject(project) {
-		return "", fmt.Errorf("%w: имя проекта", ErrInvalid)
+		return "", fmt.Errorf("%w: project name", ErrInvalid)
 	}
 	if !ValidName(name) {
-		return "", fmt.Errorf("%w: имя секрета", ErrInvalid)
+		return "", fmt.Errorf("%w: secret name", ErrInvalid)
 	}
 	if err := ValidateValue(value); err != nil {
 		return "", err
 	}
 	if !utf8Valid(value) {
-		return "", fmt.Errorf("%w: значение не UTF-8", ErrInvalid)
+		return "", fmt.Errorf("%w: value is not UTF-8", ErrInvalid)
 	}
 	rcpt, err := age.ParseX25519Recipient(strings.TrimSpace(pubkey))
 	if err != nil {
-		return "", fmt.Errorf("%w: открытый ключ: %w", ErrInvalid, err)
+		return "", fmt.Errorf("%w: public key: %w", ErrInvalid, err)
 	}
 	raw, err := json.Marshal(payload{V: payloadVersion, Project: project, Name: name, Value: string(value), CreatedAt: now.UTC().Format(time.RFC3339)})
 	if err != nil {
@@ -126,7 +126,7 @@ func Encrypt(pubkey, project, name string, value []byte, now time.Time) (string,
 	}
 	s := strings.TrimRight(out.String(), "\n")
 	if len(s) > MaxCiphertextSize {
-		return "", fmt.Errorf("%w: шифртекст больше %d байт", ErrInvalid, MaxCiphertextSize)
+		return "", fmt.Errorf("%w: ciphertext is larger than %d bytes", ErrInvalid, MaxCiphertextSize)
 	}
 	return s, nil
 }
@@ -136,11 +136,11 @@ func utf8Valid(b []byte) bool { return bytes.Equal(bytes.ToValidUTF8(b, []byte{0
 // Decrypt расшифровывает шифртекст закрытым ключом и проверяет привязку к проекту и имени.
 func Decrypt(secretKey, ciphertext, project, name string) ([]byte, error) {
 	if len(ciphertext) > MaxCiphertextSize {
-		return nil, fmt.Errorf("%w: шифртекст больше %d байт", ErrDecrypt, MaxCiphertextSize)
+		return nil, fmt.Errorf("%w: ciphertext is larger than %d bytes", ErrDecrypt, MaxCiphertextSize)
 	}
 	id, err := age.ParseX25519Identity(strings.TrimSpace(secretKey))
 	if err != nil {
-		return nil, fmt.Errorf("%w: закрытый ключ", ErrDecrypt)
+		return nil, fmt.Errorf("%w: private key", ErrDecrypt)
 	}
 	r, err := age.Decrypt(armor.NewReader(strings.NewReader(ciphertext)), id)
 	if err != nil {
@@ -180,7 +180,7 @@ func NewStoreAt(fsys host.FS, dir string) *Store { return &Store{FS: fsys, Dir: 
 
 func (s *Store) path(project, name string) (string, error) {
 	if !ValidProject(project) || !ValidName(name) {
-		return "", fmt.Errorf("%w: имя проекта или секрета", ErrInvalid)
+		return "", fmt.Errorf("%w: project or secret name", ErrInvalid)
 	}
 	return s.Dir + "/" + project + "/" + name, nil
 }
@@ -233,7 +233,7 @@ type Entry struct {
 // List перечисляет имена и время записи; значений не читает.
 func (s *Store) List(project string) ([]Entry, error) {
 	if !ValidProject(project) {
-		return nil, fmt.Errorf("%w: имя проекта", ErrInvalid)
+		return nil, fmt.Errorf("%w: project name", ErrInvalid)
 	}
 	names, err := s.FS.ReadDir(s.Dir + "/" + project)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -263,7 +263,7 @@ func EnsureKey(fsys host.FS, keyPath, pubPath string) (pub string, created bool,
 	if old, err := fsys.ReadFile(keyPath); err == nil {
 		id, perr := age.ParseX25519Identity(strings.TrimSpace(string(old)))
 		if perr != nil {
-			return "", false, fmt.Errorf("%s есть, но не разобран: %w", keyPath, perr)
+			return "", false, fmt.Errorf("%s exists but could not be parsed: %w", keyPath, perr)
 		}
 		pub = id.Recipient().String()
 		// открытый ключ можно восстановить из закрытого

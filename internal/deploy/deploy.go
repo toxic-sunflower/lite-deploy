@@ -91,7 +91,7 @@ func other(s string) string {
 // Open читает описание проекта и порты из состояния сервера.
 func Open(env Env, name string) (*Manager, *Error) {
 	if !nameRe.MatchString(name) {
-		return nil, fail(CodeProjectNotFound, "неверное имя проекта")
+		return nil, fail(CodeProjectNotFound, "invalid project name")
 	}
 	if env.ProjectsDir == "" {
 		env.ProjectsDir = DefaultProjectsDir
@@ -111,25 +111,25 @@ func Open(env Env, name string) (*Manager, *Error) {
 	raw, err := env.FS.ReadFile(env.ProjectsDir + "/" + name + ".json")
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, &Error{Code: CodeProjectNotFound, Message: "проект " + name + " не найден", Hint: "создайте его: lite-deploy project create"}
+			return nil, &Error{Code: CodeProjectNotFound, Message: "project " + name + " not found", Hint: "create it: lite-deploy project create"}
 		}
 		return nil, fail(CodeIO, err.Error())
 	}
 	m := &Manager{Env: env, Name: name}
 	if err := json.Unmarshal(raw, &m.proj); err != nil {
-		return nil, fail(CodeIO, "описание проекта повреждено: "+err.Error())
+		return nil, fail(CodeIO, "the project description is corrupt: "+err.Error())
 	}
 	if raw, err := env.FS.ReadFile(env.StateDir + "/projects/" + name + ".json"); err == nil {
 		var st struct {
 			Ports actions.Ports `json:"ports"`
 		}
 		if err := json.Unmarshal(raw, &st); err != nil {
-			return nil, fail(CodeIO, "состояние проекта повреждено: "+err.Error())
+			return nil, fail(CodeIO, "the project state is corrupt: "+err.Error())
 		}
 		m.ports = st.Ports
 	}
 	if len(m.proj.Services) == 0 {
-		return nil, fail(CodeIO, "в описании проекта нет сервисов")
+		return nil, fail(CodeIO, "the project description has no services")
 	}
 	return m, nil
 }
@@ -315,7 +315,7 @@ type DeployResult struct {
 // Deploy выкатывает версию sha в свободный слот и переключает трафик (SPEC-v0.md, 5.2).
 func (m *Manager) Deploy(ctx context.Context, sha string) (*DeployResult, *Error) {
 	if !shaRe.MatchString(sha) {
-		return nil, fail(CodeInvalidSHA, "нужен полный хэш коммита: 40 символов 0-9a-f")
+		return nil, fail(CodeInvalidSHA, "the full commit hash is required: 40 characters 0-9a-f")
 	}
 	if err := m.ensureStateDir(); err != nil {
 		return nil, fail(CodeIO, err.Error())
@@ -323,7 +323,7 @@ func (m *Manager) Deploy(ctx context.Context, sha string) (*DeployResult, *Error
 	unlock, err := m.Lock.TryLock(m.userStateDir() + "/lock")
 	if err != nil {
 		if errors.Is(err, host.ErrLocked) {
-			return nil, &Error{Code: CodeInProgress, Message: "другая выкатка этого проекта ещё идёт", Hint: "подождите и повторите"}
+			return nil, &Error{Code: CodeInProgress, Message: "another deploy of this project is still running", Hint: "wait and try again"}
 		}
 		return nil, fail(CodeIO, err.Error())
 	}
@@ -355,7 +355,7 @@ func (m *Manager) Deploy(ctx context.Context, sha string) (*DeployResult, *Error
 			return nil, fail(CodeFailed, "podman pull "+img+": "+err.Error())
 		}
 		if res.ExitCode != 0 {
-			return nil, fail(CodeFailed, "не удалось скачать образ "+img+": "+trim(res))
+			return nil, fail(CodeFailed, "could not download the image "+img+": "+trim(res))
 		}
 		local := "localhost/" + m.Name + "-" + s + ":" + idle
 		if res, err := m.run(ctx, time.Minute, "podman", "tag", img, local); err != nil || res.ExitCode != 0 {
@@ -365,7 +365,7 @@ func (m *Manager) Deploy(ctx context.Context, sha string) (*DeployResult, *Error
 	for _, s := range svcs {
 		unit := render.UnitName(m.Name, s, idle) + ".service"
 		if res, err := m.run(ctx, 2*time.Minute, "systemctl", "--user", "restart", unit); err != nil || res.ExitCode != 0 {
-			return nil, m.abort(ctx, idle, sha, active, svcs, "не удалось запустить "+unit+": "+errText(res, err))
+			return nil, m.abort(ctx, idle, sha, active, svcs, "could not start "+unit+": "+errText(res, err))
 		}
 	}
 
@@ -391,7 +391,7 @@ func (m *Manager) Deploy(ctx context.Context, sha string) (*DeployResult, *Error
 					bad = append(bad, s)
 				}
 			}
-			return nil, m.abort(ctx, idle, sha, active, bad, "сервисы не стали готовыми вовремя: "+strings.Join(bad, ", "))
+			return nil, m.abort(ctx, idle, sha, active, bad, "the services did not become ready in time: "+strings.Join(bad, ", "))
 		}
 		m.Sleep(m.Poll)
 	}
@@ -400,7 +400,7 @@ func (m *Manager) Deploy(ctx context.Context, sha string) (*DeployResult, *Error
 		return nil, e
 	}
 	if err := m.writeState("active", []byte(idle+"\n")); err != nil {
-		return nil, fail(CodeIO, "трафик переключён, но active не записан: "+err.Error())
+		return nil, fail(CodeIO, "traffic was switched but active was not written: "+err.Error())
 	}
 	m.history("deploy", sha, idle, active)
 	return &DeployResult{Project: m.Name, Version: sha, Slot: idle, PreviousSlot: active, Switched: true}, nil
@@ -431,7 +431,7 @@ func (m *Manager) abort(ctx context.Context, idle, sha, active string, logsFor [
 		_, _ = m.run(ctx, time.Minute, "systemctl", "--user", "stop", render.UnitName(m.Name, s, idle)+".service")
 	}
 	m.history("deploy-failed", sha, idle, active)
-	e := &Error{Code: CodeUnhealthy, Message: msg, Hint: "трафик остался на прежней версии"}
+	e := &Error{Code: CodeUnhealthy, Message: msg, Hint: "traffic stayed on the previous version"}
 	if len(logs) > 0 {
 		e.Message += "\n" + strings.Join(logs, "\n")
 	}
@@ -449,7 +449,7 @@ func (m *Manager) switchTraffic(ctx context.Context, slot string) *Error {
 		}
 		port := m.port(site.Service, slot)
 		if port == 0 {
-			return fail(CodeIO, "нет порта сервиса "+site.Service+" для слота "+slot)
+			return fail(CodeIO, "no service port "+site.Service+" for slot "+slot)
 		}
 		body := []byte(render.Upstream(port, site.TrustedProxy))
 		var werr error
@@ -460,13 +460,13 @@ func (m *Manager) switchTraffic(ctx context.Context, slot string) *Error {
 		}
 		if werr != nil {
 			m.restore(ctx, olds, false)
-			return fail(CodeIO, "запись "+path+": "+werr.Error())
+			return fail(CodeIO, "write "+path+": "+werr.Error())
 		}
 		olds = append(olds, upstreamBackup{path, old})
 	}
 	if res, err := m.reloadCaddy(ctx); err != nil || res.ExitCode != 0 {
 		m.restore(ctx, olds, true)
-		return &Error{Code: CodeCaddyReloadFailed, Message: "reload Caddy не удался: " + errText(res, err), Hint: "файлы upstream возвращены, трафик на прежней версии"}
+		return &Error{Code: CodeCaddyReloadFailed, Message: "Caddy reload failed: " + errText(res, err), Hint: "the upstream files were restored, traffic is on the previous version"}
 	}
 	return nil
 }
@@ -521,7 +521,7 @@ func (m *Manager) Rollback(ctx context.Context) (*RollbackResult, *Error) {
 	unlock, err := m.Lock.TryLock(m.userStateDir() + "/lock")
 	if err != nil {
 		if errors.Is(err, host.ErrLocked) {
-			return nil, &Error{Code: CodeInProgress, Message: "выкатка этого проекта идёт", Hint: "подождите и повторите"}
+			return nil, &Error{Code: CodeInProgress, Message: "a deploy of this project is in progress", Hint: "wait and try again"}
 		}
 		return nil, fail(CodeIO, err.Error())
 	}
@@ -529,14 +529,14 @@ func (m *Manager) Rollback(ctx context.Context) (*RollbackResult, *Error) {
 
 	active := m.Active()
 	if active == "none" {
-		return nil, fail(CodeNothingDeployed, "проект ещё ни разу не выкатывали")
+		return nil, fail(CodeNothingDeployed, "the project has never been deployed")
 	}
 	prev := other(active)
 	version := ""
 	for _, s := range m.services() {
 		ok, ver := m.probe(ctx, s, prev)
 		if !ok {
-			return nil, &Error{Code: CodeRollbackNA, Message: "прежняя версия (слот " + prev + ") не отвечает", Hint: "выкатите нужную версию заново: deploy <хэш>"}
+			return nil, &Error{Code: CodeRollbackNA, Message: "the previous version (slot " + prev + ") is not responding", Hint: "deploy the version you need again: deploy <hash>"}
 		}
 		if version == "" {
 			version = ver
@@ -546,7 +546,7 @@ func (m *Manager) Rollback(ctx context.Context) (*RollbackResult, *Error) {
 		return nil, e
 	}
 	if err := m.writeState("active", []byte(prev+"\n")); err != nil {
-		return nil, fail(CodeIO, "трафик переключён, но active не записан: "+err.Error())
+		return nil, fail(CodeIO, "traffic was switched but active was not written: "+err.Error())
 	}
 	m.history("rollback", orDash(version), prev, active)
 	return &RollbackResult{Project: m.Name, Version: version, Slot: prev, PreviousSlot: active}, nil
@@ -600,7 +600,7 @@ func (m *Manager) Status(ctx context.Context) (*StatusResult, *Error) {
 func (m *Manager) fetchRelease(ctx context.Context, service, sha, slot string) *Error {
 	svc := m.proj.Services[service]
 	if svc.Release == nil || svc.Release.URL == "" {
-		return fail(CodeFailed, "у компонента "+service+" не описан release")
+		return fail(CodeFailed, "component "+service+" has no release described")
 	}
 	url := strings.ReplaceAll(svc.Release.URL, "{sha}", sha)
 	dir := m.home() + "/" + render.AppDir(service, slot)
@@ -614,48 +614,48 @@ func (m *Manager) fetchRelease(ctx context.Context, service, sha, slot string) *
 		}
 		return nil
 	}
-	if e := step(time.Minute, "подготовка каталога релиза", "mkdir", "-p", dir[:strings.LastIndex(dir, "/")]); e != nil {
+	if e := step(time.Minute, "preparing the release directory", "mkdir", "-p", dir[:strings.LastIndex(dir, "/")]); e != nil {
 		return e
 	}
-	if e := step(time.Minute, "очистка каталога релиза", "rm", "-rf", tmp, archive); e != nil {
+	if e := step(time.Minute, "cleaning the release directory", "rm", "-rf", tmp, archive); e != nil {
 		return e
 	}
-	if e := step(time.Minute, "создание каталога релиза", "mkdir", tmp); e != nil {
+	if e := step(time.Minute, "creating the release directory", "mkdir", tmp); e != nil {
 		return e
 	}
 	curl := []string{"--fail", "--silent", "--show-error", "--location", "--proto", "=https", "--proto-redir", "=https", "--max-filesize", "2147483648", "--max-time", "900"}
 	if svc.Release.TokenSecret != "" {
 		curl = append(curl, "-H", "@"+m.home()+"/.config/lite-deploy/release-"+service+".hdr")
 	}
-	if e := step(16*time.Minute, "скачивание релиза "+url, "curl", append(curl, "-o", archive, url)...); e != nil {
+	if e := step(16*time.Minute, "downloading the release "+url, "curl", append(curl, "-o", archive, url)...); e != nil {
 		return e
 	}
 	sig := m.userStateDir() + "/" + service + "-" + slot + ".minisig"
-	if e := step(5*time.Minute, "скачивание подписи "+url+".minisig", "curl", append(curl, "-o", sig, url+".minisig")...); e != nil {
+	if e := step(5*time.Minute, "downloading the signature "+url+".minisig", "curl", append(curl, "-o", sig, url+".minisig")...); e != nil {
 		return e
 	}
 	if res, err := m.run(ctx, time.Minute, "minisign", "-Vm", archive, "-P", svc.Release.MinisignKey, "-x", sig); err != nil || res.ExitCode != 0 {
 		_, _ = m.run(ctx, time.Minute, "rm", "-rf", tmp, archive, sig)
-		return fail(CodeFailed, "подпись архива не подтверждена, релиз отклонён: "+errText(res, err))
+		return fail(CodeFailed, "the archive signature is not confirmed, the release was rejected: "+errText(res, err))
 	}
 	_, _ = m.run(ctx, time.Minute, "rm", "-f", sig)
-	if e := step(10*time.Minute, "распаковка релиза", "tar", "-xzf", archive, "-C", tmp, "--no-same-owner"); e != nil {
+	if e := step(10*time.Minute, "unpacking the release", "tar", "-xzf", archive, "-C", tmp, "--no-same-owner"); e != nil {
 		return e
 	}
 	if err := m.FS.WriteFile(tmp+"/.release", []byte(sha+"\n"), 0o644); err != nil {
-		return fail(CodeFailed, "запись метки релиза: "+err.Error())
+		return fail(CodeFailed, "write the release mark: "+err.Error())
 	}
 	if m.AsUser {
 		if err := m.FS.Chown(tmp+"/.release", m.Name, m.Name); err != nil {
-			return fail(CodeFailed, "владелец метки релиза: "+err.Error())
+			return fail(CodeFailed, "owner of the release mark: "+err.Error())
 		}
 	}
 	// слот свободен: останавливаем его, заменяем каталог
 	_, _ = m.run(ctx, 2*time.Minute, "systemctl", "--user", "stop", render.UnitName(m.Name, service, slot)+".service")
-	if e := step(time.Minute, "замена каталога слота", "rm", "-rf", dir); e != nil {
+	if e := step(time.Minute, "replacing the slot directory", "rm", "-rf", dir); e != nil {
 		return e
 	}
-	if e := step(time.Minute, "перенос релиза в слот", "mv", tmp, dir); e != nil {
+	if e := step(time.Minute, "moving the release into the slot", "mv", tmp, dir); e != nil {
 		return e
 	}
 	_, _ = m.run(ctx, time.Minute, "rm", "-f", archive)

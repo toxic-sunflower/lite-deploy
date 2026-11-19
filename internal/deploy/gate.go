@@ -56,9 +56,9 @@ func ParseGate(cmd string) (GateCommand, *GateError) {
 	}
 	if sha, ok := strings.CutPrefix(cmd, "deploy "); ok {
 		if !shaRe.MatchString(sha) {
-			return GateCommand{}, &GateError{Code: CodeInvalidSHA, Message: "нужен полный хэш коммита: 40 символов 0-9a-f"}
+			return GateCommand{}, &GateError{Code: CodeInvalidSHA, Message: "the full commit hash is required: 40 characters 0-9a-f"}
 		}
 		return GateCommand{Verb: VerbDeploy, SHA: sha}, nil
 	}
-	return GateCommand{}, &GateError{Code: CodeNotAllowed, Message: "команда не разрешена (можно: deploy <хэш>, rollback, status)"}
+	return GateCommand{}, &GateError{Code: CodeNotAllowed, Message: "the command is not allowed (allowed: deploy <hash>, rollback, status)"}
 }

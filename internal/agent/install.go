@@ -23,7 +23,7 @@ const (
 func Units(bin, group string) map[string]string {
 	return map[string]string{
 		"lite-deploy-agent.socket": `[Unit]
-Description=lite-deploy: API агента
+Description=lite-deploy: agent API
 
 [Socket]
 ListenStream=` + APISocket + `
@@ -36,7 +36,7 @@ DirectoryMode=0755
 WantedBy=sockets.target
 `,
 		"lite-deploy-agent.service": `[Unit]
-Description=lite-deploy: агент (без прав)
+Description=lite-deploy: agent (unprivileged)
 Requires=lite-deploy-agent.socket
 After=lite-deploy-agent.socket
 
@@ -56,7 +56,7 @@ RestrictAddressFamilies=AF_UNIX
 CapabilityBoundingSet=
 `,
 		"lite-deploy-exec.socket": `[Unit]
-Description=lite-deploy: сокет исполнителя (только для агента)
+Description=lite-deploy: executor socket (agent only)
 
 [Socket]
 ListenStream=` + ExecSocket + `
@@ -70,7 +70,7 @@ Accept=yes
 WantedBy=sockets.target
 `,
 		"lite-deploy-exec@.service": `[Unit]
-Description=lite-deploy: исполнитель (root, по запросу)
+Description=lite-deploy: executor (root, on request)
 
 [Service]
 User=root
@@ -96,7 +96,7 @@ func AdminGroup(ctx context.Context, r host.Runner) (string, error) {
 			return g, nil
 		}
 	}
-	return "", fmt.Errorf("в системе нет группы администраторов (sudo или wheel)")
+	return "", fmt.Errorf("the system has no administrator group (sudo or wheel)")
 }
 
 // Install создаёт пользователя службы агента, записывает unit-файлы и включает сокеты.

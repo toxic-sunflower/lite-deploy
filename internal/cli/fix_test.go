@@ -20,7 +20,7 @@ func TestFixCommandsAllowlist(t *testing.T) {
 	if len(manual) != 3 {
 		t.Fatalf("manual = %v", manual)
 	}
-	for _, evil := range []string{"sudo lite security ssh --force", "sudo lite pg install; rm -rf /", "lite security ssh", "sudo lite security allow-users ИМЯ…"} {
+	for _, evil := range []string{"sudo lite security ssh --force", "sudo lite pg install; rm -rf /", "lite security ssh", "sudo lite security allow-users NAME…"} {
 		a, _ := fixCommands(evil)
 		for _, x := range a {
 			if strings.Contains(strings.Join(x, " "), "--force") || strings.Contains(strings.Join(x, " "), "rm") {

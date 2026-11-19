@@ -12,7 +12,7 @@
       "type": "string"
     },
     "hash": {
-      "description": "sha256 от канонического JSON плана без поля hash",
+      "description": "sha256 of the canonical plan JSON without the hash field",
       "pattern": "^sha256:[0-9a-f]{64}$",
       "type": "string"
     },
@@ -97,6 +97,6 @@
     "steps",
     "hash"
   ],
-  "title": "План lite-deploy",
+  "title": "lite-deploy plan",
   "type": "object"
 }

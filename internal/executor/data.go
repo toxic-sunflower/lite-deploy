@@ -45,11 +45,11 @@ func (r *run) getSecret(project, name string) (val []byte, pending bool, err err
 func setSecret(_ context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.SetSecret)
 	if strings.HasPrefix(p.Name, "_") && p.Name != dbPasswordName {
-		return outcome{}, fmt.Errorf("служебное имя %s из плана задавать нельзя", p.Name)
+		return outcome{}, fmt.Errorf("the internal name %s cannot be set from a plan", p.Name)
 	}
 	key, err := r.FS.ReadFile(r.KeyPath)
 	if err != nil {
-		return outcome{}, fmt.Errorf("ключ исполнителя не прочитан (выполните lite-deploy init): %w", err)
+		return outcome{}, fmt.Errorf("the executor key could not be read (run lite-deploy init): %w", err)
 	}
 	val, err := secrets.Decrypt(string(key), p.Ciphertext, p.Project, p.Name)
 	if err != nil {
@@ -116,7 +116,7 @@ func provisionPostgres(ctx context.Context, r *run, v any) (outcome, error) {
 
 	switch {
 	case !roleExists:
-		did = append(did, "роль")
+		did = append(did, "role")
 		password = ""
 		if !r.dry {
 			if password, err = r.newPassword(); err != nil {
@@ -128,7 +128,7 @@ func provisionPostgres(ctx context.Context, r *run, v any) (outcome, error) {
 			}
 		}
 	case p.RotatePassword:
-		did = append(did, "пароль")
+		did = append(did, "password")
 		if !r.dry {
 			if password, err = r.newPassword(); err != nil {
 				return outcome{}, err
@@ -139,12 +139,12 @@ func provisionPostgres(ctx context.Context, r *run, v any) (outcome, error) {
 			}
 		}
 	case !haveSecret && !pending:
-		return outcome{}, errors.New("adopt_password_unknown: роль есть, но её пароль неизвестен; задайте секрет _db_password или rotate_password")
+		return outcome{}, errors.New("adopt_password_unknown: the role exists but its password is unknown; set the _db_password secret or rotate_password")
 	default:
 		password = string(saved)
 	}
 	if !dbExists {
-		did = append(did, "база")
+		did = append(did, "database")
 		if !r.dry {
 			if _, err := r.psql(ctx, "postgres", fmt.Sprintf("CREATE DATABASE %s OWNER %s", role, role), nil, nil); err != nil {
 				return outcome{}, err
@@ -183,7 +183,7 @@ func provisionPostgres(ctx context.Context, r *run, v any) (outcome, error) {
 		}
 		dsn := fmt.Sprintf("host=/var/run/postgresql dbname=%s user=%s", role, role)
 		if _, err := r.must(ctx, host.Cmd{Name: "psql", Args: []string{"-X", "-tA", "-c", "SELECT 1", dsn}, Env: []string{"PGPASSWORD=" + pw}}); err != nil {
-			return outcome{}, fmt.Errorf("проверка входа роли %s: %w", role, err)
+			return outcome{}, fmt.Errorf("login check of role %s: %w", role, err)
 		}
 	}
 	if len(did) == 0 {
@@ -229,7 +229,7 @@ func (r *run) ensureHba(ctx context.Context, role string) (bool, error) {
 			}
 		}
 		if at < 0 {
-			return false, errors.New("в pg_hba.conf нет общего правила «local all all»: не знаю, куда вставить правило роли")
+			return false, errors.New("pg_hba.conf has no general \"local all all\" rule: cannot tell where to insert the role rule")
 		}
 		out = append(out[:at], append([]string{block}, out[at:]...)...)
 	}
@@ -267,10 +267,10 @@ func registryLogin(ctx context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.RegistryLogin)
 	token, pending, err := r.getSecret(p.Project, p.Secret)
 	if err != nil {
-		return outcome{}, fmt.Errorf("токен реестра: %w", err)
+		return outcome{}, fmt.Errorf("registry token: %w", err)
 	}
 	if pending {
-		return outcome{changed: true, detail: "токен будет записан предыдущим шагом"}, nil
+		return outcome{changed: true, detail: "the token will be written by an earlier step"}, nil
 	}
 	authPath := home(p.Project) + "/.config/lite-deploy/auth.json"
 	want := base64.StdEncoding.EncodeToString([]byte(p.Username + ":" + string(token)))
@@ -290,7 +290,7 @@ func registryLogin(ctx context.Context, r *run, v any) (outcome, error) {
 		return outcome{}, err
 	}
 	if res.ExitCode != 0 {
-		return outcome{}, fmt.Errorf("podman login завершился с кодом %d: %s", res.ExitCode, trimErr(res))
+		return outcome{}, fmt.Errorf("podman login exited with code %d: %s", res.ExitCode, trimErr(res))
 	}
 	if err := r.FS.Chmod(authPath, 0o600); err != nil {
 		return outcome{}, err
@@ -310,7 +310,7 @@ func writeServiceEnv(_ context.Context, r *run, v any) (outcome, error) {
 		case "secret":
 			val, pending, err := r.getSecret(p.Project, e.Secret)
 			if err != nil {
-				return outcome{}, fmt.Errorf("секрет %s для %s: %w", e.Secret, e.Name, err)
+				return outcome{}, fmt.Errorf("secret %s for %s: %w", e.Secret, e.Name, err)
 			}
 			if pending {
 				unknown = true
@@ -325,7 +325,7 @@ func writeServiceEnv(_ context.Context, r *run, v any) (outcome, error) {
 			}
 			pw, pending, err := r.getSecret(p.Project, pwName)
 			if err != nil {
-				return outcome{}, fmt.Errorf("пароль базы: %w", err)
+				return outcome{}, fmt.Errorf("database password: %w", err)
 			}
 			if pending {
 				unknown = true
@@ -345,7 +345,7 @@ func writeServiceEnv(_ context.Context, r *run, v any) (outcome, error) {
 	}
 	path := home(p.Project) + "/.config/lite-deploy/env/" + p.Service + ".env"
 	if unknown {
-		return outcome{changed: true, detail: "зависит от секретов, которые запишут предыдущие шаги"}, nil
+		return outcome{changed: true, detail: "depends on secrets that earlier steps will write"}, nil
 	}
 	text, err := render.EnvFile(lines)
 	if err != nil {
@@ -362,7 +362,7 @@ func bakNote(bak string) string {
 	if bak == "" {
 		return ""
 	}
-	return "старый файл сохранён: " + bak
+	return "the old file was saved: " + bak
 }
 
 // writeReleaseAuth: заголовок Authorization для скачивания релиза; файл 600 у пользователя проекта.
@@ -370,13 +370,13 @@ func writeReleaseAuth(_ context.Context, r *run, v any) (outcome, error) {
 	p := v.(*actions.WriteReleaseAuth)
 	token, pending, err := r.getSecret(p.Project, p.Secret)
 	if err != nil {
-		return outcome{}, fmt.Errorf("токен релиза: %w", err)
+		return outcome{}, fmt.Errorf("release token: %w", err)
 	}
 	if pending {
-		return outcome{changed: true, detail: "токен будет записан предыдущим шагом"}, nil
+		return outcome{changed: true, detail: "the token will be written by an earlier step"}, nil
 	}
 	if strings.ContainsAny(string(token), "\r\n\x00") {
-		return outcome{}, errors.New("токен релиза содержит перевод строки")
+		return outcome{}, errors.New("the release token contains a line break")
 	}
 	path := home(p.Project) + "/.config/lite-deploy/release-" + p.Service + ".hdr"
 	changed, _, err := r.ensureFile(fileSpec{path: path, data: []byte("Authorization: Bearer " + string(token) + "\n"), perm: 0o600, owner: p.Project, group: p.Project})

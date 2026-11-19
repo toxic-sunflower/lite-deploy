@@ -18,15 +18,15 @@ func (Pkg) Name() string       { return "package" }
 func (Pkg) Kind() string       { return "builtin" }
 func (Pkg) Requires() []string { return nil }
 func (Pkg) Description() string {
-	return "системные пакеты: установка, удаление, обновление, проверка, журнал"
+	return "system packages: install, remove, update, check, journal"
 }
 func (Pkg) Commands() []plugin.Command {
 	return []plugin.Command{
-		{Name: "list", Help: "пакеты, установленные через lite"},
-		{Name: "check", Help: "установлен ли пакет и какой версии", Args: "ПАКЕТ"},
-		{Name: "install", Help: "установить пакеты", Args: "ПАКЕТ…", Confirm: true},
-		{Name: "update", Help: "обновить пакеты", Args: "ПАКЕТ…", Confirm: true},
-		{Name: "remove", Help: "удалить пакеты (ssh-сервер, sudo, systemd и оболочку удалить нельзя)", Args: "ПАКЕТ…", Confirm: true},
+		{Name: "list", Help: "packages installed through lite"},
+		{Name: "check", Help: "whether a package is installed and its version", Args: "PACKAGE"},
+		{Name: "install", Help: "install packages", Args: "PACKAGE…", Confirm: true},
+		{Name: "update", Help: "update packages", Args: "PACKAGE…", Confirm: true},
+		{Name: "remove", Help: "remove packages (the ssh server, sudo, systemd and the shell cannot be removed)", Args: "PACKAGE…", Confirm: true},
 	}
 }
 
@@ -47,7 +47,7 @@ func (Pkg) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (
 	switch cmd {
 	case "list":
 		if len(args) != 0 {
-			return plugin.Output{}, plugin.Errorf("usage", "package list: аргументов нет")
+			return plugin.Output{}, plugin.Errorf("usage", "package list: takes no arguments")
 		}
 		es, err := m.List()
 		if err != nil {
@@ -58,7 +58,7 @@ func (Pkg) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (
 		}
 		var sb strings.Builder
 		if len(es) == 0 {
-			sb.WriteString("Через lite пакеты пока не ставились.\n")
+			sb.WriteString("No packages have been installed through lite yet.\n")
 		}
 		for _, e := range es {
 			fmt.Fprintf(&sb, "%-30s %-20s %s\n", e.Name, e.Version, e.InstalledAt)
@@ -66,27 +66,27 @@ func (Pkg) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (
 		return plugin.Output{Text: sb.String(), Data: map[string]any{"packages": es}}, nil
 	case "check":
 		if len(args) != 1 {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: lite package check ПАКЕТ")
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite package check PACKAGE")
 		}
 		in, err := m.Check(ctx, args[0])
 		if err != nil {
 			return plugin.Output{}, pkgErr(err)
 		}
-		text := fmt.Sprintf("%s: не установлен\n", in.Name)
+		text := fmt.Sprintf("%s: not installed\n", in.Name)
 		if in.Installed {
-			by := "поставлен не через lite"
+			by := "not installed through lite"
 			if in.ByLite {
-				by = "поставлен через lite"
+				by = "installed through lite"
 			}
-			text = fmt.Sprintf("%s: установлен, версия %s (%s)\n", in.Name, in.Version, by)
+			text = fmt.Sprintf("%s: installed, version %s (%s)\n", in.Name, in.Version, by)
 		}
 		return plugin.Output{Text: text, Data: in}, nil
 	case "install", "update", "remove":
 		if len(args) == 0 {
-			return plugin.Output{}, plugin.Errorf("usage", "использование: lite package %s ПАКЕТ…", cmd)
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite package %s PACKAGE…", cmd)
 		}
 		var err error
-		verb := map[string]string{"install": "установлены", "update": "обновлены", "remove": "удалены"}[cmd]
+		verb := map[string]string{"install": "installed", "update": "updated", "remove": "removed"}[cmd]
 		switch cmd {
 		case "install":
 			err = m.Install(ctx, args...)
@@ -98,9 +98,9 @@ func (Pkg) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (
 		if err != nil {
 			return plugin.Output{}, pkgErr(err)
 		}
-		return plugin.Output{Text: fmt.Sprintf("Пакеты %s: %s\n", verb, strings.Join(args, ", ")), Data: map[string]any{"packages": args, "action": cmd}}, nil
+		return plugin.Output{Text: fmt.Sprintf("Packages %s: %s\n", verb, strings.Join(args, ", ")), Data: map[string]any{"packages": args, "action": cmd}}, nil
 	}
-	return plugin.Output{}, plugin.Errorf("usage", "у плагина package нет команды %q", cmd)
+	return plugin.Output{}, plugin.Errorf("usage", "plugin package has no command %q", cmd)
 }
 
 func (Pkg) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
@@ -112,5 +112,5 @@ func (Pkg) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	if _, err := m.List(); err != nil {
 		return []plugin.Finding{{Plugin: "package", Check: "journal", Level: plugin.LevelWarn, Message: err.Error()}}
 	}
-	return []plugin.Finding{{Plugin: "package", Check: "manager", Level: plugin.LevelOK, Message: "менеджер пакетов: " + mgr}}
+	return []plugin.Finding{{Plugin: "package", Check: "manager", Level: plugin.LevelOK, Message: "package manager: " + mgr}}
 }

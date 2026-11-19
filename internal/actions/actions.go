@@ -52,7 +52,7 @@ func Names() []string {
 func Decode(name string, raw json.RawMessage) (any, []schema.Issue) {
 	d, ok := registry[name]
 	if !ok {
-		return nil, []schema.Issue{{Path: "/action", Code: "unknown_action", Message: fmt.Sprintf("действие %q не входит в список исполнителя", name)}}
+		return nil, []schema.Issue{{Path: "/action", Code: "unknown_action", Message: fmt.Sprintf("action %q is not in the executor list", name)}}
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
 		raw = json.RawMessage("{}")
@@ -64,7 +64,7 @@ func Decode(name string, raw json.RawMessage) (any, []schema.Issue) {
 		return nil, []schema.Issue{{Path: "/params", Code: "syntax", Message: err.Error()}}
 	}
 	if _, err := dec.Token(); err != io.EOF {
-		return nil, []schema.Issue{{Path: "/params", Code: "syntax", Message: "лишние данные после параметров"}}
+		return nil, []schema.Issue{{Path: "/params", Code: "syntax", Message: "extra data after the parameters"}}
 	}
 	issues := schema.Check(v)
 	if d.Extra != nil {
@@ -98,7 +98,7 @@ const (
 
 // VerifyHost только читает: проверяет предусловия сервера.
 type VerifyHost struct {
-	NoPodman bool `json:"no_podman,omitempty" doc:"в проекте нет контейнеров: podman не нужен"`
+	NoPodman bool `json:"no_podman,omitempty" doc:"the project has no containers: podman is not needed"`
 }
 
 // CreateProjectUser создаёт системного пользователя проекта.
@@ -117,7 +117,7 @@ type ProvisionPostgres struct {
 type SetSecret struct {
 	Project    string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	Name       string `json:"name" pattern:"^_?[a-z][a-z0-9_]{1,63}$"`
-	Ciphertext string `json:"ciphertext" pattern:"^-----BEGIN AGE ENCRYPTED FILE-----\\n[A-Za-z0-9+/=\\n]{20,}-----END AGE ENCRYPTED FILE-----$" maxLen:"16384" doc:"шифртекст age (armor)"`
+	Ciphertext string `json:"ciphertext" pattern:"^-----BEGIN AGE ENCRYPTED FILE-----\\n[A-Za-z0-9+/=\\n]{20,}-----END AGE ENCRYPTED FILE-----$" maxLen:"16384" doc:"age ciphertext (armor)"`
 }
 
 // RegistryLogin входит в реестр образов от имени проектного пользователя.
@@ -132,10 +132,10 @@ type RegistryLogin struct {
 type EnvVar struct {
 	Name   string `json:"name" pattern:"^[A-Za-z_][A-Za-z0-9_]*$"`
 	Kind   string `json:"kind" enum:"literal,secret,database"`
-	Value  string `json:"value,omitempty" pattern:"^[^\\r\\n]*$" maxLen:"1024" doc:"значение для literal; формат строки подключения для database"`
-	Secret string `json:"secret,omitempty" pattern:"^[a-z][a-z0-9_]{1,63}$" doc:"имя секрета: для secret значение переменной, для database с host пароль роли"`
-	Host   string `json:"host,omitempty" pattern:"^[A-Za-z0-9.:-]{1,253}$" doc:"только database: адрес PostgreSQL на другом сервере; без него база на этом сервере по сокету"`
-	Port   int    `json:"port,omitempty" min:"1" max:"65535" doc:"только database с host"`
+	Value  string `json:"value,omitempty" pattern:"^[^\\r\\n]*$" maxLen:"1024" doc:"value for literal; connection string format for database"`
+	Secret string `json:"secret,omitempty" pattern:"^[a-z][a-z0-9_]{1,63}$" doc:"secret name: for secret the variable value, for database with host the role password"`
+	Host   string `json:"host,omitempty" pattern:"^[A-Za-z0-9.:-]{1,253}$" doc:"database only: PostgreSQL address on another server; without it the database is on this server, over a socket"`
+	Port   int    `json:"port,omitempty" min:"1" max:"65535" doc:"database with host only"`
 }
 
 // WriteServiceEnv собирает env-файл сервиса.
@@ -155,7 +155,7 @@ type InstallQuadlet struct {
 	Memory         string   `json:"memory" pattern:"^[1-9][0-9]*[mg]$"`
 	Pids           int      `json:"pids" min:"16" max:"4096"`
 	DatabaseSocket bool     `json:"database_socket"`
-	Data           []string `json:"data,omitempty" maxItems:"8" pattern:"^[a-z][a-z0-9-]{0,15}$" doc:"постоянные каталоги, монтируются в /data/<имя>"`
+	Data           []string `json:"data,omitempty" maxItems:"8" pattern:"^[a-z][a-z0-9-]{0,15}$" doc:"persistent directories, mounted at /data/<name>"`
 }
 
 // InstallUnit пишет пользовательский юнит systemd одного слота компонента kind unit (процесс на хосте).
@@ -164,9 +164,9 @@ type InstallUnit struct {
 	Service  string   `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
 	Slot     string   `json:"slot" enum:"blue,green"`
 	HostPort int      `json:"host_port" min:"18000" max:"18999"`
-	Exec     []string `json:"exec" minItems:"1" maxItems:"32" doc:"программа (относительно каталога релиза или абсолютный путь) и аргументы"`
-	Stop     []string `json:"stop,omitempty" maxItems:"32" doc:"команда остановки (ExecStop)"`
-	Data     []string `json:"data,omitempty" maxItems:"8" pattern:"^[a-z][a-z0-9-]{0,15}$" doc:"постоянные каталоги, доступные в LITE_DATA_<ИМЯ>"`
+	Exec     []string `json:"exec" minItems:"1" maxItems:"32" doc:"program (relative to the release directory or an absolute path) and arguments"`
+	Stop     []string `json:"stop,omitempty" maxItems:"32" doc:"stop command (ExecStop)"`
+	Data     []string `json:"data,omitempty" maxItems:"8" pattern:"^[a-z][a-z0-9-]{0,15}$" doc:"persistent directories, available in LITE_DATA_<NAME>"`
 	Memory   string   `json:"memory" pattern:"^[1-9][0-9]*[mg]$"`
 	Pids     int      `json:"pids" min:"16" max:"4096"`
 }

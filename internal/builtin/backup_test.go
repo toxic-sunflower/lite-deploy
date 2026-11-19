@@ -37,7 +37,7 @@ func backupEnv(t *testing.T, stdin string) (plugin.Env, *host.MemFS, *[]host.Cmd
 
 func TestBackupRequiresKey(t *testing.T) {
 	env, _, _ := backupEnv(t, "")
-	if _, err := (Backup{}).Run(context.Background(), env, "run", nil); err == nil || !strings.Contains(err.Error(), "без шифрования") {
+	if _, err := (Backup{}).Run(context.Background(), env, "run", nil); err == nil || !strings.Contains(err.Error(), "without encryption") {
 		t.Fatalf("без ключа копия не снимается: %v", err)
 	}
 }
