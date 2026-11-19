@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/builtin"
+	"github.com/toxic-sunflower/lite-deploy/internal/firewall"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/pkgmgr"
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
@@ -214,6 +215,7 @@ func collectFindings(env Env) []plugin.Finding {
 		all = append(all, p.Check(ctx, env.pluginEnv())...)
 	}
 	all = append(all, projectRequirements(ctx, env)...)
+	all = append(all, projectPublishing(ctx, env)...)
 	for _, e := range errs {
 		all = append(all, plugin.Finding{Plugin: "plugin", Check: "load", Level: plugin.LevelFail, Message: e.Error()})
 	}
@@ -261,4 +263,49 @@ func projectRequirements(ctx context.Context, env Env) []plugin.Finding {
 		}
 	}
 	return out
+}
+
+// projectPublishing checks that a site published directly can be reached: the firewall must let ports 80 and 443 in.
+func projectPublishing(ctx context.Context, env Env) []plugin.Finding {
+	var out []plugin.Finding
+	var st *firewall.State
+	for _, name := range projectNames(env) {
+		b, err := env.FS.ReadFile("/etc/lite-deploy/projects/" + name + ".json")
+		if err != nil {
+			continue
+		}
+		p, issues := project.Parse(b)
+		if len(issues) > 0 {
+			continue
+		}
+		for _, s := range p.Sites {
+			if s.Publish != "direct" {
+				continue
+			}
+			if st == nil {
+				var e *firewall.Error
+				if st, e = (&firewall.Manager{Runner: env.Runner}).Status(ctx); e != nil {
+					return append(out, plugin.Finding{Plugin: "project", Check: name + "/" + s.Name + "/publish", Level: plugin.LevelWarn,
+						Message: "could not read the firewall to check that site " + s.Name + " of " + name + " is reachable"})
+				}
+			}
+			check := name + "/" + s.Name + "/publish"
+			if !st.Active || (openTo(st, 80) && openTo(st, 443)) {
+				out = append(out, plugin.Finding{Plugin: "project", Check: check, Level: plugin.LevelOK, Message: "site " + s.Name + " of " + name + " is published directly: ports 80 and 443 are not blocked"})
+				continue
+			}
+			out = append(out, plugin.Finding{Plugin: "project", Check: check, Level: plugin.LevelWarn,
+				Message: "site " + s.Name + " of " + name + " is published directly, but the firewall does not allow ports 80 and 443 (no certificate can be issued)", Fix: "sudo lite firewall mode http"})
+		}
+	}
+	return out
+}
+
+func openTo(st *firewall.State, port int) bool {
+	for _, r := range st.Rules {
+		if r.Port == port && r.Action == "allow" && r.From == "any" {
+			return true
+		}
+	}
+	return false
 }

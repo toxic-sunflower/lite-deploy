@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 )
@@ -122,5 +123,36 @@ func TestHelpWorksForEveryoneIncludingRoot(t *testing.T) {
 	env.LoginUID = func() (int, bool) { return 0, true }
 	if c := run(t, env, "verify"); c != 4 || !strings.Contains(out.String()+"", "") {
 		t.Errorf("other commands are still forbidden for root: %d", c)
+	}
+}
+
+func TestPublishSwitchesSiteThroughAgent(t *testing.T) {
+	env, out, _ := testEnv(t)
+	env.IsRoot = func() bool { return false }
+	proj, err := os.ReadFile(projectFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = env.FS.WriteFile("/etc/lite-deploy/projects/shop.json", proj, 0o644)
+	var createBody string
+	env.AgentCall = func(_ context.Context, _, _, path string, b []byte) ([]byte, error) {
+		if strings.HasSuffix(path, "preview") {
+			return []byte(`{"ok":true,"api_version":"v1","command":"project.bundle","data":{"project_hash":"sha256:abc","steps":[]}}`), nil
+		}
+		createBody = string(b)
+		return []byte(`{"ok":true,"api_version":"v1","command":"project.bundle","data":{"steps":[]}}`), nil
+	}
+	if c := run(t, env, "publish", "shop", "main"); c != 0 || !strings.Contains(out.String(), "tunnel") {
+		t.Fatalf("showing the mode: %d %s", c, out.String())
+	}
+	out.Reset()
+	if c := run(t, env, "publish", "shop", "main", "direct", "--yes"); c != 0 {
+		t.Fatalf("%d %s", c, out.String())
+	}
+	if !strings.Contains(createBody, `"publish":"direct"`) {
+		t.Fatalf("the agent did not get publish=direct: %s", createBody)
+	}
+	if c := run(t, env, "publish", "shop", "nosuch", "direct", "--yes"); c == 0 {
+		t.Fatal("an unknown site must fail")
 	}
 }

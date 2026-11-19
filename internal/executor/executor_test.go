@@ -180,7 +180,7 @@ func (c counter) Read(p []byte) (int, error) {
 
 func randReader(n *int) counter { return counter{n} }
 
-// buildPlan builds a plan for the example project project (without adopt, so that the executor creates the database password).
+// buildPlan builds a plan for the example project (shop) (without adopt, so that the executor creates the database password).
 func (w *world) buildPlan(adopt bool, extra map[string]string) *plan.Plan {
 	w.t.Helper()
 	data, err := os.ReadFile("../../testdata/shop/project.json")

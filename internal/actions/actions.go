@@ -197,6 +197,7 @@ type InstallCaddySite struct {
 	ListenPort      int         `json:"listen_port" min:"18000" max:"18999"`
 	UpstreamInitial string      `json:"upstream_initial" enum:"not_deployed"`
 	TrustedProxy    string      `json:"trusted_proxy" enum:"cloudflare,none"`
+	Direct          bool        `json:"direct,omitempty" doc:"also serve the host on 80/443 with an automatic TLS certificate"`
 	MaxBody         string      `json:"max_body" pattern:"^[1-9][0-9]*(KB|MB)$"`
 	Routes          []SiteRoute `json:"routes,omitempty" maxItems:"16"`
 }

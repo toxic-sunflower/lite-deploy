@@ -105,21 +105,37 @@ func Unit(a actions.InstallUnit) string {
 }
 
 // CaddySite is the text of a site file (SPEC-v0.md, 4.3, install_caddy_site).
+// The loopback block always exists (a Cloudflare Tunnel points at it); with Direct a second block serves the host publicly and Caddy gets the certificate itself.
 func CaddySite(a actions.InstallCaddySite) string {
 	var b strings.Builder
+	siteBlock(&b, a, fmt.Sprintf("http://%s:%d", a.Host, a.ListenPort), "\tbind 127.0.0.1\n\n", "")
+	if a.Direct {
+		b.WriteString("\n")
+		// The real client address: a forged CF-Connecting-IP header must not reach the application.
+		pre := ""
+		if a.TrustedProxy == "cloudflare" {
+			pre = "\trequest_header CF-Connecting-IP {remote_host}\n\n"
+		}
+		siteBlock(&b, a, a.Host, "", pre)
+	}
+	return b.String()
+}
+
+// siteBlock writes one site block. head goes right after the address line, pre before the routes.
+func siteBlock(b *strings.Builder, a actions.InstallCaddySite, addr, head, pre string) {
 	up := UpstreamPath(a.Project, a.Site)
-	fmt.Fprintf(&b, "http://%s:%d {\n\tbind 127.0.0.1\n\n\tencode zstd gzip\n\n", a.Host, a.ListenPort)
+	fmt.Fprintf(b, "%s {\n%s\tencode zstd gzip\n\n", addr, head)
 	b.WriteString("\theader {\n\t\tStrict-Transport-Security \"max-age=31536000\"\n\t\tX-Content-Type-Options nosniff\n\t\tReferrer-Policy strict-origin-when-cross-origin\n\t\t-Server\n\t}\n\n")
+	b.WriteString(pre)
 	if len(a.Routes) == 0 {
-		fmt.Fprintf(&b, "\trequest_body {\n\t\tmax_size %s\n\t}\n\timport %s\n", a.MaxBody, up)
+		fmt.Fprintf(b, "\trequest_body {\n\t\tmax_size %s\n\t}\n\timport %s\n", a.MaxBody, up)
 	} else {
 		for i, r := range a.Routes {
-			fmt.Fprintf(&b, "\t@route%d path %s\n\thandle @route%d {\n\t\trequest_body {\n\t\t\tmax_size %s\n\t\t}\n\t\timport %s\n\t}\n\n", i+1, r.Path, i+1, r.MaxBody, up)
+			fmt.Fprintf(b, "\t@route%d path %s\n\thandle @route%d {\n\t\trequest_body {\n\t\t\tmax_size %s\n\t\t}\n\t\timport %s\n\t}\n\n", i+1, r.Path, i+1, r.MaxBody, up)
 		}
-		fmt.Fprintf(&b, "\thandle {\n\t\trequest_body {\n\t\t\tmax_size %s\n\t\t}\n\t\timport %s\n\t}\n", a.MaxBody, up)
+		fmt.Fprintf(b, "\thandle {\n\t\trequest_body {\n\t\t\tmax_size %s\n\t\t}\n\t\timport %s\n\t}\n", a.MaxBody, up)
 	}
-	fmt.Fprintf(&b, "\n\tlog {\n\t\toutput file /var/log/caddy/%s.log {\n\t\t\troll_size 50MiB\n\t\t\troll_keep 5\n\t\t}\n\t}\n}\n", a.Project+"-"+a.Site)
-	return b.String()
+	fmt.Fprintf(b, "\n\tlog {\n\t\toutput file /var/log/caddy/%s.log {\n\t\t\troll_size 50MiB\n\t\t\troll_keep 5\n\t\t}\n\t}\n}\n", a.Project+"-"+a.Site)
 }
 
 // UpstreamNotDeployed is the initial upstream content before the first deploy.

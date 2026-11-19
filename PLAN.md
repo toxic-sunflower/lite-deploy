@@ -4,7 +4,7 @@ Project: **lite-deploy** (a working name). Every session is short and solves one
 
 ## Status on 2026-11-20
 
-The code of S1–S6 and S9 is done, the plugin mechanism and the plugins `package`, `security`, `firewall`, `caddy`, `podman`, `pg`, `redis`, `server`, `backup`, `backblaze`, `s3`, `sftp` are done, and so are `liteup`, `lite fix`, `kind: unit` components and creating a project from the interface (see `REQUIREMENTS.md`, section 2, for the exact state and what is checked on a server). Release `v0.6.1` is published. What remains is running it all on a real server (`INSTALL-PROD.md`), the MCP server (S10) and the skill (S11). The queue below is the original plan and is kept for the history of decisions.
+The code of S1–S6 and S9 is done, the plugin mechanism and the plugins `package`, `security`, `firewall`, `caddy`, `podman`, `pg`, `redis`, `server`, `backup`, `backblaze`, `s3`, `sftp` are done, and so are `liteup`, `lite fix`, `kind: unit` components and creating a project from the interface (see `REQUIREMENTS.md`, section 2, for the exact state and what is checked on a server). Release `v0.6.1` is published. What remains is running it all on a real server, the MCP server (S10) and the skill (S11). The queue below is the original plan and is kept for the history of decisions.
 
 ## The map of documents
 
@@ -14,7 +14,6 @@ The code of S1–S6 and S9 is done, the plugin mechanism and the plugins `packag
 | `ARCHITECTURE.md` | How it is built (the scheme, parts, security, the threat model) |
 | `SPEC-v0.md` | The exact v0 specification: schemas, the plan, executor actions, the CLI |
 | `REQUIREMENTS.md` | What the product must do, the current state |
-| `INSTALL-PROD.md` | Installing on a new server, step by step |
 | `cmd/`, `internal/` | The code (Go): `project`, `plan`, `actions`, `render`, `host`, `deploy`, `cli`, `schema`, `secrets` (age, the store), `config`, `lint` (checks of repository rules), `builtin` (plugins), `agent`, `executor`, `ui` |
 | `schemas/` | JSON Schema, generated from the Go types (`go test ./internal/cli -update`) |
 | `testdata/shop/` | `project.json` and golden files of units, sites, sudoers (`go test ./internal/render -update`) |
@@ -73,7 +72,7 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 
 ### S5. `deploy`, `rollback`, `status` and the gatekeeper (done 2026-11-13)
 - Done: `internal/deploy` (blue-green, health check, rollback, flock), the commands `deploy`, `rollback`, `status`, `gate`, the `deploy_failed` code; 8 scenarios on doubles. Checked on 2026-11-19 in a container for `kind unit`.
-- The criterion of readiness of the core (D-28): the example project is installed and deployed through lite-deploy.
+- The criterion of readiness of the core (D-28): a reference project is installed and deployed through lite-deploy.
 
 ### S6. The agent daemon and the on-request executor (mode B; the first version done 2026-11-13)
 - Done: the agent (`lite-deploy agent serve`, HTTP/JSON `/v1` over a unix socket, access by the system administrators group (`sudo` or `wheel`), `SO_PEERCRED`, a request journal), the on-request executor (`lite-deploy exec`, socket activation, a fixed list of actions, the systemd journal), the client `lite-deploy call`, installing the agent is part of the installer. The UI goes through the agent, and neither `sudo` nor `sudoers` is needed for it. Decision D-63. Since v0.6 the CLI also hands privileged commands to the agent (no sudo).
@@ -83,7 +82,7 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 - Goal: a plugin `tunnel-cloudflare` following the rules of `DEPLOY-PATTERN.md` (a separate user, a 600 token, checking old DNS records, a fallback plan for a failure).
 
 ### S8. Secrets and backup
-- Done: `age` encryption, the store, `secret encrypt|set|list|pubkey`, `init`; the `backup` plugin (settings and secrets encrypted with the owner key, dumps optionally, storage locations); restoring a server (`INSTALL-PROD.md`, README). Not done: `secret://` references in the daemon API, a journal of secret reads as root.
+- Done: `age` encryption, the store, `secret encrypt|set|list|pubkey`, `init`; the `backup` plugin (settings and secrets encrypted with the owner key, dumps optionally, storage locations); restoring a server (README). Not done: `secret://` references in the daemon API, a journal of secret reads as root.
 
 ### S9. The UI (the first version done 2026-11-13)
 - Done: `lite-deploy ui [--host user@server]`: a local page on `127.0.0.1` with a token in the address, the state of projects, "Deploy" (by commit hash) and "Roll back", the firewall section, the plugins and `verify`, and a "New project" form with a plan preview. Not done: forms generated from JSON Schema, checking the page in a real browser.
@@ -97,7 +96,6 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 
 ### S11. Installing from scratch, instructions and a skill
 - Goal: installing on an empty Ubuntu with one checkable command; instructions "what is installed and why" and a skill for an AI agent.
-- Input: `skill/server-setup`, `WALKTHROUGH.md`.
 - Outcome: v1.
 
 ### Later
@@ -111,7 +109,6 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 ## Parallel tasks (separate short sessions)
 
 - **C1. Finish the comparison with alternatives:** the Dokploy AI Assistant and API, Dokku, CapRover, Podman support in the full text of the documentation, real memory use. Allowed domains are needed.
-- **C2. Close the example project tails** from `projects/shop/TODO.md` and `WALKTHROUGH.md`: disabling password login, Cloudflare Access for the admin panel, the fallback plan, isolation and secret checks.
 - **C3. Tidy up the old documents:** decide what stays as internal notes and what becomes public documentation.
 - **C4. Rename the repository to `lite-deploy`** (the owner does it in the GitHub settings).
 

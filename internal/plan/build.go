@@ -182,8 +182,8 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 	for _, s := range d.Sites {
 		b.add(actions.InstallCaddySiteName, actions.InstallCaddySite{
 			Project: name, Site: s.Name, Host: s.Host, ListenPort: ports.Sites[s.Name], UpstreamInitial: "not_deployed",
-			TrustedProxy: s.TrustedProxy, MaxBody: s.MaxBody, Routes: siteRoutes(s),
-		}, fmt.Sprintf("Site %s: %s on 127.0.0.1:%d, upstream \"not deployed\" until the first deploy", s.Name, s.Host, ports.Sites[s.Name]))
+			TrustedProxy: s.TrustedProxy, Direct: s.Publish == "direct", MaxBody: s.MaxBody, Routes: siteRoutes(s),
+		}, siteDetail(s, ports.Sites[s.Name]))
 	}
 	b.add(actions.InstallReloadRuleName, actions.InstallReloadRule{Project: name}, "sudoers rule: user "+name+" may only run systemctl reload caddy")
 	b.add(actions.ReloadCaddyName, actions.ReloadCaddy{}, "Check the Caddy configuration as user caddy and reload")
@@ -440,4 +440,13 @@ func allocatePorts(d *project.Project, st State, cur ProjectState) (actions.Port
 		out.Sites[s.Name] = x
 	}
 	return out, nil
+}
+
+// siteDetail is the plan step text of a site.
+func siteDetail(s project.Site, port int) string {
+	d := fmt.Sprintf("Site %s: %s on 127.0.0.1:%d", s.Name, s.Host, port)
+	if s.Publish == "direct" {
+		d += " and publicly on 80/443 with an automatic TLS certificate"
+	}
+	return d + ", upstream \"not deployed\" until the first deploy"
 }

@@ -83,7 +83,7 @@ lite status shop
 
 ## 6. Make the site reachable
 
-`lite` keeps every site on `127.0.0.1` (port `18080` above). To reach it from the internet, put a tunnel or a proxy in front: [Publish a site](publish-a-site.md) shows how with a Cloudflare Tunnel.
+`lite` keeps every site on `127.0.0.1` (port `18080` above) until you publish it: either Caddy serves it directly with its own TLS certificate, or a Cloudflare Tunnel brings traffic to it. [Publish a site](publish-a-site.md) shows both and how to switch.
 
 ## What next
 

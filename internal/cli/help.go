@@ -21,6 +21,7 @@ Everything else runs as a regular administrator, no sudo needed:
   project plan|validate|list   build a plan, check a description, list projects
   deploy PROJECT HASH          deploy a version (blue-green, no downtime)
   rollback PROJECT             switch traffic back to the previous version
+  publish PROJECT SITE [tunnel|direct]  show or switch how a site reaches the internet
   status [PROJECT]             show projects and slots
   secret encrypt PROJECT NAME  encrypt a secret value read from stdin
   ui                           start the web interface

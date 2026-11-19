@@ -4,7 +4,7 @@
 
 Server setup does not belong in the application repository. It is separate work and, later, a separate repository.
 
-Three things are to be made out of what was walked through by hand (WALKTHROUGH.md):
+Three things are to be made out of what was walked through by hand:
 
 1. **Instructions**: what is installed on an empty Ubuntu and why (with the commands explained).
 2. **A skill for an agent**: copies a script to the server over SSH, runs it and sorts out errors. Only with the owner's explicit permission for every action.
@@ -14,7 +14,7 @@ An open question: containers are currently described as Quadlet (systemd units),
 
 The first thing to do after the vision: create a private git repository for this folder.
 
-## What the tool must be able to do (from the example project decisions, 2026-10-24)
+## What the tool must be able to do (from the reference project decisions, 2026-10-24)
 
 - **Installing the deploy files on the server in a manual-automatic way:** the project deploy script and the Quadlet units are installed by the tool on the owner's command (not sent by the pipeline: otherwise the deploy key would run any code). Modes: scripts 700, units 600.
 - **A gatekeeper and a restricted key** for each project: `deploy <hash>`, `rollback`, `status`.
@@ -36,11 +36,10 @@ The first thing to do after the vision: create a private git repository for this
 
 ## An addition of 2026-10-25 (evening)
 
-- **Checking settings files after writing:** the set of keys and the length of passwords (per the application requirements), without printing values. A failure of the example project admin (the login line disappeared) was found only through the restart loop and a `502` from outside.
+- **Checking settings files after writing:** the set of keys and the length of passwords (per the application requirements), without printing values. A failure of an application's admin (the login line disappeared) was found only through the restart loop and a `502` from outside.
 - **Slot state as part of the check:** after a deploy and after a settings change show `list-units` and the last journal lines of the slot; on a restart loop give the cause from the journal at once.
 - **Changing a secret without leaks:** hidden input, the value through stdin, replacing one line while keeping the rest, restarting only the running slots, checking the keys.
 - **Cloudflare Access:** creating an application and a policy from a list of emails, adding and removing admins; keep in mind that the interface changes, and check the result with a request from outside (the Access page instead of the application form).
-- **Checking against the real third-party API (shop) before a deploy:** a mock hides differences (the format of variants, the answer to a repeated creation); the tool and the instructions must require a manual run of every new call at the live address.
 
 ## Principles and decisions (the discussion of 2026-10-29)
 

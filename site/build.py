@@ -23,7 +23,7 @@ GROUPS = [
     ("Tutorials", [
         ("docs/quickstart.md", "quickstart", "Quickstart", "From a bare server to a running site in one sitting."),
         ("docs/first-project.md", "first-project", "Your first project", "A container project: description, secrets, create, deploy, roll back."),
-        ("docs/publish-a-site.md", "publish-a-site", "Publish a site", "Make the site reachable from the internet with a Cloudflare Tunnel."),
+        ("docs/publish-a-site.md", "publish-a-site", "Publish a site", "Serve a site with Caddy's own TLS certificate or through a Cloudflare Tunnel, and switch between them."),
         ("docs/process-project.md", "process-project", "A project without containers", "Deploy a binary, Node or compose app from a signed archive."),
         ("docs/ci.md", "ci", "Deploy from CI", "A restricted key, the gatekeeper and a GitHub Actions workflow."),
         ("docs/remote-database.md", "remote-database", "A database on another server", "Connect a project to PostgreSQL on a second server."),

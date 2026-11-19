@@ -288,8 +288,10 @@
             "type": "string"
           },
           "publish": {
+            "description": "tunnel: Caddy listens on 127.0.0.1 only (Cloudflare Tunnel); direct: Caddy also serves the host on 80/443 with its own TLS certificate",
             "enum": [
-              "tunnel"
+              "tunnel",
+              "direct"
             ],
             "type": "string"
           },

@@ -87,6 +87,8 @@ lite status
 lite rollback PROJECT
 ```
 
+A site is published through a Cloudflare Tunnel (`"publish": "tunnel"`, the default) or directly, with Caddy getting its own TLS certificate (`"publish": "direct"`). Switch at any time: `lite publish PROJECT SITE tunnel|direct` ([tutorial](docs/publish-a-site.md)).
+
 The web interface with the "Deploy" and "Roll back" buttons runs on your computer and reaches the server over SSH:
 
 ```sh

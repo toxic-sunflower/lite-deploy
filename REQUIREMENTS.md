@@ -112,6 +112,8 @@ These are the implementer's decisions, not the owner's. Each needs to be confirm
 - R-27. A project component is described by how it runs (`quadlet`, `unit` for binaries and everything else; `compose` through `unit`) and how it arrives (an image or a release directory); blue-green, the readiness check and rollback are the same for all kinds. A `unit` release is a tar.gz archive over https with a mandatory minisign signature.
 - R-28. Backups (decided 2026-11-19): the `backup` plugin is not tied to Backblaze; storage locations are pluggable (a local directory always; Backblaze B2, S3-compatible and SFTP are locations), and encryption is set per location. Project secrets enter a backup, and encryption is mandatory for them; the owner keeps the key off the server. Dumps of databases are encrypted optionally (`backup setup … --encrypt-dumps`).
 - R-29. Secret stores (decided 2026-11-19): the secret layer is pluggable (local files, later an encrypted git, HashiCorp Vault as one more backend). Only the local store exists now.
+- R-30. Publishing (decided 2026-11-20): a site is served either through a tunnel (`publish: tunnel`, Caddy on 127.0.0.1 only) or directly (`publish: direct`: Caddy also serves the host on 80/443 with its own automatic TLS certificate). The two are switchable with `lite publish PROJECT SITE MODE`, so a Cloudflare outage can be bypassed. `lite verify` warns when a direct site is blocked by the firewall.
+- R-31. Client on Windows and macOS (decided 2026-11-20): the `lite-deploy` binary is built for Windows and macOS, `liteup.ps1` and `liteup` install the client, and `lite-deploy ui --host USER@SERVER` works from them.
 
 ## 5. Limits of the first working version (v1)
 
@@ -147,4 +149,4 @@ The goal of v1: a bare Ubuntu server → install → `lite init` → a project i
 
 1. A run on a server of what is written: `liteup`, `project create`, `deploy`, the interface. Fix what is found. Repair CI.
 2. Check the pieces that only doubles have seen: ufw, a real SSH login, a Quadlet container start, the storages, the form in a browser.
-3. A full end-to-end check on a clean server following `INSTALL-PROD.md`.
+3. A full end-to-end check on a clean server following the quickstart.

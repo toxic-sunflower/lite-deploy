@@ -131,7 +131,7 @@ func TestValidateRules(t *testing.T) {
 		{"a repeated host", func(p *Project) { p.Sites[1].Host = p.Sites[0].Host }, "/sites/1/host", "duplicate"},
 		{"a host with capital letters", func(p *Project) { p.Sites[0].Host = "Example.COM" }, "/sites/0/host", "pattern"},
 		{"the site port clashes with a slot port", func(p *Project) { p.Sites[0].ListenPort = 18081 }, "/sites/0/listen_port", "duplicate_port"},
-		{"publish is not tunnel", func(p *Project) { p.Sites[0].Publish = "direct" }, "/sites/0/publish", "enum"},
+		{"publish is unknown", func(p *Project) { p.Sites[0].Publish = "public" }, "/sites/0/publish", "enum"},
 		{"max_body 1001MB", func(p *Project) { p.Sites[0].MaxBody = "1001MB" }, "/sites/0/max_body", "maximum"},
 		{"max_body without a unit", func(p *Project) { p.Sites[0].MaxBody = "5" }, "/sites/0/max_body", "pattern"},
 		{"a path with a curly brace", func(p *Project) { p.Sites[0].Routes[0].Path = "/a{b}" }, "/sites/0/routes/0/path", "pattern"},

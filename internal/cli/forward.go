@@ -135,6 +135,11 @@ func forwardProjectCreate(env Env, file string, yes, rotate bool, cts []string) 
 		}
 		ciphertexts[name] = strings.TrimSpace(string(b))
 	}
+	return forwardProjectData(env, command, data, yes, rotate, ciphertexts)
+}
+
+// forwardProjectData previews and applies a project description through the agent.
+func forwardProjectData(env Env, command string, data []byte, yes, rotate bool, ciphertexts map[string]string) result {
 	bundle := map[string]any{"project": json.RawMessage(data), "ciphertexts": ciphertexts, "rotate_password": rotate}
 	raw, bad := callAgent(env, "POST", "/v1/project/preview", bundle)
 	if bad != nil {

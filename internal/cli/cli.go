@@ -209,6 +209,8 @@ func dispatch(args []string, env Env) result {
 		return cmdRollback(args[1:], env)
 	case "status":
 		return cmdStatus(args[1:], env)
+	case "publish":
+		return cmdPublish(args[1:], env)
 	case "gate":
 		return cmdGate(args[1:], env)
 	case "ui":

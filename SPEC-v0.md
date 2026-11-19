@@ -2,11 +2,11 @@
 
 > This is the v0 specification written in session S2 (2026-11-03). The implementation has grown since: the project schema is now `lite-deploy/project/v2` (v1 descriptions are still accepted; see `README.md` and `REQUIREMENTS.md`), there are plugins, the agent, `liteup` and more. The v0 text is kept as the reference of the core model: the plan, the executor actions, the CLI envelope.
 
-Session S2, 2026-11-03. The basis: `DECISIONS.md` (D-01…D-38), `ARCHITECTURE.md`, the reference `projects/shop/`, steps 11–12 and 18 of `WALKTHROUGH.md`. The new decisions of this specification are recorded as D-39…D-46 with the status "proposed in S2": they follow from the accepted decisions, but they should be seen by the owner before S3.
+Session S2, 2026-11-03. The basis: `DECISIONS.md` (D-01…D-38), `ARCHITECTURE.md`, the reference project `testdata/shop/`. The new decisions of this specification are recorded as D-39…D-46 with the status "proposed in S2": they follow from the accepted decisions, but they should be seen by the owner before S3.
 
 The scope of v0 per D-28: mode A, the commands `project create`, `deploy`, `rollback`, `status`; the CLI with `--json` as the base API; the UI and MCP later on top of the same commands over SSH. Clarifications found while implementing S3: D-48…D-51 in `DECISIONS.md`. Not in it: a daemon, signature confirmations, Docker, an orchestrator, community plugins, installing software on a bare server (it is in S11), a Cloudflare tunnel (S7; until then the route in the tunnel is created by hand).
 
-The readiness criterion of v0: the example project is installed and deployed through lite-deploy instead of manual scripts (section 12).
+The readiness criterion of v0: a reference project is installed and deployed through lite-deploy instead of manual scripts.
 
 ## 0. Conventions
 
@@ -104,9 +104,8 @@ It is done by a single function `project.Validate`, the same for the CLI, the UI
 - the same host in two sites is forbidden;
 - the file size is up to 64 KiB.
 
-### 2.3. An example (a sketch for the example project)
+### 2.3. An example
 
-The names of the shop secrets (`Shop__*`) should be checked against `app.env` on the server; the principle is shown here.
 
 ```json
 {
@@ -156,7 +155,7 @@ The names of the shop secrets (`Shop__*`) should be checked against `app.env` on
 }
 ```
 
-All services of one project are deployed together: one hash, one slot state, one switch (as the service and the admin of the example project are now). Separate deploys of services are not part of v0.
+All services of one project are deployed together: one hash, one slot state, one switch (as e.g. an API and an admin panel). Separate deploys of services are not part of v0.
 
 ## 3. The plan (`plan.json`)
 
@@ -241,7 +240,7 @@ The project name is checked everywhere with `^[a-z][a-z0-9-]{1,30}$`. Notation: 
 
 ### 4.2. The `adopt` mode
 
-Needed for the v0 criterion: the example project is already set up by hand. If the project has `adopt: true`:
+Needed for the v0 criterion: a reference project is already set up by hand. If the project has `adopt: true`:
 - the existing user `U`, the role and the database are not recreated and are not an error;
 - the existing files (units, Caddy sites, env) are compared with the reference; if they differ, the old file is saved as `.bak-<plan id>`, the new one is written, and the difference goes into the output;
 - the executor cannot learn the password of an existing role. The options: the owner sets the internal secret `_db_password` in advance (`lite-deploy secret set shop _db_password`, hidden input, the value of the existing password) or the step parameters have `rotate_password: true`: the password is changed to a new one and the env files are rewritten. Without one of the two the `provision_postgres` step in `adopt` mode ends with the error `adopt_password_unknown`;
@@ -273,7 +272,7 @@ A repeat: the role and the database exist, the rule exists: `unchanged`. The pas
 
 **`write_service_env`**: `{project, service, env: [{name, kind, value|secret}]}` where `kind` is: `literal` (a value), `secret` (a reference to a name), `database` (the connection string format). It builds the file `~/.config/lite-deploy/env/<service>.env` (owner `U`, 600) from the lines `NAME=value` (without quotes, this is the `EnvironmentFile` format in Quadlet). It takes the secret values from the store; a value with a line break is rejected. A repeat: it compares by the hash of the resulting file.
 
-**`install_quadlet`**: `{project, service, slot, host_port, container_port, memory, pids, database_socket}`. `slot`: `blue` or `green`. It writes `~/.config/containers/systemd/<project>-<service>-<slot>.container` (owner `U`, 600) from a template equivalent to the current the example project units:
+**`install_quadlet`**: `{project, service, slot, host_port, container_port, memory, pids, database_socket}`. `slot`: `blue` or `green`. It writes `~/.config/containers/systemd/<project>-<service>-<slot>.container` (owner `U`, 600) from a template equivalent to the current a reference project units:
 
 ```
 [Unit]
@@ -308,7 +307,7 @@ The image `localhost/<project>-<service>:<slot>` is created by the deploy with t
 **`reload_user_units`**: `{project}`. It runs `systemctl --user daemon-reload` in the session of the user `U` (`systemd-run --machine=U@.host --user …` or `machinectl shell`; the way is specified in S4, a plain `sudo -u` does not work for rootless podman, `DEPLOY-PATTERN.md`). Then it checks that the units are visible (`systemctl --user list-unit-files`).
 
 **`install_caddy_site`**: `{project, site, host, listen_port, upstream_initial, trusted_proxy, max_body, routes[]}`.
-1. The site file `/etc/caddy/conf.d/<project>-<site>.caddy` (root:root, 644) from a template: `http://<host>:<listen_port>`, `bind 127.0.0.1`, `encode zstd gzip`, headers (`Strict-Transport-Security "max-age=31536000"`, `X-Content-Type-Options nosniff`, `Referrer-Policy strict-origin-when-cross-origin`, `-Server`), `request_body max_size` per `max_body` and `handle` blocks for `routes`, `import /etc/caddy/upstreams/<project>-<site>.caddy`, a log to `/var/log/caddy/<project>-<site>.log` (rotation 50 MiB, 5 files). If `trusted_proxy=cloudflare`, these headers are added by the upstream file (below), as in the current `deploy-script`.
+1. The site file `/etc/caddy/conf.d/<project>-<site>.caddy` (root:root, 644) from a template: `http://<host>:<listen_port>`, `bind 127.0.0.1`, `encode zstd gzip`, headers (`Strict-Transport-Security "max-age=31536000"`, `X-Content-Type-Options nosniff`, `Referrer-Policy strict-origin-when-cross-origin`, `-Server`), `request_body max_size` per `max_body` and `handle` blocks for `routes`, `import /etc/caddy/upstreams/<project>-<site>.caddy`, a log to `/var/log/caddy/<project>-<site>.log` (rotation 50 MiB, 5 files). If `trusted_proxy=cloudflare`, these headers are added by the upstream file (below), as in the current the manual deploy script.
 2. The directory `/etc/caddy/upstreams` (owner root, 755) and the file `/etc/caddy/upstreams/<project>-<site>.caddy` (owner `U`, 644). The initial content on first creation: `respond "not deployed" 503`. If the file already exists (the project has been deployed), the content is **not touched**.
 3. The directory `/var/log/caddy` (owner `caddy`).
 4. It does not reload Caddy (that is `reload_caddy`).
@@ -337,7 +336,7 @@ An old line with the same mark is replaced. Lines without the mark are not touch
 
 ## 5. Deploy, rollback, state (`deploy`, `rollback`, `status`)
 
-In v0 these are **not plan steps** but operations of the project user, as in the current `deploy-script`. They were moved to Go (`internal/deploy`) and are called by the gatekeeper. The description below fixes the behaviour that has already been checked by hand and must be kept.
+In v0 these are **not plan steps** but operations of the project user, as in the current the manual deploy script. They were moved to Go (`internal/deploy`) and are called by the gatekeeper. The description below fixes the behaviour that has already been checked by hand and must be kept.
 
 ### 5.1. Slots and ports
 
@@ -379,7 +378,7 @@ The forced command in `authorized_keys` (4.3, `install_deploy_key`). It reads `S
 - `rollback`;
 - `status` and `status --json`.
 
-Everything else: code 2, the message "the command is not allowed". The gatekeeper calls the `internal/deploy` functions directly in the same process, without a shell and without running scripts. Earlier the gatekeeper and `deploy-script` lay in the home directory of the project user (700, owner `U`), so a hacked project could overwrite them; the binary in `/usr/local/bin` belongs to root and a project cannot change it. The gatekeeper quotas: section 8.
+Everything else: code 2, the message "the command is not allowed". The gatekeeper calls the `internal/deploy` functions directly in the same process, without a shell and without running scripts. Earlier the gatekeeper and the manual deploy script lay in the home directory of the project user (700, owner `U`), so a hacked project could overwrite them; the binary in `/usr/local/bin` belongs to root and a project cannot change it. The gatekeeper quotas: section 8.
 
 ## 6. The CLI and the response format
 
@@ -550,26 +549,7 @@ The caller is identified by `SO_PEERCRED` (the uid) and matched with a role (the
 - Schemas: the committed `schemas/*.json` equal the generated ones.
 - The envelope and exit codes for every error of section 6.3.
 
-S4 adds checks on a test server: `apply` creates a project from scratch, a repeated `apply` gives `unchanged` everywhere, `adopt` on a copy of the live the example project setup breaks nothing.
-
-## 12. Correspondence to the manual the example project steps (the v0 criterion)
-
-| Manual step | Where in v0 |
-|---|---|
-| 11. A user, linger, subuid | `create_project_user` |
-| 12. A role, a database, `pg_hba.conf`, `app.env` with the connection string | `provision_postgres`, `write_service_env` |
-| 13. The deploy key and the gatekeeper | `install_deploy_key`, `lite-deploy gate` |
-| 14. The gatekeeper, `deploy-script`, the Quadlet units, `daemon-reload` | the `lite-deploy` binary, `install_quadlet`, `reload_user_units` |
-| 15. The sudoers rule | `install_reload_rule` |
-| 16. `deploy.conf`, `admin.env`, `app.env` | the project description, `set_secret`, `write_service_env` |
-| 17. The GHCR login | `registry_login` |
-| 18. The Caddy directories and files, the initial upstreams, the check, `reload` | `install_caddy_site`, `reload_caddy`, `probe_site` |
-| 19. GitHub environments, secrets and variables | outside v0 (stays manual or `gh api`) |
-| 20. The `cloudflared` tunnel, routes, DNS | outside v0 (S6) |
-| 21. Deploy, rollback, state | `deploy`, `rollback`, `status` |
-| Rights and isolation from the `DEPLOY-PATTERN.md` checklist | the action templates (section 4.3); the checks of access to `localhost:2019`, to other databases and to `/etc/environment` stay in `verify` (S11) |
-
-What stays outside v0 and is recorded in the project `TODO.md`: disabling password login, Cloudflare Access, the Cloudflare fallback plan, a WAF rule for the webhook, cleaning up images in GHCR, migrations by a separate role.
+S4 adds checks on a test server: `apply` creates a project from scratch, a repeated `apply` gives `unchanged` everywhere, `adopt` on a copy of the live manual setup breaks nothing.
 
 ## 13. What is not decided and moves on
 

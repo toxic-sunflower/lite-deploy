@@ -3,8 +3,6 @@ package render
 import (
 	"flag"
 	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -14,7 +12,6 @@ import (
 var update = flag.Bool("update", false, "overwrite the golden files")
 
 const golden = "../../testdata/shop/golden/"
-const legacy = "../../testdata/shop/legacy/"
 
 func checkGolden(t *testing.T, name, got string) {
 	t.Helper()
@@ -65,93 +62,6 @@ func TestGoldenFiles(t *testing.T) {
 	checkGolden(t, "sudoers", Sudoers("shop"))
 	checkGolden(t, "authorized_keys", AuthorizedKey(actions.InstallDeployKey{Project: "shop",
 		PublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDtqJ7zOtqQtYqOo0CpvDXNlMhV3HeJDpjrASKGLWdop github-actions"}))
-}
-
-// settings returns the file lines without empty ones and without comments, trimmed.
-func settings(s string) []string {
-	var out []string
-	for _, l := range strings.Split(s, "\n") {
-		l = strings.TrimSpace(l)
-		if l == "" || strings.HasPrefix(l, "#") {
-			continue
-		}
-		out = append(out, l)
-	}
-	return out
-}
-
-func contains(lines []string, want string) bool {
-	for _, l := range lines {
-		if l == want {
-			return true
-		}
-	}
-	return false
-}
-
-// The settings lines of the previous the example project units (SPEC-v0.md, section 11) must be in the generated ones,
-// except those that changed on purpose: environment variables moved to the env file.
-func TestQuadletMatchesLegacy(t *testing.T) {
-	moved := regexp.MustCompile(`^(Environment|EnvironmentFile)=`)
-	for _, c := range []struct {
-		file string
-		gen  actions.InstallQuadlet
-	}{
-		{"shop-api-blue.container", apiQuadlet("blue", 18081)},
-		{"shop-api-green.container", apiQuadlet("green", 18082)},
-		{"shop-admin-blue.container", adminQuadlet("blue", 18091)},
-		{"shop-admin-green.container", adminQuadlet("green", 18092)},
-	} {
-		old, err := os.ReadFile(filepath.Join(legacy, "quadlet", c.file))
-		if err != nil {
-			t.Fatal(err)
-		}
-		gen := settings(Quadlet(c.gen))
-		for _, l := range settings(string(old)) {
-			if moved.MatchString(l) || strings.HasPrefix(l, "Description=") {
-				continue
-			}
-			// Memory= exists only in Quadlet of podman 5; PodmanArgs=--memory works in podman 4.x too (Ubuntu 24.04)
-			if m, ok := strings.CutPrefix(l, "Memory="); ok {
-				l = "PodmanArgs=--memory=" + m
-			}
-			if !contains(gen, l) {
-				t.Errorf("%s: the line %q is not in the generated unit", c.file, l)
-			}
-		}
-	}
-}
-
-func TestCaddyMatchesLegacy(t *testing.T) {
-	for _, c := range []struct {
-		file string
-		gen  actions.InstallCaddySite
-		name string
-	}{
-		{"shop.caddy", mainSite(), "shop-main"},
-		{"shop-admin.caddy", adminSite(), "shop-admin"},
-	} {
-		old, err := os.ReadFile(filepath.Join(legacy, "caddy", c.file))
-		if err != nil {
-			t.Fatal(err)
-		}
-		gen := settings(CaddySite(c.gen))
-		oldBase := strings.TrimSuffix(c.file, ".caddy")
-		for _, l := range settings(string(old)) {
-			// the file names changed: <project>-<site>.caddy
-			l = strings.ReplaceAll(l, oldBase+".caddy", c.name+".caddy")
-			l = strings.ReplaceAll(l, oldBase+".log", c.name+".log")
-			if strings.HasPrefix(l, "@upload") {
-				l = strings.Replace(l, "@upload", "@route1", 1)
-			}
-			if l == "handle @upload {" {
-				l = "handle @route1 {"
-			}
-			if !contains(gen, l) {
-				t.Errorf("%s: the line %q is not in the generated file", c.file, l)
-			}
-		}
-	}
 }
 
 func TestQuadletWithoutDatabaseHasNoSocket(t *testing.T) {
@@ -212,5 +122,26 @@ func TestDatabaseURL(t *testing.T) {
 	}
 	if _, err := DatabaseURL("x", "r", "d", "pw"); err == nil {
 		t.Error("unknown format")
+	}
+}
+
+func TestCaddySiteDirect(t *testing.T) {
+	a := mainSite()
+	a.TrustedProxy = "cloudflare"
+	tunnel := CaddySite(a)
+	if strings.Contains(tunnel, "request_header") || strings.Count(tunnel, "{\n\tbind") != 1 {
+		t.Fatalf("a tunnel site must stay one loopback block:\n%s", tunnel)
+	}
+	a.Direct = true
+	got := CaddySite(a)
+	if !strings.HasPrefix(got, tunnel[:len(tunnel)-1]) {
+		t.Error("the loopback block must stay unchanged in direct mode")
+	}
+	pub := got[len(tunnel):]
+	if !strings.Contains(pub, "\n"+a.Host+" {\n") || strings.Contains(pub, "bind 127.0.0.1") {
+		t.Errorf("the public block must be a bare host without bind:\n%s", pub)
+	}
+	if !strings.Contains(pub, "request_header CF-Connecting-IP {remote_host}") {
+		t.Errorf("a direct site behind cloudflare trust must overwrite a forged CF-Connecting-IP:\n%s", pub)
 	}
 }

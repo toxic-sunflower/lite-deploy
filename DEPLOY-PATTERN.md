@@ -1,12 +1,12 @@
 # The deploy pattern: Actions builds, the server receives the finished result, the key is restricted by a gatekeeper
 
-Invented and checked on the example project (2026-10-23). Suitable for any project on a shared server. The implementation for the example project: `projects/shop/` in this repository (scripts, units, Caddy, copies of the workflows); the workflows themselves live in the project repository (`.github/workflows/`).
+Invented and checked on a reference project (2026-10-23). Suitable for any project on a shared server.
 
 ## The idea
 
 1. **GitHub Actions** builds the images and puts them into a private registry (GHCR) tagged with the full commit hash. There are no sources and no git on the server.
 2. Actions logs in to the server over SSH with a **restricted key** and sends only the command `deploy <hash>`. The deploy script and the service descriptions are on the server in advance and are installed by hand (the decision of 2026-10-24: a script that was sent would run as the project user, that is, the key could run any code). Later a separate deployment system automates the manual installation (VISION.md).
-3. **The gatekeeper** (`lite-deploy-gate`) sits in `authorized_keys` as a forced command (`command="...",restrict ssh-ed25519 ...`). It allows only `deploy <hash>`, `rollback`, `status`, checks the hash (`^[0-9a-f]{40}$`) and runs the deploy script installed on the server. The key has no console.
+3. **The gatekeeper** (`lite-deploy gate`) sits in `authorized_keys` as a forced command (`command="...",restrict ssh-ed25519 ...`). It allows only `deploy <hash>`, `rollback`, `status`, checks the hash (`^[0-9a-f]{40}$`) and runs the deploy script installed on the server. The key has no console.
 4. **Blue-green** on the server: two slots on local ports; the new version comes up in the free slot, passes the `/health/ready` check (the answer carries the version = the commit hash), and only then Caddy switches to it (the upstream file + `systemctl reload caddy`). The old slot stays for an instant rollback.
 
 ## Why this is safe and simple
@@ -38,7 +38,7 @@ A user (`adduser --disabled-password`), `loginctl enable-linger`, a PostgreSQL r
 - Run the Caddy config check as `caddy`, not as root: otherwise log files owned by root may appear which the running Caddy can then not write to.
 - An asterisk in the path of another user's home directory is expanded by the calling user's shell, not by `sudo`: `sudo chown … /home/other/*.x` finds no files. Use `sudo sh -c '… /home/other/*.x'`.
 - NuGet packages: if the application references a shared project and the database provider pulls a lower dependency version (and the needed version arrives only through a closed `PrivateAssets=all` package), the wrong version ends up in the image and the application crashes at start (`FileNotFoundException` for `Microsoft.EntityFrameworkCore.Relational`). Give the version explicitly in the shared project. The `MSB3277` warning at build time points to this; tests do not catch it, only checking the published image can.
-- An application may refuse to start with empty required settings (the example project admin needs a login and a password). Then the slot goes into a restart loop, Caddy answers `502`, and the Cloudflare "Bad gateway" page is seen from outside. Look at `list-units` and the slot journal first. Caddy's answers to a proxy error carry no headers of the site.
+- An application may refuse to start with empty required settings (an application's admin needs a login and a password). Then the slot goes into a restart loop, Caddy answers `502`, and the Cloudflare "Bad gateway" page is seen from outside. Look at `list-units` and the slot journal first. Caddy's answers to a proxy error carry no headers of the site.
 - Check the settings files by machine after writing: the set of keys and the length of passwords (without printing values). Pasting several commands into a terminal at once hands the second command to the first one's input (`read`), so give commands one at a time.
 - Cloudflare Access: the names of the interface sections change (Authentication, Login methods, Integrations → Identity providers). The error "That account does not have access" means the email is not in the policy or the login method is wrong. The Access session counts from the login and is not extended by activity.
 - The Caddy management API must not be turned off (`admin off`): `systemctl reload caddy` calls `caddy reload`, which needs the API. If the API is reachable by containers, move it to a unix socket and check that the reload works.

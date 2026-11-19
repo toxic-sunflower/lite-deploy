@@ -58,7 +58,7 @@ In brief: what was decided, why, the status. Details and schemes: `ARCHITECTURE.
 
 **D-23. The language: Go.** No `unsafe` and no `cgo`, tests with `-race`, automatic service restart. The executor can be rewritten in Rust later if wanted. Status: accepted.
 
-**D-24. The first goal: mode A, the `project create` command.** It does what was done by hand in steps 11, 12 and 18 of `WALKTHROUGH.md`. Then `deploy`, `rollback`, `status`. The composition of the first version: D-28. Status: accepted.
+**D-24. The first goal: mode A, the `project create` command.** It does what was done by hand. Then `deploy`, `rollback`, `status`. The composition of the first version: D-28. Status: accepted.
 
 ## The final decisions of session S1 (2026-11-03)
 
@@ -68,7 +68,7 @@ In brief: what was decided, why, the status. Details and schemes: `ARCHITECTURE.
 
 **D-27. The goal of the project.** An open tool for myself and for other VDS owners like me, with no obligations on deadlines and support, no monetization planned. Status: accepted.
 
-**D-28. The first version (v0).** Mode A. The commands `project create`, `deploy`, `rollback`, `status`. The CLI with JSON output is the base API; thin UI and MCP work over the same commands through SSH, without a daemon. The readiness criterion: the example project is installed and deployed through lite-deploy instead of manual scripts. v0 has no: daemon, confirmations, Docker, orchestrator, community plugins. Status: accepted.
+**D-28. The first version (v0).** Mode A. The commands `project create`, `deploy`, `rollback`, `status`. The CLI with JSON output is the base API; thin UI and MCP work over the same commands through SSH, without a daemon. The readiness criterion: a reference project is installed and deployed through lite-deploy instead of manual scripts. v0 has no: daemon, confirmations, Docker, orchestrator, community plugins. Status: accepted.
 
 **D-29. Action classes.**
 - Safe (any client may read): `status`, logs, the list of projects.
@@ -89,7 +89,7 @@ Status: accepted.
 
 **D-35. The orchestrator and SaaS are postponed until v1.** The agent API is designed so that it can become a client of the orchestrator. Not discussed before v1. Status: accepted.
 
-**D-36. The repository.** The deployment system lives in a separate private repository `toxic-sunflower/lite-deploy` (created 2026-11-12, the history was taken from `server-setup`), which stayed private until v0 was ready (it is public now, see `RELEASING.md`). `toxic-sunflower/server-setup` is not renamed: only the example project server setup instructions remain there. Status: done (it replaced the original plan to rename).
+**D-36. The repository.** The deployment system lives in a separate private repository `toxic-sunflower/lite-deploy` (created 2026-11-12), which stayed private until v0 was ready (it is public now, see `RELEASING.md`). Status: done (it replaced the original plan to rename).
 
 **D-37. The priority: AI (MCP) and the UI.** The consequences: JSON Schema and OpenAPI are the source of truth for forms and tools; any action first in the "show the plan" (dry-run) mode in a readable form; confirmations live in the agent (protection from a deceived AI); operations are idempotent. Status: accepted.
 
@@ -101,7 +101,7 @@ They follow from D-25…D-38; accepted by the owner on 2026-11-03.
 
 **D-39. The gatekeeper is the subcommand `lite-deploy gate`, not a script in the project home directory.** The binary in `/usr/local/bin` belongs to root; the earlier scripts (700, owned by the project user) could be overwritten by a hacked project. The gatekeeper calls the deploy code in the same process, without a shell. Status: accepted.
 
-**D-40. The `adopt` mode.** A project set up by hand (the example project) is taken under management without recreating it: the existing user, role and database are not broken, files that differ are saved as `.bak`. The password of an existing role: set the internal secret `_db_password` or `rotate_password`. Status: accepted.
+**D-40. The `adopt` mode.** A project set up by hand (a reference project) is taken under management without recreating it: the existing user, role and database are not broken, files that differ are saved as `.bak`. The password of an existing role: set the internal secret `_db_password` or `rotate_password`. Status: accepted.
 
 **D-41. Secret encryption: `age` (X25519 + ChaCha20-Poly1305), the executor public key `/etc/lite-deploy/exec.pub`.** The value is wrapped in JSON with `project` and `name` (a binding, age has no associated data). We do not invent our own format. Status: accepted.
 
@@ -148,7 +148,7 @@ Clarifications of `SPEC-v0.md` that were needed in the implementation; accepted 
 
 **D-52. A ciphertext in a plan must be the output of `secret encrypt` (age armor), otherwise the plan is rejected (`invalid_secret`, both when building and when verifying).** A secret value: UTF-8, 1…8192 bytes, no NUL; a ciphertext up to 16 KiB. `lite-deploy init` creates the executor key `/etc/lite-deploy/exec.age` (600) and `exec.pub` (644) and never overwrites an existing private key. The commands `secret encrypt` and `secret set` read the value only from standard input or hidden from the terminal; `secret list` without root takes names from the project state (D-49). Status: accepted by the owner (2026-11-04).
 
-**D-57. The composition of the system: a minimum at install, the rest are plugins.** The installer installs only `lite`, `minisign` (the signature check) and the agent. Everything else is plugins installed with `lite init --plugins` or from the interface: `caddy` (incoming traffic, mandatory for project sites), `podman`, `postgres`, `firewall` and on. Clarified by the owner on 2026-11-17: the earlier wording made Caddy a core dependency and installed it at install time. The `0*.sh` scripts from `server-setup` are not needed for this. Status: accepted by the owner.
+**D-57. The composition of the system: a minimum at install, the rest are plugins.** The installer installs only `lite`, `minisign` (the signature check) and the agent. Everything else is plugins installed with `lite init --plugins` or from the interface: `caddy` (incoming traffic, mandatory for project sites), `podman`, `postgres`, `firewall` and on. Clarified by the owner on 2026-11-17: the earlier wording made Caddy a core dependency and installed it at install time. Status: accepted by the owner.
 
 **D-58. The container engine: podman by default, Docker as a fallback.** A project may turn containers off completely. Status: accepted by the owner (2026-11-13). **Changed by D-65 (2026-11-19): Docker is forbidden.**
 
@@ -198,3 +198,6 @@ Taken from the documentation of the projects themselves, 2026-10-29:
 - Dokploy: Docker and Swarm, Traefik, PostgreSQL, ports 80/443/3000, at least 2 GB and 30 GB ([Installation](https://docs.dokploy.com/docs/core/installation)); external secret managers; OpenAPI.
 - Kamal: SSH as root by default, the config in the repository, no daemon and no panel ([Installation](https://kamal-deploy.org/docs/installation/)).
 - Not checked: the Dokploy AI Assistant and API, Dokku, CapRover, Podman in the full text of the documentation, real memory use.
+
+**D-71. Two publishing modes, one loopback listener.** `tunnel` and `direct` differ only by an extra public Caddy site block (`host { … }`, automatic HTTPS) that imports the same upstream file as the 127.0.0.1 block, so deploys, rollback and the upstream switch are unchanged and a tunnel keeps working in `direct` mode. On the public block `CF-Connecting-IP` is overwritten with the real peer address when `trusted_proxy` is `cloudflare`. Status: accepted by the owner (2026-11-20).
+

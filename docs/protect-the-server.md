@@ -49,7 +49,7 @@ lite firewall allow 8443/tcp --from 10.0.0.0/24 --yes
 lite firewall remove 8443/tcp --from 10.0.0.0/24 --yes
 ```
 
-The SSH, 80 and 443 ports cannot be closed through `lite`, and every change asks for confirmation. A site behind a tunnel needs no inbound web ports at all, so `max` is the right mode.
+The SSH, 80 and 443 ports cannot be closed through `lite`, and every change asks for confirmation. A site behind a tunnel needs no inbound web ports at all, so `max` is the right mode; a site published `direct` needs `http`.
 
 `lite verify` also reports ports that listen on all interfaces and are not blocked by the firewall.
 
