@@ -1,9 +1,9 @@
-# ЗАПАСНОЙ ВАРИАНТ на случай сбоя Cloudflare или туннеля. В обычное время выключен: расширение .disabled,
-# Caddy такие файлы не читает (в основном Caddyfile подключается только /etc/caddy/conf.d/*.caddy).
-# Включение и возврат описаны в README.md этой папки, раздел «Если Cloudflare недоступен».
+# A FALLBACK in case Cloudflare or the tunnel fails. Normally off: the .disabled extension,
+# Caddy does not read such files (the main Caddyfile includes only /etc/caddy/conf.d/*.caddy).
+# Turning it on and back off is described in the README.md of this folder, the section "If Cloudflare is unavailable".
 #
-# Сайт открывается напрямую на 443 с обычным публичным сертификатом (Let's Encrypt, Caddy получает его сам).
-# Пока включён, обхода Cloudflare не избежать: сайт доступен по IP сервера. Держать включённым только на время сбоя.
+# The site opens directly on 443 with an ordinary public certificate (Let's Encrypt, Caddy obtains it itself).
+# While it is on, bypassing Cloudflare cannot be avoided: the site is reachable by the server IP. Keep it on only during an outage.
 shop.example.com {
 	encode zstd gzip
 
@@ -14,8 +14,8 @@ shop.example.com {
 		-Server
 	}
 
-	# Скрипт деплоя ставит в upstream X-Forwarded-For из CF-Connecting-IP. Без Cloudflare этого заголовка нет, а присланный
-	# клиентом заголовок нельзя пускать дальше (подделка адреса), поэтому подставляем настоящий адрес сами.
+	# The deploy script sets X-Forwarded-For in the upstream from CF-Connecting-IP. Without Cloudflare that header does not exist, and a header
+	# sent by the client must not be passed on (address spoofing), so we put in the real address ourselves.
 	request_header CF-Connecting-IP {remote_host}
 
 	@upload path /api/vault/upload

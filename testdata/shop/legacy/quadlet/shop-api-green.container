@@ -1,7 +1,7 @@
-# Слот green сервиса the example project. Лежит в ~/.config/containers/systemd/ пользователя shop.
-# Копия слота blue, отличаются только имя, образ и порт.
+# The green slot of the example project service. It lives in ~/.config/containers/systemd/ of the user shop.
+# A copy of the blue slot, only the name, the image and the port differ.
 [Unit]
-Description=the example project API (слот green)
+Description=the example project API (slot green)
 After=network-online.target
 Wants=network-online.target
 

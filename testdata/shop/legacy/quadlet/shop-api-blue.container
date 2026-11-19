@@ -1,22 +1,22 @@
-# Слот blue сервиса the example project. Лежит в ~/.config/containers/systemd/ пользователя shop.
-# Образ localhost/shop-api:blue создаёт скрипт деплоя (podman tag), сам файл версии не знает.
+# The blue slot of the example project service. It lives in ~/.config/containers/systemd/ of the user shop.
+# The image localhost/shop-api:blue is created by the deploy script (podman tag); the file itself does not know the version.
 [Unit]
-Description=the example project API (слот blue)
+Description=the example project API (slot blue)
 After=network-online.target
 Wants=network-online.target
 
 [Container]
 ContainerName=shop-api-blue
 Image=localhost/shop-api:blue
-# наружу только на localhost, к нему ходит Caddy
+# published on localhost only, Caddy talks to it
 PublishPort=127.0.0.1:18081:8080
-# строка подключения к базе и секреты приложения (файл создаётся на сервере руками, права 600)
+# the database connection string and the application secrets (the file is created on the server by hand, mode 600)
 EnvironmentFile=%h/.config/shop/app.env
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=Shop__UseMock=false
-# сокет PostgreSQL хоста
+# the host PostgreSQL socket
 Volume=/var/run/postgresql:/var/run/postgresql
-# ограничения контейнера
+# container limits
 ReadOnly=true
 Tmpfs=/tmp
 NoNewPrivileges=true

@@ -1,4 +1,4 @@
-# ключи, пароли и файлы с секретами никогда не коммитим
+# keys, passwords and files with secrets are never committed
 *.pem
 *.key
 id_*
@@ -7,16 +7,16 @@ id_*
 .env*
 secrets*
 
-# сборка Go
+# Go build output
 /lite-deploy
 *.test
 *.out
-# исходники пакета internal/secrets это код, не секреты
+# the sources of the internal/secrets package are code, not secrets
 !/internal/secrets/
 !/internal/secrets/**
 
-# закрытый ключ подписи релизов
+# the release signing private key
 minisign.key
 
-# сборка сайта
+# site build output
 /_site

@@ -12,7 +12,7 @@ linters:
       locale: US
   exclusions:
     rules:
-      # lite-deploy по назначению читает файлы по путям пользователя и запускает команды через host.Runner
+      # lite-deploy by design reads files at user-given paths and runs commands through host.Runner
       - path: internal/(host|cli)/
         text: "G304|G204"
       - path: _test\.go

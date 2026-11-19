@@ -1,7 +1,7 @@
 {
   "schema": "lite-deploy/project/v1",
   "name": "demo-app",
-  "description": "Тестовый проект для проверки S4 в WSL (без реестра и ключа CI)",
+  "description": "A test project for checking S4 in WSL (no registry and no CI key)",
   "database": { "engine": "postgres", "connection_format": "url" },
   "services": {
     "web": {

@@ -1,17 +1,17 @@
-# Выпуск релиза (для владельца)
+# Releasing (for the owner)
 
-Однократная настройка:
+One-time setup:
 
-1. Ключ подписи создан без пароля. Закрытый: `~/.config/lite-deploy/minisign.key` (не коммитить, копия в секрете репозитория `MINISIGN_KEY`). Открытый: `minisign.pub` в репозитории и в `MINISIGN_PUBKEY` в `site/install.sh`. Сменить ключ: `minisign -G -W -p minisign.pub -s minisign.key -f`, затем обновить секрет и ключ в скрипте.
+1. The signing key was created without a password. The private key: `~/.config/lite-deploy/minisign.key` (never commit it; a copy is in the repository secret `MINISIGN_KEY`). The public key: `minisign.pub` in the repository and `MINISIGN_PUBKEY` in `site/liteup`. To change the key: `minisign -G -W -p minisign.pub -s minisign.key -f`, then update the secret and the key in the script.
 2. Settings → Pages → Source: GitHub Actions.
-3. Репозиторий должен быть публичным, иначе скачивание без входа не работает.
+3. The repository must be public, otherwise downloading without a login does not work.
 
-Каждый релиз:
+Every release:
 
 ```sh
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-Тег запускает `.github/workflows/release.yml`: тесты, сборка linux amd64 и arm64, подпись `SHA256SUMS`, публикация релиза. Номер версии это только метка выпуска; установщик по умолчанию берёт самый новый релиз.
+The tag starts `.github/workflows/release.yml`: tests, builds for linux amd64 and arm64, adds the `liteup` script, signs `SHA256SUMS` and publishes the release. The version number is only a release label; `liteup` takes the newest release by default.
 
-Служебные параметры установщика: `--version <тег>` (закрепить версию), `--prefix <каталог>`, `--skip-sig` (без проверки подписи, небезопасно).
+`liteup` options: `--version <tag>` (pin a version), `--prefix <dir>`, `--skip-sig` (no signature check, unsafe). `liteup` itself is part of every release, so `sudo liteup update` updates both the binary and the script.

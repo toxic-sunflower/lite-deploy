@@ -1,7 +1,7 @@
-# Сайт админки the example project. Устанавливается в /etc/caddy/conf.d/shop-admin.caddy.
-# Как и основной сайт, слушает только 127.0.0.1 (порт 18090), к нему ходит туннель cloudflared. Перед админкой стоит
-# Cloudflare Access (вход по почте), потом логин самой админки.
-# Куда идёт трафик (blue или green), решает файл /etc/caddy/upstreams/shop-admin.caddy, его меняет скрипт деплоя.
+# The the example project admin site. Installed as /etc/caddy/conf.d/shop-admin.caddy.
+# Like the main site, it listens on 127.0.0.1 only (port 18090), and the cloudflared tunnel talks to it. In front of the admin there is
+# Cloudflare Access (login by email), then the login of the admin itself.
+# Where traffic goes (blue or green) is decided by the file /etc/caddy/upstreams/shop-admin.caddy, which the deploy script changes.
 http://admin.shop.example.com:18090 {
 	bind 127.0.0.1
 
@@ -13,7 +13,7 @@ http://admin.shop.example.com:18090 {
 		-Server
 	}
 
-	# Blazor Server работает по WebSocket: reverse_proxy пропускает его сам. Тела запросов небольшие.
+	# Blazor Server uses WebSocket: reverse_proxy passes it through by itself. Request bodies are small.
 	request_body {
 		max_size 5MB
 	}
