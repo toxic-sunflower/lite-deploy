@@ -204,3 +204,6 @@ Taken from the documentation of the projects themselves, 2026-10-29:
 
 
 **D-72. Protection is fully on by default.** `lite init` enables the `security` plugin completely: fail2ban, automatic security updates, protective kernel parameters, and SSH by key only for everyone (root by key only), unless `--no-security` is given. It already requires a key for the new user and tells the person to check a second login. `allow-users` is optional. Caddy, podman, PostgreSQL and Redis remain opt-in plugins. Status: accepted by the owner (2026-11-20).
+
+**D-73. High-level commands and a UI-first path.** The path for the target user is: install `lite`, run `lite init`, hand over the key, then use only the UI; the server is protected by `init` itself. The terminal stays supported but is never required. `lite` commands express goals, not system tools: low-level steps such as fail2ban, sysctl, automatic updates or SSH settings are internal parts of one goal and are not part of the everyday commands. Status: accepted by the owner (2026-11-20).
+
