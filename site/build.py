@@ -116,7 +116,7 @@ def main() -> int:
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir()
-    for f in ("style.css", "install.sh", "liteup", "CNAME"):
+    for f in ("style.css", "install.sh", "liteup", "liteup.ps1", "CNAME"):
         shutil.copy(ROOT / "site" / f, OUT / f)
 
     for _, items in GROUPS:

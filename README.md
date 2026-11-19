@@ -33,6 +33,28 @@ liteup status                           # installed and latest versions
 
 The installer takes the **latest release** by default. It has been tested on Ubuntu; on Debian, Fedora, RHEL, openSUSE and Arch packages are installed with their package manager, but the installation was not tested there. The script is short and can be read before running: [site/liteup](site/liteup). The old one-liner `curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh` still works: it just runs `liteup install`.
 
+## Install the client on Windows or macOS
+
+The server runs Linux, but the web interface (`lite-deploy ui`) can run on your own computer and reach the server over SSH. Install the client there:
+
+```powershell
+# Windows (PowerShell)
+irm https://lite-deploy.prozorov.me/liteup.ps1 | iex
+```
+
+```sh
+# macOS (and Linux laptops): installs the client only, no root, into ~/.local/bin
+curl -fsSL https://lite-deploy.prozorov.me/liteup | sh
+```
+
+Then, in a new terminal:
+
+```sh
+lite-deploy ui --host YOUR_USER@YOUR_SERVER
+```
+
+This needs the OpenSSH client (built into Windows 10 and later and into macOS) and a key login to the server. The page opens at an address like `http://127.0.0.1:8787/?t=…` and only your computer can reach it.
+
 ## Prepare the server
 
 After installing, run `lite init` once on the server (as root; the only command that works when logged in as root):

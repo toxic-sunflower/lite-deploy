@@ -121,19 +121,15 @@ Edit `shop.json` and run `lite project create` again with the same `--ciphertext
 
 ## Using the web interface instead
 
-Everything above is also in the web interface, including a form for a new project. On the server, as `alice`:
+Everything above is also in the web interface, including a form for a new project. The interface runs on **your computer** and reaches the server over SSH, so install the client first: on Windows `irm https://lite-deploy.prozorov.me/liteup.ps1 | iex` in PowerShell, on macOS and Linux `curl -fsSL https://lite-deploy.prozorov.me/liteup | sh` (see the [README](README.md) for details). Then:
 
 ```sh
-lite-deploy ui
+lite-deploy ui --host alice@YOUR_SERVER
 ```
 
-It prints an address like `http://127.0.0.1:8787/?t=…`. To open it from your laptop, forward the port in another terminal and open the address in a browser:
+It prints an address like `http://127.0.0.1:8787/?t=…`; open it in a browser. In the "New project" section fill in the form and press "Preview plan", then "Create project". Secret values you type are encrypted in the page before they leave it.
 
-```sh
-ssh -L 8787:127.0.0.1:8787 alice@YOUR_SERVER
-```
-
-In the "New project" section fill in the form and press "Preview plan", then "Create project". Secret values you type are encrypted in the page before they leave it.
+You can also run `lite-deploy ui` on the server itself and forward the port from your computer: `ssh -L 8787:127.0.0.1:8787 alice@YOUR_SERVER`.
 
 ## Next
 

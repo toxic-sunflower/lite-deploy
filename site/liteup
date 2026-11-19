@@ -78,7 +78,15 @@ done
 
 if [ "$cmd" = help ]; then usage; exit 0; fi
 
-[ "$(uname -s)" = Linux ] || die "only Linux is supported"
+os=$(uname -s | tr 'A-Z' 'a-z')
+case $os in
+  linux) ;;
+  # on a Mac only the client is installed (for the web interface): no root, no agent, no systemd
+  darwin)
+    binary_only=1
+    [ -n "${LITE_DEPLOY_PREFIX:-}" ] || prefix="$HOME/.local/bin" ;;
+  *) die "only Linux (server and client) and macOS (client) are supported; on Windows use liteup.ps1" ;;
+esac
 case $(uname -m) in
   x86_64|amd64)  arch=amd64 ;;
   aarch64|arm64) arch=arm64 ;;
@@ -139,6 +147,7 @@ do_install() {
   if [ "$binary_only" != 1 ]; then
     [ -d /run/systemd/system ] || die "systemd is required"
   fi
+  if [ "$os" = darwin ]; then mkdir -p "$prefix"; fi
   case $version in
     latest|v[0-9]*) ;;
     *) die "the version must look like v1.2.3 or latest" ;;
@@ -167,7 +176,7 @@ do_install() {
 
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT INT TERM
-  name="lite-deploy-linux-$arch"
+  name="lite-deploy-$os-$arch"
 
   say "[1/4] Downloading $name ($version)"
   fetch "$base/$name" "$tmp/$name" || die "could not download $base/$name"
@@ -251,7 +260,11 @@ case $cmd in
   install)
     do_install
     say "Done: $(installed_version)."
-    say "Next: sudo lite init --user YOUR_NAME   (creates an administrator with your SSH key; run lite --help for all commands)"
+    if [ "$os" = darwin ]; then
+      say "Next: lite-deploy ui --host YOUR_USER@YOUR_SERVER   (the web interface; make sure $prefix is in your PATH)"
+    else
+      say "Next: sudo lite init --user YOUR_NAME   (creates an administrator with your SSH key; run lite --help for all commands)"
+    fi
     ;;
   update)
     need_root

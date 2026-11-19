@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"syscall"
 	"time"
 )
 
@@ -292,8 +291,8 @@ func (OSFS) Stat(p string) (Info, error) {
 		return Info{}, err
 	}
 	info := Info{Mode: st.Mode().Perm(), IsDir: st.IsDir()}
-	if sys, ok := st.Sys().(*syscall.Stat_t); ok {
-		info.Owner, info.Group = strconv.FormatUint(uint64(sys.Uid), 10), strconv.FormatUint(uint64(sys.Gid), 10)
+	if uid, gid, ok := fileIDs(st); ok {
+		info.Owner, info.Group = uid, gid
 		if u, err := user.LookupId(info.Owner); err == nil {
 			info.Owner = u.Username
 		}

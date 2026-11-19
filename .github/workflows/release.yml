@@ -1,6 +1,6 @@
 name: release
 
-# Release on a vX.Y.Z tag: linux amd64/arm64 binaries, the liteup script, SHA256SUMS and its minisign signature.
+# Release on a vX.Y.Z tag: linux, macOS and Windows binaries, the liteup scripts, SHA256SUMS and its minisign signature.
 # Repository secret: MINISIGN_KEY (the content of minisign.key, a key without a password).
 on:
   push:
@@ -22,13 +22,16 @@ jobs:
       - name: Build
         run: |
           mkdir dist
-          for arch in amd64 arm64; do
-            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            os=${target%/*}; arch=${target#*/}; ext=""
+            [ "$os" = windows ] && ext=".exe"
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath \
               -ldflags "-s -w -X github.com/toxic-sunflower/lite-deploy/internal/cli.Version=${GITHUB_REF_NAME}" \
-              -o dist/lite-deploy-linux-$arch ./cmd/lite-deploy
+              -o dist/lite-deploy-$os-$arch$ext ./cmd/lite-deploy
           done
           cp site/liteup dist/liteup
-          (cd dist && sha256sum lite-deploy-linux-* liteup > SHA256SUMS)
+          cp site/liteup.ps1 dist/liteup.ps1
+          (cd dist && sha256sum lite-deploy-* liteup liteup.ps1 > SHA256SUMS)
       - name: Sign SHA256SUMS
         env:
           MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
