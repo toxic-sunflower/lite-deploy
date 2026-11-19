@@ -119,7 +119,7 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 
 - **T3. Update checks in `lite verify`.** Warn when a newer `lite` release exists (the same data as `liteup status`) and when updates of components (Caddy, PostgreSQL, podman, Redis) or pending security updates are waiting, with the command to run.
 
-- **T4. Protection on by default.** `lite init` turns on the `security` basics (fail2ban, automatic updates, kernel parameters) without being asked; `--no-security` skips them. `security ssh` and `allow-users` stay a separate, confirmed step because they can lock a person out. Caddy, podman, PostgreSQL and Redis stay opt-in.
+- **T4. Protection fully on by default.** `lite init` does everything itself: fail2ban, automatic updates, kernel parameters, and SSH by key only for everyone (root by key only), so `lite verify` has no security errors right after `init`. `--no-security` skips it. `init` already requires a key for the new user, so the lock-out risk is the same as today; it still tells the person to check a second login. `allow-users` stays optional. Caddy, podman, PostgreSQL and Redis stay opt-in.
 - **T5. Hints must not say `sudo`.** The `fix:` lines of `lite verify` print `sudo lite security …`, but daily commands run without sudo (R-16). Print the command as it is run: `lite security …`.
 
 ## Status

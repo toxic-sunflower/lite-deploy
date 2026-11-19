@@ -203,5 +203,4 @@ Taken from the documentation of the projects themselves, 2026-10-29:
 
 
 
-**D-72. Protection is on by default.** `lite init` enables the `security` basics (fail2ban, automatic security updates, protective kernel parameters) unless `--no-security` is given. Restricting SSH (`security ssh`, `allow-users`) is not automatic: it can lock a person out, so it stays a separate confirmed step after the second login is checked. Caddy, podman, PostgreSQL and Redis remain opt-in plugins. Status: accepted by the owner (2026-11-20).
-\n
+**D-72. Protection is fully on by default.** `lite init` enables the `security` plugin completely: fail2ban, automatic security updates, protective kernel parameters, and SSH by key only for everyone (root by key only), unless `--no-security` is given. It already requires a key for the new user and tells the person to check a second login. `allow-users` is optional. Caddy, podman, PostgreSQL and Redis remain opt-in plugins. Status: accepted by the owner (2026-11-20).
