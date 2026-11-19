@@ -81,11 +81,7 @@ if [ "$cmd" = help ]; then usage; exit 0; fi
 os=$(uname -s | tr 'A-Z' 'a-z')
 case $os in
   linux) ;;
-  # on a Mac only the client is installed (for the web interface): no root, no agent, no systemd
-  darwin)
-    binary_only=1
-    [ -n "${LITE_DEPLOY_PREFIX:-}" ] || prefix="$HOME/.local/bin" ;;
-  *) die "only Linux (server and client) and macOS (client) are supported; on Windows use liteup.ps1" ;;
+  *) die "liteup installs the server side and needs Linux; on your own computer use lite-ui (curl -fsSL https://lite-deploy.prozorov.me/lite-ui | sh, or lite-ui.ps1 on Windows)" ;;
 esac
 case $(uname -m) in
   x86_64|amd64)  arch=amd64 ;;
@@ -147,7 +143,6 @@ do_install() {
   if [ "$binary_only" != 1 ]; then
     [ -d /run/systemd/system ] || die "systemd is required"
   fi
-  if [ "$os" = darwin ]; then mkdir -p "$prefix"; fi
   case $version in
     latest|v[0-9]*) ;;
     *) die "the version must look like v1.2.3 or latest" ;;
@@ -260,11 +255,7 @@ case $cmd in
   install)
     do_install
     say "Done: $(installed_version)."
-    if [ "$os" = darwin ]; then
-      say "Next: lite-deploy ui --host YOUR_USER@YOUR_SERVER   (the web interface; make sure $prefix is in your PATH)"
-    else
-      say "Next: sudo lite init --user YOUR_NAME   (creates an administrator with your SSH key; run lite --help for all commands)"
-    fi
+    say "Next: sudo lite init --user YOUR_NAME   (creates an administrator with your SSH key and protects the server)"
     ;;
   update)
     need_root

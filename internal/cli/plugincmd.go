@@ -256,7 +256,7 @@ func projectRequirements(ctx context.Context, env Env) []plugin.Finding {
 			res, err := env.Runner.Run(ctx, host.Cmd{Name: probe[0], Args: probe[1:]})
 			if err != nil || res.ExitCode != 0 {
 				out = append(out, plugin.Finding{Plugin: "project", Check: name + "/" + need, Level: plugin.LevelFail,
-					Message: "project " + name + " needs the plugin " + need + ", it is not on the server", Fix: "sudo lite " + need + " install"})
+					Message: "project " + name + " needs the plugin " + need + ", it is not on the server", Fix: "lite " + need + " install"})
 				continue
 			}
 			out = append(out, plugin.Finding{Plugin: "project", Check: name + "/" + need, Level: plugin.LevelOK, Message: "project " + name + " needs " + need + ": present"})
@@ -295,7 +295,7 @@ func projectPublishing(ctx context.Context, env Env) []plugin.Finding {
 				continue
 			}
 			out = append(out, plugin.Finding{Plugin: "project", Check: check, Level: plugin.LevelWarn,
-				Message: "site " + s.Name + " of " + name + " is published directly, but the firewall does not allow ports 80 and 443 (no certificate can be issued)", Fix: "sudo lite firewall mode http"})
+				Message: "site " + s.Name + " of " + name + " is published directly, but the firewall does not allow ports 80 and 443 (no certificate can be issued)", Fix: "lite firewall mode http"})
 		}
 	}
 	return out

@@ -22,16 +22,24 @@ jobs:
       - name: Build
         run: |
           mkdir dist
+          # the product (the server side): Linux only
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
+              -ldflags "-s -w -X github.com/toxic-sunflower/lite-deploy/internal/cli.Version=${GITHUB_REF_NAME}" \
+              -o dist/lite-deploy-linux-$arch ./cmd/lite-deploy
+          done
+          # the interface (your computer): a separate small program, never installed on the server
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             os=${target%/*}; arch=${target#*/}; ext=""
             [ "$os" = windows ] && ext=".exe"
             CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath \
-              -ldflags "-s -w -X github.com/toxic-sunflower/lite-deploy/internal/cli.Version=${GITHUB_REF_NAME}" \
-              -o dist/lite-deploy-$os-$arch$ext ./cmd/lite-deploy
+              -ldflags "-s -w -X main.Version=${GITHUB_REF_NAME}" \
+              -o dist/lite-ui-$os-$arch$ext ./cmd/lite-ui
           done
           cp site/liteup dist/liteup
-          cp site/liteup.ps1 dist/liteup.ps1
-          (cd dist && sha256sum lite-deploy-* liteup liteup.ps1 > SHA256SUMS)
+          cp site/lite-ui dist/lite-ui
+          cp site/lite-ui.ps1 dist/lite-ui.ps1
+          (cd dist && sha256sum lite-deploy-* lite-ui-* liteup lite-ui lite-ui.ps1 > SHA256SUMS)
       - name: Sign SHA256SUMS
         env:
           MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}

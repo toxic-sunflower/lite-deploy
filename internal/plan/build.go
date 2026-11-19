@@ -101,7 +101,7 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 
 	if db := p.Database; db != nil && !db.IsLocal() {
 		if _, ok := st.Servers[db.Server]; !ok {
-			return nil, &BuildError{Code: CodePrecondition, Message: fmt.Sprintf("server %q is not in the registry", db.Server), Hint: "sudo lite server add " + db.Server + " ADDRESS"}
+			return nil, &BuildError{Code: CodePrecondition, Message: fmt.Sprintf("server %q is not in the registry", db.Server), Hint: "lite server add " + db.Server + " ADDRESS"}
 		}
 	}
 

@@ -99,7 +99,7 @@ func (Podman) Run(ctx context.Context, env plugin.Env, cmd string, args []string
 		res, err := t.run("podman", "--version")
 		if err != nil || res.ExitCode != 0 {
 			e := plugin.Errorf("precondition_failed", "podman is not installed")
-			e.Hint = "sudo lite podman install"
+			e.Hint = "lite podman install"
 			return plugin.Output{}, e
 		}
 		return textOut(string(res.Stdout)), nil
@@ -117,7 +117,7 @@ func (Podman) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	// podman 4.4+ is acceptable, below 5.0 there is a warning (as in verify_host)
 	var maj, min int
 	if _, err := fmt.Sscanf(v, "podman version %d.%d", &maj, &min); err == nil && (maj < 4 || (maj == 4 && min < 4)) {
-		return []plugin.Finding{finding("podman", "version", plugin.LevelFail, v+": version 4.4 or newer is required", "sudo lite package update podman")}
+		return []plugin.Finding{finding("podman", "version", plugin.LevelFail, v+": version 4.4 or newer is required", "lite package update podman")}
 	} else if err == nil && maj < 5 {
 		return []plugin.Finding{finding("podman", "version", plugin.LevelWarn, v+": version is below 5.0, some features are unavailable", "")}
 	}
@@ -344,7 +344,7 @@ func (PG) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (p
 	case "status":
 		if !t.ok("psql", "--version") {
 			e := plugin.Errorf("precondition_failed", "PostgreSQL is not installed")
-			e.Hint = "sudo lite pg install"
+			e.Hint = "lite pg install"
 			return plugin.Output{}, e
 		}
 		res, _ := t.run("psql", "--version")

@@ -242,7 +242,7 @@ func (s *Server) api(method string, h func(*http.Request) ([]byte, int)) http.Ha
 		if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Token")), []byte(s.Token)) != 1 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write(errBody("permission_denied", "a token from the address printed by lite-deploy ui is required"))
+			_, _ = w.Write(errBody("permission_denied", "a token from the address printed by lite-ui is required"))
 			return
 		}
 		b, code := h(r)

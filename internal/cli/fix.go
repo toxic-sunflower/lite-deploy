@@ -16,12 +16,15 @@ var safeFixes = map[string]bool{
 	"podman install": true, "pg install": true, "redis install": true, "caddy install": true,
 }
 
-// fixCommands splits a "sudo lite … ; sudo lite …" hint into commands (plugin, arguments) from the safeFixes list.
+// fixCommands splits a "lite … ; lite …" hint into commands (plugin, arguments) from the safeFixes list.
 // The parts that are not in the list are returned separately as needing manual action.
 func fixCommands(hint string) (auto [][]string, manual []string) {
 	for _, part := range strings.Split(hint, ";") {
 		part = strings.TrimSpace(part)
-		rest, ok := strings.CutPrefix(part, "sudo lite ")
+		rest, ok := strings.CutPrefix(part, "lite ")
+		if !ok {
+			rest, ok = strings.CutPrefix(part, "sudo lite ")
+		}
 		if !ok {
 			if part != "" {
 				manual = append(manual, part)

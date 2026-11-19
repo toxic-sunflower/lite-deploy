@@ -152,7 +152,7 @@ func (Caddy) Run(ctx context.Context, env plugin.Env, cmd string, args []string)
 	case "validate", "reload", "status", "sites":
 		if !t.ok("caddy", "version") {
 			e := plugin.Errorf("precondition_failed", "Caddy is not installed")
-			e.Hint = "sudo lite caddy install"
+			e.Hint = "lite caddy install"
 			return plugin.Output{}, e
 		}
 	default:
@@ -209,10 +209,10 @@ func (Caddy) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	if t.ok("caddy", "validate", "--config", caddyfile, "--adapter", "caddyfile") {
 		out = append(out, finding("caddy", "config", plugin.LevelOK, "Caddy configuration is valid", ""))
 	} else {
-		out = append(out, finding("caddy", "config", plugin.LevelFail, "Caddy configuration does not pass validation", "sudo lite caddy validate"))
+		out = append(out, finding("caddy", "config", plugin.LevelFail, "Caddy configuration does not pass validation", "lite caddy validate"))
 	}
 	if b, err := env.FS.ReadFile(caddyfile); err != nil || !strings.Contains(string(b), caddyMark) {
-		out = append(out, finding("caddy", "caddyfile", plugin.LevelWarn, "the main Caddyfile is not managed by lite: project sites may not be served", "sudo lite caddy install"))
+		out = append(out, finding("caddy", "caddyfile", plugin.LevelWarn, "the main Caddyfile is not managed by lite: project sites may not be served", "lite caddy install"))
 	}
 	return out
 }

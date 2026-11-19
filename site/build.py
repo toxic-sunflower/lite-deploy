@@ -81,7 +81,8 @@ def nav(cur: str) -> str:
     parts.append("<h4>Links</h4>")
     parts.append(f'<a href="{REPO}">Source code</a>')
     parts.append(f'<a href="{REPO}/releases">Releases</a>')
-    parts.append('<a href="liteup">liteup</a>')
+    parts.append('<a href="liteup">liteup (server)</a>')
+    parts.append('<a href="lite-ui">lite-ui (your computer)</a>')
     return "\n".join(parts)
 
 
@@ -116,7 +117,7 @@ def main() -> int:
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir()
-    for f in ("style.css", "install.sh", "liteup", "liteup.ps1", "CNAME"):
+    for f in ("style.css", "install.sh", "liteup", "lite-ui", "lite-ui.ps1", "CNAME"):
         shutil.copy(ROOT / "site" / f, OUT / f)
 
     for _, items in GROUPS:

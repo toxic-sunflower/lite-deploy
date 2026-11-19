@@ -91,7 +91,7 @@ func (Redis) Run(ctx context.Context, env plugin.Env, cmd string, args []string)
 		res, err := t.run("redis-server", "--version")
 		if err != nil || res.ExitCode != 0 {
 			e := plugin.Errorf("precondition_failed", "Redis is not installed")
-			e.Hint = "sudo lite redis install"
+			e.Hint = "lite redis install"
 			return plugin.Output{}, e
 		}
 		active := t.ok("systemctl", "is-active", "--quiet", t.redisService())

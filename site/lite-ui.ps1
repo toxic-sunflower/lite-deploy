@@ -1,14 +1,14 @@
-# liteup.ps1: installs the lite-deploy client on Windows (for the web interface).
+# lite-ui.ps1: installs the web interface of lite-deploy on Windows. Nothing is installed on the server.
 #
-#   irm https://lite-deploy.prozorov.me/liteup.ps1 | iex
+#   irm https://lite-deploy.prozorov.me/lite-ui.ps1 | iex
 #
-# It downloads lite-deploy.exe from the latest GitHub release into %LOCALAPPDATA%\lite-deploy, checks its
+# It downloads the small lite-ui.exe from the latest GitHub release into %LOCALAPPDATA%\lite-ui, checks its
 # SHA256 against the signed SHA256SUMS of the same release (and the minisign signature too, if minisign
-# is installed), and adds the folder to your user PATH. The server side is installed on Linux with liteup.
+# is installed), and adds the folder to your user PATH. The server side is installed on Linux with liteup, and never contains the interface.
 #
-# Options (environment variables): LITE_DEPLOY_VERSION (a tag like v0.6.2, the latest by default),
-# LITE_DEPLOY_BASE_URL (for testing), LITE_DEPLOY_SKIP_SIG=1 (do not use minisign even if present),
-# LITE_DEPLOY_NO_PATH=1 (do not touch your PATH).
+# Options (environment variables): LITE_UI_VERSION (a tag like v0.6.2, the latest by default),
+# LITE_UI_BASE_URL (for testing), LITE_UI_SKIP_SIG=1 (do not use minisign even if present),
+# LITE_UI_NO_PATH=1 (do not touch your PATH).
 $ErrorActionPreference = 'Stop'
 
 # The minisign public key the releases are signed with. Matches minisign.pub in the repository.
@@ -23,15 +23,15 @@ $arch = switch ($env:PROCESSOR_ARCHITECTURE) {
     default { Fail "architecture $($env:PROCESSOR_ARCHITECTURE) is not supported (amd64 and arm64 only)" }
 }
 
-$version = if ($env:LITE_DEPLOY_VERSION) { $env:LITE_DEPLOY_VERSION } else { 'latest' }
+$version = if ($env:LITE_UI_VERSION) { $env:LITE_UI_VERSION } else { 'latest' }
 if ($version -ne 'latest' -and $version -notmatch '^v[0-9]') { Fail 'the version must look like v1.2.3 or latest' }
 
-if ($env:LITE_DEPLOY_BASE_URL) { $base = $env:LITE_DEPLOY_BASE_URL }
+if ($env:LITE_UI_BASE_URL) { $base = $env:LITE_UI_BASE_URL }
 elseif ($version -eq 'latest') { $base = "https://github.com/$Repo/releases/latest/download" }
 else { $base = "https://github.com/$Repo/releases/download/$version" }
 
-$name = "lite-deploy-windows-$arch.exe"
-$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("liteup-" + [System.Guid]::NewGuid().ToString('N'))
+$name = "lite-ui-windows-$arch.exe"
+$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("lite-ui-" + [System.Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
     Write-Host "[1/3] Downloading $name ($version)"
@@ -40,7 +40,7 @@ try {
 
     $note = ''
     $minisign = Get-Command minisign -ErrorAction SilentlyContinue
-    if ($minisign -and $env:LITE_DEPLOY_SKIP_SIG -ne '1') {
+    if ($minisign -and $env:LITE_UI_SKIP_SIG -ne '1') {
         Invoke-WebRequest -UseBasicParsing "$base/SHA256SUMS.minisig" -OutFile (Join-Path $tmp 'SHA256SUMS.minisig')
         & minisign -Vm (Join-Path $tmp 'SHA256SUMS') -P $MinisignPubKey -x (Join-Path $tmp 'SHA256SUMS.minisig') | Out-Null
         if ($LASTEXITCODE -ne 0) { Fail 'the SHA256SUMS signature is invalid: the files may have been tampered with, installation cancelled' }
@@ -56,23 +56,22 @@ try {
     if ($want -ne $got) { Fail "checksum mismatch (expected $want, got $got)" }
     Write-Host "[2/3] Verified: ${note}SHA256 OK"
 
-    $dir = Join-Path $env:LOCALAPPDATA 'lite-deploy'
+    $dir = Join-Path $env:LOCALAPPDATA 'lite-ui'
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    Copy-Item (Join-Path $tmp $name) (Join-Path $dir 'lite-deploy.exe') -Force
-    Copy-Item (Join-Path $tmp $name) (Join-Path $dir 'lite.exe') -Force
+    Copy-Item (Join-Path $tmp $name) (Join-Path $dir 'lite-ui.exe') -Force
 
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if ($env:LITE_DEPLOY_NO_PATH -eq '1') {
-        Write-Host "[3/3] Installed $dir\lite-deploy.exe"
+    if ($env:LITE_UI_NO_PATH -eq '1') {
+        Write-Host "[3/3] Installed $dir\lite-ui.exe"
     } elseif (($userPath -split ';') -notcontains $dir) {
         [Environment]::SetEnvironmentVariable('Path', ($userPath.TrimEnd(';') + ';' + $dir), 'User')
         $env:Path += ";$dir"
-        Write-Host "[3/3] Installed $dir\lite-deploy.exe and added the folder to your PATH (open a new terminal to use it)"
+        Write-Host "[3/3] Installed $dir\lite-ui.exe and added the folder to your PATH (open a new terminal to use it)"
     } else {
-        Write-Host "[3/3] Installed $dir\lite-deploy.exe"
+        Write-Host "[3/3] Installed $dir\lite-ui.exe"
     }
-    Write-Host "Done: $(& (Join-Path $dir 'lite-deploy.exe') version)."
-    Write-Host 'Next: lite-deploy ui --host YOUR_USER@YOUR_SERVER   (the web interface; needs the OpenSSH client and a key login to the server)'
+    Write-Host "Done: $(& (Join-Path $dir 'lite-ui.exe') --version)."
+    Write-Host 'Next: lite-ui --host YOUR_USER@YOUR_SERVER   (it opens the interface in your browser; needs the OpenSSH client and a key login to the server)'
 } finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }

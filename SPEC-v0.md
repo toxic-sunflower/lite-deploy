@@ -410,7 +410,7 @@ Everything else: code 2, the message "the command is not allowed". The gatekeepe
 | `lite-deploy firewall allow <port>/<tcp\|udp> [--from <address or network>] --yes` | root | normal | open a port; without `--yes` the error `confirmation_required` |
 | `lite-deploy firewall remove <port>/<tcp\|udp> [--from <address or network>] [--action allow\|limit\|deny] --yes` | root | normal | close a port; the SSH, 80 and 443 ports are protected (`protected_rule`), no such rule: `rule_not_found` |
 | `lite-deploy firewall enable --yes` | root | normal | first `default deny incoming`, `default allow outgoing`, the rules for SSH (`limit`), 80/tcp, 443/tcp, 443/udp, then turning on |
-| `lite-deploy ui [--host <user@server>] [--listen 127.0.0.1:8787]` | the owner | normal | the local web interface: state, deploy, rollback, the firewall (on top of the CLI, listens on loopback only, a token in the address) |
+| `lite-ui [--host <user@server>] [--listen 127.0.0.1:8787]` (a separate program on the owner's computer) | the owner | normal | the local web interface: state, deploy, rollback, the firewall (on top of the CLI, listens on loopback only, a token in the address) |
 | `lite-deploy version` | anyone | safe | the version, the schema versions |
 
 Common flags: `--json` (machine output), `--host <user@address>` (the client mode: the command runs on the server through `ssh <host> lite-deploy <arguments> --json`, input and output are passed through; this is how the UI and MCP work, D-28), `--quiet`. The rights come from the OS user: for `apply` with `--host` `ssh -t <host> sudo lite-deploy apply …` is used.

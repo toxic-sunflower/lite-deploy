@@ -17,7 +17,7 @@ func memfs(env Env) *host.MemFS { return env.FS.(*host.MemFS) }
 const testKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFakeFakeFakeFake anna@laptop"
 
 // initArgs are the init arguments for tests: no questions, the firewall is not touched.
-var initArgs = []string{"init", "--yes", "--ufw", "off", "--json"}
+var initArgs = []string{"init", "--yes", "--ufw", "off", "--no-security", "--json"}
 
 // forInit prepares the environment init runs in: started through sudo by anna, who already has a key and a password.
 func forInit(env Env) Env {
@@ -284,5 +284,17 @@ func TestEndToEndSecrets(t *testing.T) {
 	}
 	if n != 6 {
 		t.Fatalf("set_secret steps %d", n)
+	}
+}
+
+func TestInitAddsSecurityByDefault(t *testing.T) {
+	if got := withSecurity([]string{"caddy"}, false); len(got) != 2 || got[1] != "security" {
+		t.Errorf("security must be added: %v", got)
+	}
+	if got := withSecurity([]string{"security", "caddy"}, false); len(got) != 2 {
+		t.Errorf("security must not be added twice: %v", got)
+	}
+	if got := withSecurity([]string{"caddy"}, true); len(got) != 1 {
+		t.Errorf("--no-security must skip it: %v", got)
 	}
 }

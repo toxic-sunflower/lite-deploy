@@ -344,9 +344,9 @@ func (t tools) backupFindings() []plugin.Finding {
 		at, ok := newest[db]
 		switch {
 		case !ok:
-			out = append(out, finding("pg", "backup-"+db, plugin.LevelWarn, "database "+db+" has no backups", "sudo lite pg backup "+db+"; sudo lite pg schedule on"))
+			out = append(out, finding("pg", "backup-"+db, plugin.LevelWarn, "database "+db+" has no backups", "lite pg backup "+db+"; lite pg schedule on"))
 		case t.now().Sub(at) > pgStale:
-			out = append(out, finding("pg", "backup-"+db, plugin.LevelFail, "the latest backup of database "+db+" is older than 36 hours ("+at.Format(time.RFC3339)+")", "sudo lite pg schedule on"))
+			out = append(out, finding("pg", "backup-"+db, plugin.LevelFail, "the latest backup of database "+db+" is older than 36 hours ("+at.Format(time.RFC3339)+")", "lite pg schedule on"))
 		default:
 			out = append(out, finding("pg", "backup-"+db, plugin.LevelOK, "backup of database "+db+" is fresh ("+at.Format(time.RFC3339)+")", ""))
 		}

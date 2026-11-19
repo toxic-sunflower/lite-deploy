@@ -156,9 +156,9 @@ func createProjectUser(ctx context.Context, r *run, v any) (outcome, error) {
 func installHint(tool string) string {
 	switch tool {
 	case "caddy", "podman":
-		return " (install it: sudo lite init --plugins " + tool + ")"
+		return " (install it: lite init --plugins " + tool + ")"
 	case "psql":
-		return " (install it: sudo lite init --plugins postgres)"
+		return " (install it: lite init --plugins postgres)"
 	}
 	return ""
 }

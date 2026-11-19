@@ -250,7 +250,15 @@ func (e Env) Apply(ctx context.Context, o Options) error {
 	}
 	e.say("")
 	e.say("Done. Keep this session open, open a new one and check key login: ssh %s@this-server, then sudo -v.", users[0])
-	e.say("Root SSH login was not changed: whether to disable it is up to you.")
+	hardened := false
+	for _, pl := range o.Plugins {
+		hardened = hardened || pl == "security"
+	}
+	if hardened {
+		e.say("The server is protected: SSH by key only (root too), fail2ban, automatic security updates. Check with: lite verify")
+	} else {
+		e.say("Root SSH login was not changed: whether to disable it is up to you.")
+	}
 	return nil
 }
 

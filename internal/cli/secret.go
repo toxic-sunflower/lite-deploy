@@ -66,7 +66,7 @@ func readSecretValue(env Env) ([]byte, error) {
 	return b, nil
 }
 
-const initUsage = "usage: lite init [--user name[,name…]] [--all-users] [--ufw keep|off|http|max] [--plugins caddy,podman,pg,security] [--yes]"
+const initUsage = "usage: lite init [--user name[,name…]] [--all-users] [--ufw keep|off|http|max] [--plugins caddy,podman,pg,redis] [--no-security] [--yes]"
 
 // cmdInit prepares the server for work: the executor key and directories, administrator users with SSH keys,
 // SSH login by key only, the firewall mode, the plugins. The only command that may be run directly as root.
@@ -77,13 +77,14 @@ func cmdInit(args []string, env Env) result {
 	allUsers := fl.Bool("all-users", false, "")
 	ufw := fl.String("ufw", "max", "")
 	plugins := fl.String("plugins", "", "")
+	noSecurity := fl.Bool("no-security", false, "")
 	yes := fl.Bool("yes", false, "")
 	pos, err := parseArgs(fl, args)
 	if err != nil || len(pos) != 0 {
 		return fail("init", CodeUsage, initUsage)
 	}
 	if !env.root() {
-		return fail("init", "permission_denied", "init must run as root: sudo lite init")
+		return fail("init", "permission_denied", "init must run as root: lite init")
 	}
 	pub, created, err := secrets.EnsureKey(env.FS, env.keyPath(), env.pubPath())
 	if err != nil {
@@ -122,7 +123,7 @@ func cmdInit(args []string, env Env) result {
 		stdin = strings.NewReader("")
 	}
 	se := setup.Env{Runner: env.Runner, FS: env.FS, In: bufio.NewReader(stdin), Out: env.Stderr, Projects: projects}
-	opts := setup.Options{Users: split(users), AllUsers: *allUsers, Current: current, Firewall: *ufw, Plugins: split([]string{*plugins}), Yes: *yes}
+	opts := setup.Options{Users: split(users), AllUsers: *allUsers, Current: current, Firewall: *ufw, Plugins: withSecurity(split([]string{*plugins}), *noSecurity), Yes: *yes}
 	if err := se.Apply(context.Background(), opts); err != nil {
 		return fail("init", plan.CodePrecondition, err.Error())
 	}
@@ -265,4 +266,18 @@ func secretList(args []string, env Env) result {
 		sb.WriteString("No secrets.\n")
 	}
 	return result{command: "secret.list", data: map[string]any{"secrets": items}, text: sb.String()}
+}
+
+// withSecurity adds the security plugin (SSH by key only, fail2ban, automatic updates, kernel parameters) to the plugin
+// list unless the person asked not to: a server is protected right after init (D-72).
+func withSecurity(plugins []string, skip bool) []string {
+	if skip {
+		return plugins
+	}
+	for _, p := range plugins {
+		if p == "security" {
+			return plugins
+		}
+	}
+	return append(plugins, "security")
 }

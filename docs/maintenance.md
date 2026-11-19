@@ -54,6 +54,25 @@ Every error has a code and a hint. With `--json` any command prints a single JSO
 
 **The site returns 502 or "not deployed".** `503 not deployed` means the project exists but has never been deployed. `502` means the application is not answering: look at `lite status` and the deploy output.
 
+## Starting over
+
+To remove everything `lite` installed and begin again (you stay able to log in; the user and the SSH key are kept). Run as your administrator:
+
+```sh
+sudo liteup uninstall --purge --yes     # lite, the agent, settings, secrets and backups
+sudo apt purge -y caddy postgresql 'postgresql-*' redis-server fail2ban podman
+sudo apt autoremove -y --purge
+sudo rm -rf /var/lib/postgresql /etc/postgresql /var/lib/redis /etc/caddy /var/log/caddy /etc/apt/sources.list.d/caddy-stable.list
+sudo rm -f /etc/ssh/sshd_config.d/01-lite-security.conf /etc/ssh/sshd_config.d/50-lite-deploy.conf
+sudo rm -f /etc/sysctl.d/60-lite-security.conf /etc/fail2ban/jail.d/lite-deploy.local /etc/apt/apt.conf.d/52lite-deploy-auto-upgrades
+sudo rm -f /etc/systemd/system/lite-pg-backup.service /etc/systemd/system/lite-pg-backup.timer
+sudo systemctl daemon-reload && sudo sysctl --system >/dev/null
+sudo sshd -t && sudo systemctl reload ssh
+sudo ufw --force reset && sudo ufw allow OpenSSH && sudo ufw --force enable
+```
+
+This deletes databases and project data. Then install again from the [Quickstart](quickstart.md). On your computer, remove `lite-ui` (`~/.local/bin/lite-ui` or `%LOCALAPPDATA%\lite-ui`) if you want.
+
 ## Getting help
 
 Run `lite --help` for the command list and `lite info` for every plugin and its commands. Report problems at the project repository on GitHub, with the output of the failing command (it never prints secret values).

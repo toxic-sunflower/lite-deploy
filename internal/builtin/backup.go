@@ -59,7 +59,7 @@ func (t tools) backupConfig() (backupConfig, error) {
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			e := plugin.Errorf("precondition_failed", "the backup encryption key is not set: secrets are not backed up without encryption")
-			e.Hint = "age-keygen (on your computer), then sudo lite backup setup age1…"
+			e.Hint = "age-keygen (on your computer), then lite backup setup age1…"
 			return backupConfig{}, e
 		}
 		return backupConfig{}, plugin.Errorf("step_failed", "%s: %v", backupConf, err)
@@ -323,16 +323,16 @@ func (Backup) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	}
 	if _, err := t.backupConfig(); err != nil {
 		if secretsExist {
-			return []plugin.Finding{finding("backup", "key", plugin.LevelFail, "the server has project secrets but backups are not configured: losing the server would lose them too", "sudo lite backup setup age1…")}
+			return []plugin.Finding{finding("backup", "key", plugin.LevelFail, "the server has project secrets but backups are not configured: losing the server would lose them too", "lite backup setup age1…")}
 		}
 		return []plugin.Finding{finding("backup", "key", plugin.LevelOK, "settings backups are not configured (no secrets yet)", "")}
 	}
 	files := t.configFiles()
 	switch {
 	case len(files) == 0:
-		return []plugin.Finding{finding("backup", "config", plugin.LevelWarn, "there are no settings and secrets backups yet", "sudo lite backup run; sudo lite backup schedule on")}
+		return []plugin.Finding{finding("backup", "config", plugin.LevelWarn, "there are no settings and secrets backups yet", "lite backup run; lite backup schedule on")}
 	case t.now().Sub(files[0].At) > pgStale:
-		return []plugin.Finding{finding("backup", "config", plugin.LevelFail, "the latest settings and secrets backup is older than 36 hours ("+files[0].At.Format(time.RFC3339)+")", "sudo lite backup schedule on")}
+		return []plugin.Finding{finding("backup", "config", plugin.LevelFail, "the latest settings and secrets backup is older than 36 hours ("+files[0].At.Format(time.RFC3339)+")", "lite backup schedule on")}
 	}
 	return []plugin.Finding{finding("backup", "config", plugin.LevelOK, "the settings and secrets backup is fresh ("+files[0].At.Format(time.RFC3339)+")", "")}
 }

@@ -1,6 +1,6 @@
 # Protect the server
 
-`lite` can bring a fresh server to a sensible secure state, and keep checking it. It all lives in the `security` and `firewall` plugins, and in `lite verify`.
+`lite init` already brings a fresh server to a sensible secure state (SSH by key only, protection against password guessing, automatic security updates, protective kernel parameters), unless you passed `--no-security`. This page shows how to check it, and how to change or repeat any part of it. It all lives in the `security` and `firewall` plugins, and in `lite verify`.
 
 ## The check
 
@@ -21,7 +21,7 @@ lite fix                # do it
 
 ## What the `security` plugin does
 
-Turn it all on with one command (SSH goes last, so a mistake cannot lock you out early):
+If you skipped it in `init`, or want to repeat it, turn it all on with one command (SSH goes last, so a mistake cannot lock you out early):
 
 ```sh
 lite security enable --yes

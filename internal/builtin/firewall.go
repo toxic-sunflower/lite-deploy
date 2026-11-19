@@ -121,10 +121,10 @@ func (Firewall) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 func (Firewall) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	st, fe := (&firewall.Manager{Runner: env.Runner}).Status(ctx)
 	if fe != nil || st == nil {
-		return []plugin.Finding{finding("firewall", "status", plugin.LevelWarn, "the firewall is not installed or unavailable (ufw)", "sudo lite firewall mode max")}
+		return []plugin.Finding{finding("firewall", "status", plugin.LevelWarn, "the firewall is not installed or unavailable (ufw)", "lite firewall mode max")}
 	}
 	if !st.Active {
-		return []plugin.Finding{finding("firewall", "status", plugin.LevelWarn, "the firewall is off: incoming traffic is not filtered", "sudo lite firewall mode max")}
+		return []plugin.Finding{finding("firewall", "status", plugin.LevelWarn, "the firewall is off: incoming traffic is not filtered", "lite firewall mode max")}
 	}
 	return []plugin.Finding{finding("firewall", "status", plugin.LevelOK, fmt.Sprintf("the firewall is on, SSH port %d", st.SSHPort), "")}
 }

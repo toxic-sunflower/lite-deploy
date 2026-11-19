@@ -24,7 +24,6 @@ Everything else runs as a regular administrator, no sudo needed:
   publish PROJECT SITE [tunnel|direct]  show or switch how a site reaches the internet
   status [PROJECT]             show projects and slots
   secret encrypt PROJECT NAME  encrypt a secret value read from stdin
-  ui                           start the web interface
   version                      show the version
 
 Install and update (run as root with sudo):

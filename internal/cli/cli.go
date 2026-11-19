@@ -171,7 +171,7 @@ func dispatch(args []string, env Env) result {
 		return cmdHelp(env)
 	}
 	if len(args) == 0 {
-		return fail("usage", CodeUsage, "usage: lite-deploy <command>; commands: version, schema, project validate|plan|create|list, apply, deploy, rollback, status, firewall, ui (lite --help lists everything)")
+		return fail("usage", CodeUsage, "usage: lite-deploy <command>; commands: version, schema, project validate|plan|create|list, apply, deploy, rollback, status, firewall (lite --help lists everything)")
 	}
 	switch args[0] {
 	case "version":
@@ -213,8 +213,6 @@ func dispatch(args []string, env Env) result {
 		return cmdPublish(args[1:], env)
 	case "gate":
 		return cmdGate(args[1:], env)
-	case "ui":
-		return cmdUI(args[1:], env)
 	case "agent":
 		return cmdAgent(args[1:], env)
 	case "exec":

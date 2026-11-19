@@ -222,7 +222,7 @@ func (s *sec) guardSSH(c sshConf) error {
 	}
 	if len(keyed) == 0 {
 		e := plugin.Errorf("precondition_failed", "there is no administrator (sudo) with an SSH key: after disabling passwords you would lose access")
-		e.Hint = "first: sudo lite init --user NAME (creates the user and asks for a key)"
+		e.Hint = "first: lite init --user NAME (creates the user and asks for a key)"
 		return e
 	}
 	if u := s.env.User; u != "" && !s.hasKey(u) {
@@ -629,30 +629,30 @@ func (s *sec) findings() []plugin.Finding {
 	} else {
 		switch eff["permitrootlogin"] {
 		case "yes":
-			add("ssh-root", plugin.LevelFail, "root can log in over SSH with a password", "sudo lite security ssh")
+			add("ssh-root", plugin.LevelFail, "root can log in over SSH with a password", "lite security ssh")
 		case "no":
 			add("ssh-root", plugin.LevelOK, "root cannot log in over SSH", "")
 		default:
 			add("ssh-root", plugin.LevelOK, "root can log in over SSH with a key only", "")
 		}
 		if eff["passwordauthentication"] == "yes" {
-			add("ssh-password", plugin.LevelFail, "SSH password login is allowed", "sudo lite security ssh")
+			add("ssh-password", plugin.LevelFail, "SSH password login is allowed", "lite security ssh")
 		} else {
 			add("ssh-password", plugin.LevelOK, "SSH password login is disabled", "")
 		}
 		if eff["permitemptypasswords"] == "yes" {
-			add("ssh-empty", plugin.LevelFail, "login with an empty password is allowed", "sudo lite security ssh")
+			add("ssh-empty", plugin.LevelFail, "login with an empty password is allowed", "lite security ssh")
 		}
 		if au := eff["allowusers"]; au != "" {
 			add("ssh-allow", plugin.LevelOK, "SSH only for: "+au, "")
 		} else {
-			add("ssh-allow", plugin.LevelWarn, "the SSH user list is not restricted", "sudo lite security allow-users NAME…")
+			add("ssh-allow", plugin.LevelWarn, "the SSH user list is not restricted", "lite security allow-users NAME…")
 		}
 	}
 
 	// fail2ban
 	if res, err := s.run("fail2ban-client", "status", "sshd"); err != nil || res.ExitCode != 0 {
-		add("fail2ban", plugin.LevelFail, "fail2ban does not protect SSH (not installed, not running, or no sshd jail)", "sudo lite security fail2ban")
+		add("fail2ban", plugin.LevelFail, "fail2ban does not protect SSH (not installed, not running, or no sshd jail)", "lite security fail2ban")
 	} else {
 		add("fail2ban", plugin.LevelOK, "fail2ban protects SSH", "")
 	}
@@ -663,7 +663,7 @@ func (s *sec) findings() []plugin.Finding {
 		if res, err := s.run("apt-config", "dump"); err == nil && strings.Contains(string(res.Stdout), `APT::Periodic::Unattended-Upgrade "1"`) {
 			add("auto-updates", plugin.LevelOK, "security updates are installed automatically", "")
 		} else {
-			add("auto-updates", plugin.LevelWarn, "automatic security updates are off", "sudo lite security updates")
+			add("auto-updates", plugin.LevelWarn, "automatic security updates are off", "lite security updates")
 		}
 		if res, err := s.run("apt-get", "-s", "upgrade"); err == nil && res.ExitCode == 0 {
 			n := 0
@@ -685,7 +685,7 @@ func (s *sec) findings() []plugin.Finding {
 				break
 			}
 		}
-		add("auto-updates", plugin.LevelWarn, "automatic security updates are off", "sudo lite security updates")
+		add("auto-updates", plugin.LevelWarn, "automatic security updates are off", "lite security updates")
 	}
 
 	// kernel parameters
@@ -696,14 +696,14 @@ func (s *sec) findings() []plugin.Finding {
 		}
 	}
 	if len(bad) > 0 {
-		add("sysctl", plugin.LevelWarn, "protective kernel parameters are not applied: "+strings.Join(bad, ", "), "sudo lite security sysctl")
+		add("sysctl", plugin.LevelWarn, "protective kernel parameters are not applied: "+strings.Join(bad, ", "), "lite security sysctl")
 	} else {
 		add("sysctl", plugin.LevelOK, "protective kernel parameters are applied", "")
 	}
 
 	// administrators
 	if adm := s.admins(); len(adm) == 0 {
-		add("admins", plugin.LevelWarn, "the sudo and wheel groups are empty", "sudo lite init --user NAME")
+		add("admins", plugin.LevelWarn, "the sudo and wheel groups are empty", "lite init --user NAME")
 	} else {
 		var nokey []string
 		for _, a := range adm {
@@ -767,7 +767,7 @@ func (s *sec) portFindings() []plugin.Finding {
 	sort.Strings(open)
 	st, _ := (&firewall.Manager{Runner: s.env.Runner}).Status(s.ctx)
 	if st == nil || !st.Active {
-		return []plugin.Finding{s.finding("ports", plugin.LevelFail, "listening on all interfaces and not closed by the firewall: "+strings.Join(open, ", "), "sudo lite firewall enable (or mode max in lite init --ufw max)")}
+		return []plugin.Finding{s.finding("ports", plugin.LevelFail, "listening on all interfaces and not closed by the firewall: "+strings.Join(open, ", "), "lite firewall enable (or mode max in lite init --ufw max)")}
 	}
 	var exposed []string
 	for _, k := range open {
@@ -781,7 +781,7 @@ func (s *sec) portFindings() []plugin.Finding {
 		}
 	}
 	if len(exposed) > 0 {
-		return []plugin.Finding{s.finding("ports", plugin.LevelWarn, "extra ports are open to the outside: "+strings.Join(exposed, ", "), "sudo lite firewall remove PORT --yes")}
+		return []plugin.Finding{s.finding("ports", plugin.LevelWarn, "extra ports are open to the outside: "+strings.Join(exposed, ", "), "lite firewall remove PORT --yes")}
 	}
 	return []plugin.Finding{s.finding("ports", plugin.LevelOK, "extra ports are listening but the firewall closes them: "+strings.Join(open, ", "), "")}
 }

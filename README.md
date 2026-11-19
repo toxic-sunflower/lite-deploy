@@ -33,27 +33,27 @@ liteup status                           # installed and latest versions
 
 The installer takes the **latest release** by default. It has been tested on Ubuntu; on Debian, Fedora, RHEL, openSUSE and Arch packages are installed with their package manager, but the installation was not tested there. The script is short and can be read before running: [site/liteup](site/liteup). The old one-liner `curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh` still works: it just runs `liteup install`.
 
-## Install the client on Windows or macOS
+## The interface on your computer: lite-ui
 
-The server runs Linux, but the web interface (`lite-deploy ui`) can run on your own computer and reach the server over SSH. Install the client there:
+The web interface is a separate small program, `lite-ui`, that lives on **your own computer** and reaches the server over SSH with your key. It is never installed on the server, and the server opens nothing to the internet for it. Install it with one command:
 
 ```powershell
 # Windows (PowerShell)
-irm https://lite-deploy.prozorov.me/liteup.ps1 | iex
+irm https://lite-deploy.prozorov.me/lite-ui.ps1 | iex
 ```
 
 ```sh
-# macOS (and Linux laptops): installs the client only, no root, into ~/.local/bin
-curl -fsSL https://lite-deploy.prozorov.me/liteup | sh
+# WSL, Linux, macOS: no root, goes into ~/.local/bin
+curl -fsSL https://lite-deploy.prozorov.me/lite-ui | sh
 ```
 
-Then, in a new terminal:
+Then, in a new terminal, give it your server once (it is remembered):
 
 ```sh
-lite-deploy ui --host YOUR_USER@YOUR_SERVER
+lite-ui --host YOUR_USER@YOUR_SERVER
 ```
 
-This needs the OpenSSH client (built into Windows 10 and later and into macOS) and a key login to the server. The page opens at an address like `http://127.0.0.1:8787/?t=…` and only your computer can reach it.
+The page opens in your browser at an address like `http://127.0.0.1:8787/?t=…`; only your computer can reach it. This needs the OpenSSH client (built into Windows 10 and later and into macOS) and a key login to the server.
 
 ## Prepare the server
 
@@ -70,10 +70,10 @@ The command first shows what it will do and asks for confirmation. Then it:
 - gives administrator rights (group `sudo` or `wheel`);
 - asks for a public SSH key and adds it; without a key the setup does not continue;
 - sets up the firewall: `--ufw max` (the default, only SSH is open), `--ufw http` (SSH and the web ports 80 and 443), `--ufw off` (no filtering), `--ufw keep` (leave an existing firewall alone). The previous `ufw` rules are reset with `max` and `http`;
-- installs plugins: `--plugins caddy,podman,pg,redis,backblaze,security` (the name `postgres` is accepted as `pg`). Caddy is needed for project sites: it is installed from the official repository, the main Caddyfile includes the sites from `/etc/caddy/conf.d`, and the old Caddyfile is saved as a copy. `security` turns on the whole server protection (see below);
-- disables SSH password login for these users (the key remains); the setting is checked with `sshd -t` and the previous one is restored on an error.
+- installs plugins: `--plugins caddy,podman,pg,redis,backblaze` (the name `postgres` is accepted as `pg`). Caddy is needed for project sites: it is installed from the official repository, the main Caddyfile includes the sites from `/etc/caddy/conf.d`, and the old Caddyfile is saved as a copy;
+- **protects the server** (unless you pass `--no-security`): SSH login by key only for everyone (root by key only), fail2ban, automatic security updates and protective kernel parameters; the SSH setting is checked with `sshd -t` and the previous one is restored on an error.
 
-Root SSH login is not changed by the command: whether to disable it is up to you. After `init` log in as the regular user. Daily work needs **no root and no sudo**: if a command needs privileges, the CLI hands it to the agent (see "Working without root"). When logged in as root, the commands other than `lite init` and `lite --help` refuse to run.
+Keep your root session open and check, in a second window, that your own key login works. After `init` log in as the regular user. Daily work needs **no root and no sudo**: if a command needs privileges, the CLI hands it to the agent (see "Working without root"). When logged in as root, the commands other than `lite init` and `lite --help` refuse to run.
 
 Without `--user`, the user who ran `sudo lite init` is configured. `lite` is the short name of `lite-deploy`; `lite --help` lists everything.
 
@@ -89,13 +89,7 @@ lite rollback PROJECT
 
 A site is published through a Cloudflare Tunnel (`"publish": "tunnel"`, the default) or directly, with Caddy getting its own TLS certificate (`"publish": "direct"`). Switch at any time: `lite publish PROJECT SITE tunnel|direct` ([tutorial](docs/publish-a-site.md)).
 
-The web interface with the "Deploy" and "Roll back" buttons runs on your computer and reaches the server over SSH:
-
-```sh
-lite-deploy ui --host admin@YOUR_SERVER
-```
-
-The command prints an address like `http://127.0.0.1:8787/?t=…`; open it in a browser. The interface listens on `127.0.0.1` only.
+The web interface with the "Deploy" and "Roll back" buttons is `lite-ui` (see above): `lite-ui --host admin@YOUR_SERVER`. It listens on `127.0.0.1` of your computer only.
 
 The server must have the agent: `liteup` installs it. The agent runs unprivileged and listens only on the local socket `/run/lite-deploy/api.sock` (nothing is opened to the internet). It hands every action to the executor, which systemd starts as root for each request; the executor accepts only a fixed list of actions (`status`, `deploy`, `rollback`, `info`, `verify`, `fix`, plugin commands, project creation) and exits. System administrators (group `sudo` or `wheel`) can use it; no `sudo` password and no `sudoers` rule are needed for the interface. The caller is identified by the kernel (`SO_PEERCRED`), every request is written to the agent journal `/var/lib/lite-deploy-agent/audit.log`, and the executor writes to the systemd journal (`journalctl -u 'lite-deploy-exec@*'`).
 
@@ -245,7 +239,7 @@ In `compose.yml` the port is published as `127.0.0.1:${PORT}:8080`. The `data` f
 
 ## Creating a project in the interface
 
-The interface (`lite-deploy ui`) has a "New project" section: the name, the database (on this or another server), the image registry, the components (a container or a process on the server), the sites and the CI key. "Preview plan" builds the plan and shows the steps with no changes on the server; "Create project" applies it. Secret values are typed in the form and encrypted on your computer with the executor public key: only ciphertext goes to the server, and the values never enter the project description. If the description changed after the preview, creation is rejected and asks for a new plan.
+The interface (`lite-ui`) has a "New project" section: the name, the database (on this or another server), the image registry, the components (a container or a process on the server), the sites and the CI key. "Preview plan" builds the plan and shows the steps with no changes on the server; "Create project" applies it. Secret values are typed in the form and encrypted on your computer with the executor public key: only ciphertext goes to the server, and the values never enter the project description. If the description changed after the preview, creation is rejected and asks for a new plan.
 
 From the command line the same is done by `lite project create FILE` (it shows a preview and asks for confirmation).
 

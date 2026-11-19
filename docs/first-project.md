@@ -121,15 +121,13 @@ Edit `shop.json` and run `lite project create` again with the same `--ciphertext
 
 ## Using the web interface instead
 
-Everything above is also in the web interface, including a form for a new project. The interface runs on **your computer** and reaches the server over SSH, so install the client first: on Windows `irm https://lite-deploy.prozorov.me/liteup.ps1 | iex` in PowerShell, on macOS and Linux `curl -fsSL https://lite-deploy.prozorov.me/liteup | sh` (see the [README](README.md) for details). Then:
+Everything above is also in the web interface, including a form for a new project. The interface is the small program `lite-ui` on **your computer**: it reaches the server over SSH and is never installed on the server. Install it (Windows PowerShell: `irm https://lite-deploy.prozorov.me/lite-ui.ps1 | iex`; WSL, Linux and macOS: `curl -fsSL https://lite-deploy.prozorov.me/lite-ui | sh`), then:
 
 ```sh
-lite-deploy ui --host alice@YOUR_SERVER
+lite-ui --host alice@YOUR_SERVER
 ```
 
-It prints an address like `http://127.0.0.1:8787/?t=…`; open it in a browser. In the "New project" section fill in the form and press "Preview plan", then "Create project". Secret values you type are encrypted in the page before they leave it.
-
-You can also run `lite-deploy ui` on the server itself and forward the port from your computer: `ssh -L 8787:127.0.0.1:8787 alice@YOUR_SERVER`.
+It opens in your browser at an address like `http://127.0.0.1:8787/?t=…` (the server is remembered for next time). In the "New project" section fill in the form and press "Preview plan", then "Create project". Secret values you type are encrypted in the page before they leave it.
 
 ## Next
 

@@ -12,6 +12,6 @@ Every release:
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-The tag starts `.github/workflows/release.yml`: tests, builds for linux amd64 and arm64, adds the `liteup` script, signs `SHA256SUMS` and publishes the release. The version number is only a release label; `liteup` takes the newest release by default.
+The tag starts `.github/workflows/release.yml`: tests, builds `lite-deploy` for linux amd64 and arm64 and the separate `lite-ui` for Linux, macOS and Windows (amd64 and arm64), adds the `liteup`, `lite-ui` and `lite-ui.ps1` scripts, signs `SHA256SUMS` and publishes the release. The version number is only a release label; `liteup` takes the newest release by default.
 
 `liteup` options: `--version <tag>` (pin a version), `--prefix <dir>`, `--skip-sig` (no signature check, unsafe). `liteup` itself is part of every release, so `sudo liteup update` updates both the binary and the script.

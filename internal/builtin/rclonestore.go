@@ -291,9 +291,9 @@ func (s *RcloneStore) Check(ctx context.Context, env plugin.Env) []plugin.Findin
 	}
 	switch at, ok := s.lastTime(t); {
 	case !ok:
-		out = append(out, finding(s.PluginName, "upload", plugin.LevelWarn, "backups have never been uploaded", "sudo lite "+s.PluginName+" upload; sudo lite "+s.PluginName+" schedule on"))
+		out = append(out, finding(s.PluginName, "upload", plugin.LevelWarn, "backups have never been uploaded", "lite "+s.PluginName+" upload; sudo lite "+s.PluginName+" schedule on"))
 	case t.now().Sub(at) > pgStale:
-		out = append(out, finding(s.PluginName, "upload", plugin.LevelFail, "the last backup upload was long ago ("+at.Format(time.RFC3339)+")", "sudo lite "+s.PluginName+" schedule on"))
+		out = append(out, finding(s.PluginName, "upload", plugin.LevelFail, "the last backup upload was long ago ("+at.Format(time.RFC3339)+")", "lite "+s.PluginName+" schedule on"))
 	default:
 		out = append(out, finding(s.PluginName, "upload", plugin.LevelOK, "backups uploaded "+at.Format(time.RFC3339), ""))
 	}
