@@ -1,65 +1,65 @@
-# Схема деплоя: Actions собирает, сервер получает готовое, ключ ограничен привратником
+# The deploy pattern: Actions builds, the server receives the finished result, the key is restricted by a gatekeeper
 
-Придумано и проверено на the example project (2026-10-23). Подходит для любого проекта на общем сервере. Реализация для the example project: `projects/shop/` в этом репозитории (скрипты, юниты, Caddy, копии workflows), сами workflows лежат в репозитории проекта (`.github/workflows/`).
+Invented and checked on the example project (2026-10-23). Suitable for any project on a shared server. The implementation for the example project: `projects/shop/` in this repository (scripts, units, Caddy, copies of the workflows); the workflows themselves live in the project repository (`.github/workflows/`).
 
-## Идея
+## The idea
 
-1. **GitHub Actions** собирает образы и кладёт в приватный реестр (GHCR) с тегом полного хэша коммита. Исходников и git на сервере нет.
-2. Actions заходит на сервер по SSH **ограниченным ключом** и шлёт только команду `deploy <хэш>`. Скрипт деплоя и описания служб стоят на сервере заранее и ставятся вручную (решение 2026-10-24: присланный скрипт выполнялся бы от пользователя проекта, то есть ключ мог бы выполнить любой код). Позже ручную установку автоматизирует отдельная система развёртывания (VISION.md).
-3. **Привратник** (`lite-deploy-gate`) стоит в `authorized_keys` как принудительная команда (`command="...",restrict ssh-ed25519 ...`). Он разрешает только `deploy <хэш>`, `rollback`, `status`, проверяет хэш (`^[0-9a-f]{40}$`) и запускает установленный на сервере скрипт деплоя. Консоли у ключа нет.
-4. **Blue-green** на сервере: два слота на локальных портах; новая версия поднимается в свободном слоте, проходит проверку `/health/ready` (в ответе версия = хэш коммита), и только потом Caddy переключается на неё (файл upstream + `systemctl reload caddy`). Старый слот остаётся для мгновенного отката.
+1. **GitHub Actions** builds the images and puts them into a private registry (GHCR) tagged with the full commit hash. There are no sources and no git on the server.
+2. Actions logs in to the server over SSH with a **restricted key** and sends only the command `deploy <hash>`. The deploy script and the service descriptions are on the server in advance and are installed by hand (the decision of 2026-10-24: a script that was sent would run as the project user, that is, the key could run any code). Later a separate deployment system automates the manual installation (VISION.md).
+3. **The gatekeeper** (`lite-deploy-gate`) sits in `authorized_keys` as a forced command (`command="...",restrict ssh-ed25519 ...`). It allows only `deploy <hash>`, `rollback`, `status`, checks the hash (`^[0-9a-f]{40}$`) and runs the deploy script installed on the server. The key has no console.
+4. **Blue-green** on the server: two slots on local ports; the new version comes up in the free slot, passes the `/health/ready` check (the answer carries the version = the commit hash), and only then Caddy switches to it (the upstream file + `systemctl reload caddy`). The old slot stays for an instant rollback.
 
-## Почему это безопасно и просто
+## Why this is safe and simple
 
-- Украденный ключ деплоя даёт только «выкатить версию» или «откатить», но не консоль и не чтение секретов.
-- Привратник ставится на сервер один раз вручную и меняется только вручную: ключ не может расширить собственные права.
-- Секреты приложения живут на сервере (файл с правами 600), в репозитории и образах их нет.
-- Для переключения Caddy у пользователя проекта одно правило `sudoers`: только `systemctl reload caddy`.
-- Каждый проект: свой системный пользователь без пароля и без `sudo`, свой rootless podman, своя роль и база в PostgreSQL.
+- A stolen deploy key gives only "deploy a version" or "roll back", but not a console and not reading secrets.
+- The gatekeeper is installed on the server once by hand and changed only by hand: the key cannot extend its own rights.
+- The application secrets live on the server (a file with mode 600), not in the repository and not in the images.
+- To switch Caddy the project user has one `sudoers` rule: only `systemctl reload caddy`.
+- Every project has its own system user without a password and without `sudo`, its own rootless podman, and its own role and database in PostgreSQL.
 
-## Что нужно на сервере один раз (на проект)
+## What is needed on the server once (per project)
 
-Пользователь (`adduser --disabled-password`), `loginctl enable-linger`, роль и база PostgreSQL (доступ контейнеров через unix-сокет), файлы настроек, привратник, ключ в `authorized_keys`, правило `sudoers`, вход в GHCR токеном только на чтение, сайт в `/etc/caddy/conf.d/`, каталог `upstreams` под запись пользователем проекта.
+A user (`adduser --disabled-password`), `loginctl enable-linger`, a PostgreSQL role and database (container access through a unix socket), settings files, the gatekeeper, the key in `authorized_keys`, the `sudoers` rule, a login to GHCR with a read-only token, the site in `/etc/caddy/conf.d/`, and the `upstreams` directory writable by the project user.
 
-## Грабли, на которые уже наступили
+## Pitfalls already stepped on
 
-- Rootless podman из `sudo -u` не работает: нужна сессия (`machinectl shell пользователь@ ...`).
-- Каталоги в чужом домашнем каталоге создавать от имени самого пользователя, иначе промежуточные станут принадлежать root.
-- Миграции БД должны быть обратно совместимы (две версии работают на одной базе во время переключения). Откат возвращает только код.
-- Загрузка файлов через бесплатный Cloudflare до 100 МБ.
-- Привратника проверять в песочнице (свой `HOME`, заглушка `systemctl`, чужие команды и неверные хэши). Тест был в `.gate-test.sh` (14 проверок), он писался под прежний вариант с архивом; после перехода на ручную установку скриптов пересмотреть.
-- Защита веток GitHub (rulesets и классическая) для **приватного** репозитория на бесплатном тарифе недоступна: API отвечает 403 «Upgrade to GitHub Pro or make this repository public». Без неё нельзя запретить прямые пуши, force push и удаление `main`, а любой, кто может писать в репозиторий, может запустить деплой. Варианты: GitHub Pro (платно), сделать репозиторий публичным (не подходит для закрытого кода) или работать без защиты и держаться на 2FA и ограничении окружения `production` веткой `main`. Окружения с ограничением веток при этом работают.
-- Выключатель выкатки на каждое окружение свой: переменная репозитория с именем окружения (`DEPLOY_PRODUCTION_ENABLED`, `DEPLOY_STAGING_ENABLED`). `if` у задачи не видит переменные окружения GitHub; проверка внутри шагов происходит уже после входа в окружение.
-- Названия веток: нельзя иметь `release` и `release/1.0` одновременно (git хранит ветки как файлы и каталоги).
-- Бесплатный GitHub: около 2000 минут Actions в месяц и около 500 МБ приватных пакетов GHCR на аккаунт. Образы с тегом-хэшем копятся, нужна периодическая очистка.
-- Токен `cloudflared` и команда из панели Cloudflare (`service install <токен>`): токен попадает в файл службы, читаемый всеми, и в список процессов. На общем сервере запускать службу от отдельного пользователя, токен в закрытом файле (`EnvironmentFile`, root, 600).
-- Если у имени в Cloudflare DNS была запись от прежнего туннеля, маршрут нового её не перезапишет: **ошибка 1033** при статусе туннеля Healthy. Удалить старую запись, пересоздать маршрут. «Сервер не найден» после этого может быть кэшем DNS на компьютере (`ipconfig /flushdns` в PowerShell, не в WSL).
-- Caddy: `systemctl reload caddy` не меняет время запуска в `systemctl status`, по нему нельзя понять, перечитан ли конфиг. После правки файлов сайтов: проверка от пользователя `caddy` (`sudo -u caddy caddy validate …`) и `reload`. Признак устаревшего конфига: пустой `200` с заголовком `Server: Caddy` и без заголовков нашего сайта.
-- Проверку конфига Caddy запускать от `caddy`, не от root: иначе могут появиться файлы логов с владельцем root, в которые работающий Caddy потом не сможет писать.
-- Звёздочка в пути чужого домашнего каталога раскрывается оболочкой вызывающего пользователя, а не `sudo`: `sudo chown … /home/другой/*.x` не находит файлов. Использовать `sudo sh -c '… /home/другой/*.x'`.
-- Пакеты NuGet: если приложение ссылается на общий проект, а провайдер БД тянет более низкую версию зависимости (а нужная версия приходит только через закрытый пакет `PrivateAssets=all`), в образ попадает не та версия и приложение падает при старте (`FileNotFoundException` на `Microsoft.EntityFrameworkCore.Relational`). Версию указывать явно в общем проекте. Предупреждение `MSB3277` при сборке на это указывает; тесты этого не ловят, поймать может только проверка опубликованного образа.
-- Приложение может отказываться стартовать при пустых обязательных настройках (у the example project админка требует логин и пароль). Тогда слот уходит в цикл перезапусков, Caddy отвечает `502`, снаружи видна страница Cloudflare «Bad gateway». Сначала смотреть `list-units` и журнал слота. Ответы Caddy на ошибку проксирования не несут заголовков сайта.
-- Файлы настроек после записи проверять машинно: набор ключей и длина паролей (без вывода значений). Запись нескольких команд в терминал разом отдаёт вторую команду на ввод первой (`read`), поэтому команды давать по одной.
-- Cloudflare Access: название разделов интерфейса меняется (Authentication, Login methods, Integrations → Identity providers). Ошибка «That account does not have access» значит, что почты нет в политике или способ входа не тот. Сессия Access отсчитывается от входа и не продлевается активностью.
-- Отключать API управления Caddy (`admin off`) нельзя: `systemctl reload caddy` вызывает `caddy reload`, которому API нужно. Если API доступен контейнерам, переводить его на unix-сокет и проверять, что reload работает.
+- Rootless podman from `sudo -u` does not work: a session is needed (`machinectl shell user@ ...`; `lite` uses `systemd-run --machine=USER@.host --user`).
+- Create directories inside another user's home directory as that user, otherwise the intermediate ones become owned by root.
+- Database migrations must be backwards compatible (two versions run on one database during the switch). A rollback returns only the code.
+- File uploads through the free Cloudflare plan are limited to 100 MB.
+- Test the gatekeeper in a sandbox (its own `HOME`, a `systemctl` stub, foreign commands and wrong hashes). The test was `.gate-test.sh` (14 checks), written for the earlier variant with an archive; revisit it after the move to manually installed scripts.
+- GitHub branch protection (rulesets and classic) is unavailable for a **private** repository on the free plan: the API answers 403 "Upgrade to GitHub Pro or make this repository public". Without it you cannot forbid direct pushes, force pushes and deleting `main`, and anyone who can write to the repository can start a deploy. The options: GitHub Pro (paid), make the repository public (not suitable for closed code) or work without protection and rely on 2FA and on restricting the `production` environment to the `main` branch. Environments with branch restrictions do work.
+- The deploy switch is separate for each environment: a repository variable named after the environment (`DEPLOY_PRODUCTION_ENABLED`, `DEPLOY_STAGING_ENABLED`). The `if` of a job does not see GitHub environment variables; the check inside the steps happens only after entering the environment.
+- Branch names: you cannot have `release` and `release/1.0` at the same time (git stores branches as files and directories).
+- Free GitHub: about 2000 Actions minutes a month and about 500 MB of private GHCR packages per account. Images tagged with a hash pile up, so periodic cleanup is needed.
+- The `cloudflared` token and the command from the Cloudflare panel (`service install <token>`): the token ends up in a service file readable by everyone and in the process list. On a shared server run the service as a separate user, with the token in a closed file (`EnvironmentFile`, root, 600).
+- If a name in Cloudflare DNS had a record from an earlier tunnel, the new route does not overwrite it: **error 1033** while the tunnel status is Healthy. Delete the old record and recreate the route. "Server not found" after that may be the DNS cache on the computer (`ipconfig /flushdns` in PowerShell, not in WSL).
+- Caddy: `systemctl reload caddy` does not change the start time in `systemctl status`, so you cannot tell from it whether the config was re-read. After editing the site files: a check as the `caddy` user (`sudo -u caddy caddy validate …`) and `reload`. A sign of a stale config: an empty `200` with the `Server: Caddy` header and without the headers of our site.
+- Run the Caddy config check as `caddy`, not as root: otherwise log files owned by root may appear which the running Caddy can then not write to.
+- An asterisk in the path of another user's home directory is expanded by the calling user's shell, not by `sudo`: `sudo chown … /home/other/*.x` finds no files. Use `sudo sh -c '… /home/other/*.x'`.
+- NuGet packages: if the application references a shared project and the database provider pulls a lower dependency version (and the needed version arrives only through a closed `PrivateAssets=all` package), the wrong version ends up in the image and the application crashes at start (`FileNotFoundException` for `Microsoft.EntityFrameworkCore.Relational`). Give the version explicitly in the shared project. The `MSB3277` warning at build time points to this; tests do not catch it, only checking the published image can.
+- An application may refuse to start with empty required settings (the example project admin needs a login and a password). Then the slot goes into a restart loop, Caddy answers `502`, and the Cloudflare "Bad gateway" page is seen from outside. Look at `list-units` and the slot journal first. Caddy's answers to a proxy error carry no headers of the site.
+- Check the settings files by machine after writing: the set of keys and the length of passwords (without printing values). Pasting several commands into a terminal at once hands the second command to the first one's input (`read`), so give commands one at a time.
+- Cloudflare Access: the names of the interface sections change (Authentication, Login methods, Integrations → Identity providers). The error "That account does not have access" means the email is not in the policy or the login method is wrong. The Access session counts from the login and is not extended by activity.
+- The Caddy management API must not be turned off (`admin off`): `systemctl reload caddy` calls `caddy reload`, which needs the API. If the API is reachable by containers, move it to a unix socket and check that the reload works.
 
-## Изоляция проектов на общем сервере (чек-лист)
+## Isolating projects on a shared server (a checklist)
 
-Исходим из того, что один проект могут взломать. Тогда остальные не должны пострадать.
+We assume that one project can be hacked. Then the others must not suffer.
 
-**PostgreSQL (общий сервер, у каждого проекта своя роль и база):**
-- Роль только `LOGIN`, без `SUPERUSER`, `CREATEDB`, `CREATEROLE`. У `PUBLIC` отозвать доступ к базе проекта.
-- Пароль длинный и случайный (`openssl rand -base64 24`), свой у каждого проекта, лежит только в файле проекта с правами 600.
-- В `pg_hba.conf` отдельное правило на пару «роль проекта + база проекта» (`scram-sha-256`), выше общего `local all all peer`. В правилах для проектов не использовать `all` ни в базе, ни в роли.
-- Монтировать каталог сокета целиком нормально: сокет один на весь сервер Postgres, границу задают роли, пароли и `pg_hba.conf`, а не файл. Монтирование одного файла сокета вредно: после перезапуска Postgres контейнер остаётся с мёртвой ссылкой.
-- Что остаётся у взломавшего проект: подбор паролей чужих ролей по сокету. Защита: длинные случайные пароли. Подключиться как чужая роль без пароля нельзя (`peer` требует совпадения имени пользователя ОС с ролью).
+**PostgreSQL (a shared server, each project has its own role and database):**
+- The role is `LOGIN` only, without `SUPERUSER`, `CREATEDB`, `CREATEROLE`. Revoke `PUBLIC` access to the project database.
+- The password is long and random (`openssl rand -base64 24`), separate for each project, and lies only in the project file with mode 600.
+- `pg_hba.conf` has a separate rule for the pair "project role + project database" (`scram-sha-256`), above the general `local all all peer`. In the project rules do not use `all` either in the database or in the role.
+- Mounting the whole socket directory is fine: there is one socket for the whole Postgres server, and the boundary is set by roles, passwords and `pg_hba.conf`, not by the file. Mounting a single socket file is harmful: after a Postgres restart the container is left with a dead link.
+- What remains for someone who hacked a project: guessing the passwords of other roles over the socket. The protection: long random passwords. Connecting as another role without a password is impossible (`peer` requires the OS user name to match the role).
 
-**Linux и контейнеры:**
-- Свой пользователь на проект без пароля и без `sudo` (кроме одного правила `systemctl reload caddy`), домашние каталоги закрыты друг от друга (750 или 700).
-- Контейнер: не root, `DropCapability=ALL`, `NoNewPrivileges=true`, файловая система только для чтения.
-- Лимиты ресурсов в юнитах (`MemoryMax`, `PidsLimit`), чтобы один проект не съел весь сервер.
-- Секреты, пароли и ключи деплоя ничего не делят между проектами.
+**Linux and containers:**
+- Every project has its own user without a password and without `sudo` (except one `systemctl reload caddy` rule), and the home directories are closed to each other (750 or 700).
+- The container: not root, `DropCapability=ALL`, `NoNewPrivileges=true`, a read-only file system.
+- Resource limits in the units (`MemoryMax`, `PidsLimit`), so that one project does not eat the whole server.
+- Secrets, passwords and deploy keys share nothing between projects.
 
-**Туннель Cloudflare (если используется):** служба от отдельного пользователя без прав, токен в закрытом файле (root, 600), сайты слушают только `127.0.0.1`, Cloudflare Access на служебных именах (админка).
+**The Cloudflare tunnel (if used):** the service runs as a separate user without rights, the token is in a closed file (root, 600), the sites listen on `127.0.0.1` only, Cloudflare Access on service names (the admin panel).
 
-**Проверить на сервере (после первого деплоя):** достаёт ли контейнер до `localhost:2019` (API Caddy) и до других портов хоста; что роль проекта не может подключиться к другим базам (в том числе `postgres`); просмотреть `pg_hba.conf` на предмет правил с `all`.
+**To check on the server (after the first deploy):** whether a container reaches `localhost:2019` (the Caddy API) and other host ports; that a project role cannot connect to other databases (including `postgres`); look through `pg_hba.conf` for rules with `all`.
