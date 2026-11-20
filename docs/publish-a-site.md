@@ -44,7 +44,17 @@ Caddy asks Let's Encrypt for the certificate as soon as the name points at the s
 
 > **The short way: from the interface.** In **Ingress**, press “Cloudflare for this domain…” under the domain, choose the Cloudflare account (a name of your own), paste a Cloudflare API token and press **Connect this domain through a tunnel**. Lite Deploy creates the tunnel in the account that owns the domain (once per account, reused for every domain of it), routes the domain to the port of the site, makes the DNS record, installs `cloudflared` and connects the tunnel on the server, and points the site at it. Nothing is done by hand in the Cloudflare dashboard.
 >
-> The API token is created by the owner of the Cloudflare account once (My Profile, API Tokens, Create Custom Token) with only: **Account: Cloudflare Tunnel: Edit**, **Zone: DNS: Edit** and **Zone: Zone: Read** (and **Account: Access: Apps and Policies: Edit** for Access). It is used by `lite-ui` on your workstation and goes to Cloudflare only; by default it is forgotten after use. To the server goes only the token of the tunnel, which can run that one tunnel and nothing else. If the domain belongs to a friend, they create the API token for you, or do it themselves in the dashboard as below. The text below is the same thing done by hand.
+> The API token is created by the owner of the Cloudflare account once (My Profile, API Tokens, Create Custom Token) with only: **Account: Cloudflare Tunnel: Edit**, **Zone: DNS: Edit** and **Zone: Zone: Read** (and **Account: Access: Apps and Policies: Edit** for Access). It is used by `lite-ui` on your workstation and goes to Cloudflare only; by default it is forgotten after use. To the server goes only the token of the tunnel, which can run that one tunnel and nothing else. If the domain belongs to a friend, they create the API token for you, or do it themselves in the dashboard as below. 
+> **The same from a terminal on your workstation** (the API token never goes to the server, so this is a `lite-ui` command, not a `lite` one):
+>
+> ```sh
+> export CLOUDFLARE_API_TOKEN='the token'      # or: echo 'the token' | lite-ui cloudflare tunnel … --token-stdin
+> lite-ui cloudflare tunnel --server you@your-server --domain app.example.com --project shop --site main --label acme
+> ```
+>
+> `--port 18080` can be given instead of `--project`/`--site`; `--label` names the Cloudflare account (the tunnel is created once per account and reused); `--remember` keeps the token in a private file on the workstation. When the token sees several accounts, the command lists them and you pick one with `--account ID`.
+>
+> The text below is the same thing done by hand, with the commands `lite` has on the server: `lite cloudflare install`, `echo 'TUNNEL_TOKEN' | lite cloudflare setup --token-stdin --name acme`, then `lite publish shop main tunnel acme`; the route and the DNS record are made in the Cloudflare dashboard.
 
 The `cloudflare` plugin installs `cloudflared` and runs it as its own unprivileged user. The tunnel token is kept in a file that only that user can read, and it never appears on a command line. This mode needs no open inbound port (`lite firewall mode max`).
 

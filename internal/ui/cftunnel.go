@@ -168,3 +168,34 @@ func (s *Server) registerCFTunnel(mux *http.ServeMux) {
 		return s.cfTunnel(r.Context(), in)
 	}))
 }
+
+// CloudflareTunnel is the same action as the page's, for a terminal: it returns the answer envelope. The port of the site
+// is looked up on the server when it is not given.
+func (s *Server) CloudflareTunnel(ctx context.Context, target, label, token string, remember bool, account, host string, port int, project, site string) []byte {
+	ctx = context.WithValue(ctx, ctxKey{}, target)
+	if port == 0 && project != "" && site != "" {
+		if ok, _, data := envOK(s.call(ctx, "GET", "/v1/ingress", nil)); ok {
+			var ing struct {
+				Sites []struct {
+					Project, Site string
+					Port          int
+				} `json:"sites"`
+			}
+			if json.Unmarshal(data, &ing) == nil {
+				for _, x := range ing.Sites {
+					if x.Project == project && x.Site == site {
+						port = x.Port
+					}
+				}
+			}
+		}
+		if port == 0 {
+			return errBody("usage", "the site "+project+"/"+site+" has no port: is the project created on that server?")
+		}
+	}
+	raw, _ := s.cfTunnel(ctx, cfTunnelRequest{
+		cfAccessRequest: cfAccessRequest{Label: label, Token: token, Remember: remember, Account: account, Host: host},
+		Port:            port, Project: project, Site: site,
+	})
+	return raw
+}
