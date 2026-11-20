@@ -257,7 +257,7 @@ func TestCallStreamAnswersManyRequestsOnOneStream(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ok":true,"api_version":"v1","command":"x","data":{"path":"` + r.URL.Path + `"}}`))
 	})}
 	go func() { _ = srv.Serve(ln) }()
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 	env, out, _ := testEnv(t)
 	env.IsRoot = func() bool { return false }
 	env.Getenv = func(k string) string {
