@@ -302,3 +302,56 @@ func TestMigrationsRunOnceInOrder(t *testing.T) {
 		t.Errorf("the last number must be kept: %q", b)
 	}
 }
+
+func TestSwitchHelperServesOnlyProjectUsers(t *testing.T) {
+	env, out, _ := testEnv(t)
+	_ = env.FS.WriteFile("/etc/passwd", []byte("root:x:0:0::/root:/bin/bash\nshop:x:1001:1001::/home/shop:/bin/bash\nmallory:x:1002:1002::/home/mallory:/bin/bash\n"), 0o644)
+	_ = env.FS.WriteFile("/etc/lite-deploy/projects/shop.json", []byte(`{}`), 0o644)
+	ask := func(uid int, line string) string {
+		out.Reset()
+		env.Stdin = strings.NewReader(line)
+		env.PeerUID = func() (int, error) { return uid, nil }
+		run(t, env, "switch-serve")
+		return out.String()
+	}
+	if got := ask(1002, `{"slot":"blue"}`+"\n"); !strings.Contains(got, `"ok":false`) || !strings.Contains(got, "not the user of a project") {
+		t.Errorf("a user that is not a project user must be refused: %s", got)
+	}
+	if got := ask(4242, `{"slot":"blue"}`+"\n"); !strings.Contains(got, `"ok":false`) {
+		t.Errorf("an unknown user must be refused: %s", got)
+	}
+	if got := ask(1001, `{"slot":"../etc"}`+"\n"); !strings.Contains(got, "the slot must be blue or green") {
+		t.Errorf("only blue or green: %s", got)
+	}
+	if got := ask(0, `{"slot":"blue"}`+"\n"); !strings.Contains(got, `"ok":false`) {
+		t.Errorf("root is not served as a project user: %s", got)
+	}
+}
+
+func TestMigrationMovesToTheSwitchHelper(t *testing.T) {
+	env, out, _ := testEnv(t)
+	_ = env.FS.WriteFile("/etc/caddy/upstreams/shop-main.caddy", []byte("x"), 0o644)
+	_ = env.FS.Chown("/etc/caddy/upstreams/shop-main.caddy", "shop", "shop")
+	_ = env.FS.WriteFile("/etc/sudoers.d/lite-deploy-shop", []byte("shop ALL=(root) NOPASSWD: /usr/bin/systemctl reload caddy\n"), 0o440)
+	_ = env.FS.WriteFile("/etc/sudoers.d/lite-deploy-other", []byte("x ALL=(root) NOPASSWD: /bin/true\n"), 0o440)
+	// without the helper nothing is changed
+	run(t, env, "migrate")
+	if info, _ := env.FS.Stat("/etc/caddy/upstreams/shop-main.caddy"); info.Owner != "shop" {
+		t.Fatal("while the helper is missing the old way must keep working")
+	}
+	_ = env.FS.WriteFile("/etc/systemd/system/lite-deploy-switch.socket", []byte("[Socket]\n"), 0o644)
+	out.Reset()
+	run(t, env, "migrate")
+	if info, _ := env.FS.Stat("/etc/caddy/upstreams/shop-main.caddy"); info.Owner != "root" {
+		t.Errorf("the upstream file must become root-owned: %v", info.Owner)
+	}
+	if _, err := env.FS.Stat("/etc/sudoers.d/lite-deploy-shop"); err == nil {
+		t.Error("the sudo rule of lite-deploy must go away")
+	}
+	if _, err := env.FS.Stat("/etc/sudoers.d/lite-deploy-other"); err != nil {
+		t.Error("a file that is not our rule must be left alone")
+	}
+	if !strings.Contains(out.String(), "traffic switch helper") {
+		t.Errorf("the person is told: %s", out.String())
+	}
+}

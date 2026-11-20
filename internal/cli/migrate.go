@@ -42,6 +42,11 @@ func cmdMigrate(env Env) result {
 		}
 		done = append(done, "server protection")
 	}
+	if changed, err := reconcileSwitchHelper(env); err != nil {
+		return fail(command, "step_failed", "traffic switch helper: "+err.Error())
+	} else if changed {
+		done = append(done, "traffic switch helper")
+	}
 	last := 0
 	if b, err := env.FS.ReadFile(migrationState); err == nil {
 		last, _ = strconv.Atoi(strings.TrimSpace(string(b)))
@@ -65,4 +70,43 @@ func cmdMigrate(env Env) result {
 		text = "Brought up to date: " + strings.Join(done, ", ") + ".\n"
 	}
 	return result{command: command, data: map[string]any{"updated": done}, text: text}
+}
+
+// reconcileSwitchHelper moves a server from the old way of switching traffic (the project user writes the Caddy upstream file and
+// runs a sudo rule) to the root helper: once the helper is installed, the upstream files become root-owned and the sudo rules
+// of lite-deploy go away. It is safe to run again, and does nothing while the helper is missing.
+func reconcileSwitchHelper(env Env) (bool, error) {
+	if _, err := env.FS.Stat("/etc/systemd/system/lite-deploy-switch.socket"); err != nil {
+		return false, nil
+	}
+	changed := false
+	if names, err := env.FS.ReadDir("/etc/caddy/upstreams"); err == nil {
+		for _, n := range names {
+			if !strings.HasSuffix(n, ".caddy") {
+				continue
+			}
+			p := "/etc/caddy/upstreams/" + n
+			if info, err := env.FS.Stat(p); err == nil && info.Owner != "root" {
+				if err := env.FS.Chown(p, "root", "root"); err != nil {
+					return changed, err
+				}
+				changed = true
+			}
+		}
+	}
+	if names, err := env.FS.ReadDir("/etc/sudoers.d"); err == nil {
+		for _, n := range names {
+			if !strings.HasPrefix(n, "lite-deploy-") {
+				continue
+			}
+			p := "/etc/sudoers.d/" + n
+			if b, err := env.FS.ReadFile(p); err == nil && strings.Contains(string(b), "NOPASSWD: /usr/bin/systemctl reload caddy") {
+				if err := env.FS.Remove(p); err != nil {
+					return changed, err
+				}
+				changed = true
+			}
+		}
+	}
+	return changed, nil
 }

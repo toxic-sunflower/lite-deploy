@@ -75,7 +75,7 @@ func TestBuildExampleStepOrder(t *testing.T) {
 		"install_quadlet", "install_quadlet", "install_quadlet", "install_quadlet",
 		"reload_user_units",
 		"install_caddy_site", "install_caddy_site",
-		"install_reload_rule", "reload_caddy",
+		"reload_caddy",
 		"probe_site", "probe_site",
 		"install_deploy_key", "record_project",
 	}

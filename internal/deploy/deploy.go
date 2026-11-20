@@ -55,7 +55,10 @@ type Env struct {
 	Now    func() time.Time
 	Sleep  func(time.Duration)
 	// AsUser: the process runs as root, podman and systemctl --user commands go to the project user's session.
-	AsUser      bool
+	AsUser bool
+	// Switch moves traffic to a slot through the root helper (a project user must not write Caddy configuration or reload
+	// Caddy itself). It returns ErrNoHelper if the helper is not installed; then the old way is used.
+	Switch      func(ctx context.Context, slot string) error
 	ProjectsDir string // empty: DefaultProjectsDir
 	StateDir    string // empty: DefaultStateDir
 	Poll        time.Duration
@@ -440,6 +443,15 @@ func (m *Manager) abort(ctx context.Context, idle, sha, active string, logsFor [
 
 // switchTraffic writes the upstream of all sites to the slot ports and reloads Caddy. On a failure it restores the previous state.
 func (m *Manager) switchTraffic(ctx context.Context, slot string) *Error {
+	if !m.AsUser && m.Switch != nil {
+		err := m.Switch(ctx, slot)
+		switch {
+		case err == nil:
+			return nil
+		case !errors.Is(err, ErrNoHelper):
+			return &Error{Code: CodeCaddyReloadFailed, Message: "switching traffic failed: " + err.Error(), Hint: "traffic stayed on the previous version"}
+		}
+	}
 	var olds []upstreamBackup
 	for _, site := range m.proj.Sites {
 		path := render.UpstreamPath(m.Name, site.Name)
@@ -660,4 +672,12 @@ func (m *Manager) fetchRelease(ctx context.Context, service, sha, slot string) *
 	}
 	_, _ = m.run(ctx, time.Minute, "rm", "-f", archive)
 	return nil
+}
+
+// ErrNoHelper means the root helper that switches traffic is not installed on this server.
+var ErrNoHelper = errors.New("the traffic switch helper is not installed")
+
+// SwitchSlot moves traffic of all sites of the project to a slot (the root helper calls it).
+func (m *Manager) SwitchSlot(ctx context.Context, slot string) *Error {
+	return m.switchTraffic(ctx, slot)
 }

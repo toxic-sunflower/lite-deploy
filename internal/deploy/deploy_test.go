@@ -1,9 +1,11 @@
 package deploy
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -271,5 +273,84 @@ func TestStatusJSONShape(t *testing.T) {
 	raw, _ := json.Marshal(st)
 	if !strings.Contains(string(raw), `"active":"none"`) || !strings.Contains(string(raw), `"history":[]`) {
 		t.Fatalf("%s", raw)
+	}
+}
+
+func TestProjectUserSwitchesTrafficThroughTheHelper(t *testing.T) {
+	s, env := newSim(t)
+	var slots []string
+	env.Switch = func(_ context.Context, slot string) error { slots = append(slots, slot); return nil }
+	m := open(t, env)
+	before := s.upstream()
+	if _, e := m.Deploy(context.Background(), sha1); e != nil {
+		t.Fatal(e)
+	}
+	if len(slots) != 1 || slots[0] != "blue" {
+		t.Fatalf("the helper must be asked to switch to the idle slot: %v", slots)
+	}
+	if s.upstream() != before {
+		t.Error("a project user must not write the Caddy upstream file itself")
+	}
+	for _, c := range s.runner.Calls {
+		if c.Name == "sudo" {
+			t.Fatalf("no sudo any more: %v", c.Args)
+		}
+	}
+}
+
+func TestWithoutTheHelperTheOldWayStillWorks(t *testing.T) {
+	s, env := newSim(t)
+	env.Switch = func(context.Context, string) error { return ErrNoHelper }
+	m := open(t, env)
+	if _, e := m.Deploy(context.Background(), sha1); e != nil {
+		t.Fatal(e)
+	}
+	if !strings.Contains(s.upstream(), "18001") && !strings.Contains(s.upstream(), "18002") {
+		t.Errorf("without the helper the upstream is written as before: %s", s.upstream())
+	}
+}
+
+func TestHelperFailureKeepsTraffic(t *testing.T) {
+	s, env := newSim(t)
+	env.Switch = func(context.Context, string) error { return fmt.Errorf("caddy would not reload") }
+	m := open(t, env)
+	_, e := m.Deploy(context.Background(), sha1)
+	if e == nil || e.Code != CodeCaddyReloadFailed {
+		t.Fatalf("a helper failure must fail the deploy: %v", e)
+	}
+	_ = s
+}
+
+func TestHelperSwitcherTalksToASocketAndNoticesAMissingOne(t *testing.T) {
+	dir := t.TempDir()
+	sock := dir + "/switch.sock"
+	if err := HelperSwitcher(sock)(context.Background(), "blue"); err != ErrNoHelper {
+		t.Fatalf("a missing socket means no helper: %v", err)
+	}
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Skip("no unix sockets here")
+	}
+	defer func() { _ = ln.Close() }()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			line, _ := bufio.NewReader(c).ReadBytes('\n')
+			var req SwitchRequest
+			_ = json.Unmarshal(line, &req)
+			rep := SwitchReply{OK: req.Slot == "blue", Error: "only blue here"}
+			b, _ := json.Marshal(rep)
+			_, _ = c.Write(append(b, '\n'))
+			_ = c.Close()
+		}
+	}()
+	if err := HelperSwitcher(sock)(context.Background(), "blue"); err != nil {
+		t.Fatalf("blue must work: %v", err)
+	}
+	if err := HelperSwitcher(sock)(context.Background(), "green"); err == nil || !strings.Contains(err.Error(), "only blue here") {
+		t.Fatalf("an error of the helper must reach the caller: %v", err)
 	}
 }

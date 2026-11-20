@@ -279,8 +279,10 @@ func TestApplyFromScratchThenIdempotent(t *testing.T) {
 	check("/home/shop/.config/lite-deploy/env/api.env", 0o600, "shop")
 	check("/home/shop/.config/containers/systemd/shop-api-blue.container", 0o600, "shop")
 	check("/etc/caddy/conf.d/shop-main.caddy", 0o644, "root")
-	check("/etc/caddy/upstreams/shop-main.caddy", 0o644, "shop")
-	check("/etc/sudoers.d/lite-deploy-shop", 0o440, "root")
+	check("/etc/caddy/upstreams/shop-main.caddy", 0o644, "root") // only root writes it: a project user asks the helper
+	if ok, _ := exists(w.fsys, "/etc/sudoers.d/lite-deploy-shop"); ok {
+		t.Error("no sudoers rule any more: the root helper switches traffic")
+	}
 	check("/home/shop/.ssh/authorized_keys", 0o600, "shop")
 	check("/var/lib/lite-deploy/secrets/shop/_db_password", 0o600, "root")
 	check("/var/lib/lite-deploy/state/projects/shop.json", 0o644, "root")

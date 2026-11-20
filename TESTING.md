@@ -76,6 +76,13 @@ This needs a release newer than the one on the server. Tell me and I publish a t
 2. Press **Update**. Expected: the page waits about a minute, then says “Updated to …”. (After the update the settings that lite manages are brought up to date by themselves.) `lite version` on the **server** shows the new version.
 3. `lite verify` still has no errors, and the project still runs.
 
+## 4b. Traffic switch (after the update to this version)
+
+1. **server**: `systemctl is-active lite-deploy-switch.socket` says `active`; `ls -l /etc/caddy/upstreams/` shows the files owned by root; `ls /etc/sudoers.d/` has no `lite-deploy-*` files.
+2. Deploy a version from CI (or `lite deploy`) as before. Expected: traffic switches, no errors. **server** `sudo journalctl -u 'lite-deploy-switch@*' -n 20` shows the switch.
+3. Roll back. Expected: traffic goes back.
+4. If a deploy from CI fails with a message about switching traffic, send it to me with the journal lines above.
+
 ## 5. Protection and access
 
 1. **server**: `lite ssh-key list`, then `lite ssh-key add "ssh-ed25519 AAAA… test"` with a second key, log in with the second key from a new terminal, then `lite ssh-key remove FINGERPRINT` for it. Expected: login keeps working at every step; removing your only key is refused.

@@ -37,12 +37,14 @@ const (
 
 // Env is everything external the CLI depends on; replaced in tests.
 type Env struct {
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-	FS     host.FS
-	Paths  plan.Paths
-	Config string // the config.json path; empty: config.DefaultPath
+	Stdin io.Reader
+	// PeerUID tells who is connected to standard input when it is a socket (tests replace it).
+	PeerUID func() (int, error)
+	Stdout  io.Writer
+	Stderr  io.Writer
+	FS      host.FS
+	Paths   plan.Paths
+	Config  string // the config.json path; empty: config.DefaultPath
 	// paths of the executor key and the secret store; empty: the defaults from the secrets package
 	KeyPath, PubPath, SecretsDir string
 	IsRoot                       func() bool
@@ -157,7 +159,7 @@ func directRoot(args []string, env Env) string {
 		return ""
 	}
 	switch args[0] {
-	case "init", "version", "schema", "agent", "exec", "migrate":
+	case "init", "version", "schema", "agent", "exec", "migrate", "switch-serve":
 		return ""
 	}
 	if uid, ok := env.LoginUID(); ok && uid == 0 {
@@ -221,6 +223,8 @@ func dispatch(args []string, env Env) result {
 		return cmdCallStream(env)
 	case "owner":
 		return cmdOwner(args[1:], env)
+	case "switch-serve":
+		return cmdSwitchServe(env)
 	case "ssh-key":
 		return cmdSSHKey(args[1:], env)
 	case "gate":

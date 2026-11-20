@@ -19,8 +19,17 @@ func deployEnv(env Env) deploy.Env {
 		sleep = time.Sleep
 	}
 	paths := env.Paths
-	return deploy.Env{Runner: env.Runner, FS: env.FS, HTTP: env.HTTP, Lock: env.Lock, Now: env.Now, Sleep: sleep,
+	e := deploy.Env{Runner: env.Runner, FS: env.FS, HTTP: env.HTTP, Lock: env.Lock, Now: env.Now, Sleep: sleep,
 		AsUser: asUser, StateDir: paths.StateDir}
+	if !asUser {
+		// a project user does not touch Caddy itself: the root helper does it
+		sock := deploy.SwitchSocket
+		if env.Getenv != nil && env.Getenv("LITE_DEPLOY_SWITCH_SOCK") != "" {
+			sock = env.Getenv("LITE_DEPLOY_SWITCH_SOCK")
+		}
+		e.Switch = deploy.HelperSwitcher(sock)
+	}
+	return e
 }
 
 func deployFail(command string, e *deploy.Error) result {

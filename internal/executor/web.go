@@ -196,9 +196,6 @@ func installCaddySite(_ context.Context, r *run, v any) (outcome, error) {
 			if err := r.FS.WriteFile(up, []byte(render.UpstreamNotDeployed), 0o644); err != nil {
 				return outcome{}, err
 			}
-			if err := r.FS.Chown(up, p.Project, p.Project); err != nil {
-				return outcome{}, err
-			}
 		}
 	}
 	if changedAny && !changed {

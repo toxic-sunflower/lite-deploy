@@ -16,9 +16,23 @@ const (
 	DefaultGroup = "sudo" // the system administrator group; on RHEL and Fedora it is wheel
 	APISocket    = "/run/lite-deploy/api.sock"
 	ExecSocket   = "/run/lite-deploy/exec.sock"
+	SwitchSocket = "/run/lite-deploy/switch.sock"
 	UnitDir      = "/etc/systemd/system"
 	auditFileRel = "audit.log"
 )
+
+// rootHardening are the limits for the services that run as root. They are the ones that cannot get in the way of what the
+// services do (installing packages, writing /etc, firewall, users, sysctl). ProtectKernelTunables, ProtectKernelModules,
+// ProtectSystem and RestrictSUIDSGID are left out on purpose: the executor writes sysctl settings, ufw loads kernel modules,
+// and packages write /etc and install setuid files.
+const rootHardening = `NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+`
 
 // Units returns the systemd unit files (name → content) for the binary bin.
 func Units(bin, group string) map[string]string {
@@ -80,9 +94,32 @@ StandardInput=socket
 StandardOutput=socket
 StandardError=journal
 RuntimeMaxSec=1800
-NoNewPrivileges=yes
-PrivateTmp=yes
+` + rootHardening,
+		"lite-deploy-switch.socket": `[Unit]
+Description=lite-deploy: traffic switch helper socket (project users)
+
+[Socket]
+ListenStream=` + SwitchSocket + `
+SocketUser=root
+SocketGroup=root
+SocketMode=0666
+DirectoryMode=0755
+Accept=yes
+
+[Install]
+WantedBy=sockets.target
 `,
+		"lite-deploy-switch@.service": `[Unit]
+Description=lite-deploy: traffic switch helper (root, on request)
+
+[Service]
+User=root
+ExecStart=` + bin + ` switch-serve
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+RuntimeMaxSec=300
+` + rootHardening,
 	}
 }
 
@@ -135,7 +172,7 @@ func Install(ctx context.Context, r host.Runner, fsys host.FS, bin string) (grou
 	if err := must("systemctl", "daemon-reload"); err != nil {
 		return "", err
 	}
-	if err := must("systemctl", "enable", "--now", "lite-deploy-agent.socket", "lite-deploy-exec.socket"); err != nil {
+	if err := must("systemctl", "enable", "--now", "lite-deploy-agent.socket", "lite-deploy-exec.socket", "lite-deploy-switch.socket"); err != nil {
 		return "", err
 	}
 	// the agent process is long-lived and keeps running the old binary after an upgrade: restart it if it is running
@@ -153,7 +190,7 @@ func Uninstall(ctx context.Context, r host.Runner, fsys host.FS) error {
 		return r.Run(ctx, host.Cmd{Name: name, Args: args})
 	}
 	// disable errors are ignored: the units may be missing already (a repeated uninstall must succeed)
-	_, _ = run("systemctl", "disable", "--now", "lite-deploy-agent.socket", "lite-deploy-exec.socket", "lite-deploy-agent.service")
+	_, _ = run("systemctl", "disable", "--now", "lite-deploy-agent.socket", "lite-deploy-exec.socket", "lite-deploy-switch.socket", "lite-deploy-agent.service")
 	for name := range Units("", DefaultGroup) {
 		if err := fsys.Remove(UnitDir + "/" + name); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err

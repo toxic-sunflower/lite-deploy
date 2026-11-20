@@ -185,7 +185,6 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 			TrustedProxy: s.TrustedProxy, Direct: s.Publish == "direct", MaxBody: s.MaxBody, Routes: siteRoutes(s),
 		}, siteDetail(s, ports.Sites[s.Name]))
 	}
-	b.add(actions.InstallReloadRuleName, actions.InstallReloadRule{Project: name}, "sudoers rule: user "+name+" may only run systemctl reload caddy")
 	b.add(actions.ReloadCaddyName, actions.ReloadCaddy{}, "Check the Caddy configuration as user caddy and reload")
 	expect := "not_deployed"
 	if cur.Deployed {
