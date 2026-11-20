@@ -215,9 +215,9 @@ do_install() {
   fi
   ln -sf lite-deploy "$prefix/lite" 2>/dev/null || { command -v sudo >/dev/null 2>&1 && sudo ln -sf lite-deploy "$prefix/lite"; } || true
   if [ "$have_liteup" = 1 ]; then
-    say "[3/4] Installed $prefix/lite-deploy (short names: lite, liteup)"
+    say "[3/4] Installed the program $prefix/lite-deploy (you can type just: lite) and the installer $prefix/liteup (a separate program)"
   else
-    say "[3/4] Installed $prefix/lite-deploy (short name: lite)"
+    say "[3/4] Installed the program $prefix/lite-deploy (you can type just: lite)"
   fi
 
   [ "$binary_only" != 1 ] || return 0
