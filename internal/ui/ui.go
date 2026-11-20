@@ -31,11 +31,12 @@ import (
 var webFiles embed.FS
 
 var (
-	projectRe = regexp.MustCompile(`\A[a-z][a-z0-9-]{1,30}\z`)
-	siteRe    = regexp.MustCompile(`\A[a-z][a-z0-9-]{0,15}\z`)
-	shaRe     = regexp.MustCompile(`\A[0-9a-f]{40}\z`)
-	hostRe    = regexp.MustCompile(`\A[A-Za-z0-9_][A-Za-z0-9._@:-]{0,100}\z`)
-	pluginRe  = regexp.MustCompile(`\A[a-z][a-z0-9-]{0,30}\z`)
+	projectRe    = regexp.MustCompile(`\A[a-z][a-z0-9-]{1,30}\z`)
+	siteRe       = regexp.MustCompile(`\A[a-z][a-z0-9-]{0,15}\z`)
+	shaRe        = regexp.MustCompile(`\A[0-9a-f]{40}\z`)
+	hostRe       = regexp.MustCompile(`\A[A-Za-z0-9_][A-Za-z0-9._@:-]{0,100}\z`)
+	tunnelNameRe = regexp.MustCompile(`\A[a-z][a-z0-9-]{0,20}\z`)
+	pluginRe     = regexp.MustCompile(`\A[a-z][a-z0-9-]{0,30}\z`)
 )
 
 // Server is the interface.
@@ -472,12 +473,16 @@ func (s *Server) Handler() http.Handler {
 		return s.call(r.Context(), "POST", "/v1/plugin", in), 200
 	}))
 	mux.HandleFunc("/api/cloudflare/setup", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
-		var in struct{ Token string }
-		if code := readBody(r, &in); code != 0 || len(in.Token) < 20 || len(in.Token) > 2000 {
+		var in struct{ Token, Name string }
+		if code := readBody(r, &in); code != 0 || len(in.Token) < 20 || len(in.Token) > 2000 || (in.Name != "" && !tunnelNameRe.MatchString(in.Name)) {
 			return errBody("usage", "invalid request"), 400
 		}
+		args := []string{"--token-stdin"}
+		if in.Name != "" {
+			args = append(args, "--name", in.Name)
+		}
 		// the token travels as standard input of the plugin, never as an argument
-		return s.call(r.Context(), "POST", "/v1/plugin", map[string]any{"plugin": "cloudflare", "command": "setup", "args": []string{"--token-stdin"}, "stdin": in.Token + "\n"}), 200
+		return s.call(r.Context(), "POST", "/v1/plugin", map[string]any{"plugin": "cloudflare", "command": "setup", "args": args, "stdin": in.Token + "\n"}), 200
 	}))
 	mux.HandleFunc("/api/firewall", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		return s.call(r.Context(), "GET", "/v1/firewall", nil), 200

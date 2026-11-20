@@ -3,7 +3,7 @@
   var ALL = [
     { id: 'overview', title: 'Overview', icon: 'home', comp: 'overview' },
     { id: 'projects', title: 'Projects', icon: 'apps', comp: 'projects' },
-    { id: 'ingress', title: 'Ingress', icon: 'world', plugin: 'caddy', comp: 'ingress' },
+    { id: 'ingress', title: 'Ingress', icon: 'world', comp: 'ingress' },
     { id: 'databases', title: 'Databases', icon: 'database', plugin: 'pg', comp: 'databases' },
     { id: 'backups', title: 'Backups', icon: 'backup', plugin: 'backup', comp: 'backups' },
     { id: 'security', title: 'Protection', icon: 'shield', comp: 'security' },

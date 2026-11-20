@@ -58,3 +58,38 @@ func TestCloudflareRejectsAWrongToken(t *testing.T) {
 		}
 	}
 }
+
+func TestCloudflareSeveralTunnels(t *testing.T) {
+	mem := host.NewMemFS()
+	r := &host.FakeRunner{Handler: func(host.Cmd) (host.Result, error) { return host.Result{}, nil }}
+	run := func(cmd string, args ...string) plugin.Output {
+		env := plugin.Env{Runner: r, FS: mem, Stdin: strings.NewReader(cfTestToken + "\n")}
+		out, err := Cloudflare{}.Run(context.Background(), env, cmd, args)
+		if err != nil {
+			t.Fatalf("%s %v: %v", cmd, args, err)
+		}
+		return out
+	}
+	run("setup", "--token-stdin")
+	run("setup", "--token-stdin", "--name", "acme")
+	if _, ok := mem.Files[cfDir+"/tunnel-acme.token"]; !ok {
+		t.Fatal("the second tunnel needs its own token file")
+	}
+	unit := string(mem.Files["/etc/systemd/system/lite-cloudflared-acme.service"])
+	if !strings.Contains(unit, "--token-file "+cfDir+"/tunnel-acme.token") {
+		t.Errorf("the second unit must read its own token:\n%s", unit)
+	}
+	if got := run("status").Data.(map[string]any)["tunnels"].([]map[string]any); len(got) != 2 || got[0]["name"] != "default" || got[1]["name"] != "acme" {
+		t.Errorf("both tunnels must be listed: %v", got)
+	}
+	run("remove", "--name", "acme")
+	if _, ok := mem.Files[cfDir+"/tunnel-acme.token"]; ok {
+		t.Error("the token of a removed tunnel must be deleted")
+	}
+	if _, ok := mem.Files[cfToken]; !ok {
+		t.Error("removing one tunnel must not touch the other")
+	}
+	if _, err := (Cloudflare{}).Run(context.Background(), plugin.Env{Runner: r, FS: mem}, "remove", []string{"--name", "../x"}); err == nil {
+		t.Error("a bad tunnel name must be refused")
+	}
+}

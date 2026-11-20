@@ -65,6 +65,16 @@ echo 'PASTE_THE_TOKEN' | lite cloudflare setup --token-stdin
 lite cloudflare status
 ```
 
+**Several Cloudflare accounts.** Each account has its own tunnel and token, and one server can hold several tunnels. In **Ingress**, after the first tunnel is connected, type a name (for example the account) next to the token and press “Add tunnel”. On the command line:
+
+```sh
+echo 'PASTE_THE_OTHER_TOKEN' | lite cloudflare setup --token-stdin --name acme
+lite cloudflare status
+lite cloudflare remove --name acme
+```
+
+Many domains of one account share one tunnel: add a public hostname for each (step 3). Which tunnel a domain belongs to is decided in the Cloudflare dashboard of its account; the server only keeps every tunnel running and checks them in `lite verify`.
+
 ### 3. Route the name to the port
 
 In the tunnel's "Public hostname" settings add:

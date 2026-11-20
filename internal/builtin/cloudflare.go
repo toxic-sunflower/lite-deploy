@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"regexp"
@@ -20,6 +21,48 @@ const (
 	cfUnit    = "/etc/systemd/system/" + cfService + ".service"
 )
 
+// A server can hold several tunnels, one per Cloudflare account (or per group of sites). The first one is called
+// "default" and keeps the file names of the single-tunnel versions; the others are tunnel-NAME.
+const cfDefault = "default"
+
+var cfNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,20}$`)
+
+func cfTokenPath(name string) string {
+	if name == cfDefault {
+		return cfToken
+	}
+	return cfDir + "/tunnel-" + name + ".token"
+}
+
+func cfServiceName(name string) string {
+	if name == cfDefault {
+		return cfService
+	}
+	return cfService + "-" + name
+}
+
+func cfUnitPath(name string) string { return "/etc/systemd/system/" + cfServiceName(name) + ".service" }
+
+// cfName takes the optional "--name NAME" from the arguments and returns the name and the rest.
+func cfName(args []string) (string, []string, error) {
+	name, rest := cfDefault, []string{}
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--name" {
+			if i+1 >= len(args) {
+				return "", nil, plugin.Errorf("usage", "--name needs a name, for example --name acme")
+			}
+			name = args[i+1]
+			i++
+			continue
+		}
+		rest = append(rest, args[i])
+	}
+	if !cfNameRe.MatchString(name) {
+		return "", nil, plugin.Errorf("usage", "a tunnel name is lowercase letters, digits and dashes, starting with a letter (up to 21 characters)")
+	}
+	return name, rest, nil
+}
+
 var cfTokenRe = regexp.MustCompile(`^[A-Za-z0-9_=.+/-]{40,1000}$`)
 
 // Cloudflare is the `cloudflare` plugin: a Cloudflare Tunnel that brings visitors to the sites without any open port.
@@ -36,9 +79,9 @@ func (Cloudflare) Description() string {
 func (Cloudflare) Commands() []plugin.Command {
 	return []plugin.Command{
 		{Name: "install", Confirm: true, Help: "install cloudflared and a user for it"},
-		{Name: "setup", Confirm: true, Args: "--token-stdin", Help: "connect the tunnel: the token from the Cloudflare dashboard is read from standard input"},
-		{Name: "status", Help: "is cloudflared installed and running"},
-		{Name: "remove", Confirm: true, Help: "stop the tunnel and delete its token"},
+		{Name: "setup", Confirm: true, Args: "--token-stdin [--name NAME]", Help: "connect a tunnel: the token from the Cloudflare dashboard is read from standard input; --name makes another one (a second Cloudflare account)"},
+		{Name: "status", Args: "[--name NAME]", Help: "is cloudflared installed, and which tunnels run"},
+		{Name: "remove", Confirm: true, Args: "[--name NAME]", Help: "stop a tunnel and delete its token"},
 	}
 }
 
@@ -96,9 +139,9 @@ func InstallCloudflare(ctx context.Context, env plugin.Env, say Say) error {
 	return t.env.FS.MkdirAll(cfDir, fs.FileMode(0o755))
 }
 
-func cfUnitText() string {
-	return "[Unit]\nDescription=Cloudflare Tunnel (lite-deploy)\nAfter=network-online.target\nWants=network-online.target\n\n" +
-		"[Service]\nUser=" + cfUser + "\nExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run --token-file " + cfToken + "\n" +
+func cfUnitText(name string) string {
+	return "[Unit]\nDescription=Cloudflare Tunnel " + name + " (lite-deploy)\nAfter=network-online.target\nWants=network-online.target\n\n" +
+		"[Service]\nUser=" + cfUser + "\nExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run --token-file " + cfTokenPath(name) + "\n" +
 		"Restart=on-failure\nRestartSec=5\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=strict\nProtectHome=true\n\n[Install]\nWantedBy=multi-user.target\n"
 }
 
@@ -129,8 +172,12 @@ func (Cloudflare) Run(ctx context.Context, env plugin.Env, cmd string, args []st
 		}
 		return textOut("cloudflared is installed.\nNext: create a tunnel in the Cloudflare dashboard, copy its token and run: lite cloudflare setup --token-stdin\n"), nil
 	case "setup":
-		if len(args) != 1 || args[0] != "--token-stdin" {
-			return plugin.Output{}, plugin.Errorf("usage", "usage: echo TOKEN | lite cloudflare setup --token-stdin")
+		name, rest, err := cfName(args)
+		if err != nil {
+			return plugin.Output{}, err
+		}
+		if len(rest) != 1 || rest[0] != "--token-stdin" {
+			return plugin.Output{}, plugin.Errorf("usage", "usage: echo TOKEN | lite cloudflare setup --token-stdin [--name NAME]")
 		}
 		if !t.ok("cloudflared", "--version") || !t.ok("id", cfUser) {
 			e := plugin.Errorf("precondition_failed", "cloudflared is not installed")
@@ -144,45 +191,79 @@ func (Cloudflare) Run(ctx context.Context, env plugin.Env, cmd string, args []st
 		if err := env.FS.MkdirAll(cfDir, fs.FileMode(0o755)); err != nil {
 			return plugin.Output{}, plugin.Errorf("io_error", "%v", err)
 		}
-		if err := env.FS.WriteFile(cfToken, []byte(tok+"\n"), fs.FileMode(0o600)); err != nil {
+		path, svc := cfTokenPath(name), cfServiceName(name)
+		if err := env.FS.WriteFile(path, []byte(tok+"\n"), fs.FileMode(0o600)); err != nil {
 			return plugin.Output{}, plugin.Errorf("io_error", "%v", err)
 		}
-		if err := t.must("chown", cfUser+":"+cfUser, cfToken); err != nil {
+		if err := t.must("chown", cfUser+":"+cfUser, path); err != nil {
 			return plugin.Output{}, err
 		}
-		if err := env.FS.WriteFile(cfUnit, []byte(cfUnitText()), fs.FileMode(0o644)); err != nil {
+		if err := env.FS.WriteFile(cfUnitPath(name), []byte(cfUnitText(name)), fs.FileMode(0o644)); err != nil {
 			return plugin.Output{}, plugin.Errorf("io_error", "%v", err)
 		}
 		if err := t.must("systemctl", "daemon-reload"); err != nil {
 			return plugin.Output{}, err
 		}
-		if err := t.must("systemctl", "enable", "--now", cfService); err != nil {
+		if err := t.must("systemctl", "enable", "--now", svc); err != nil {
 			return plugin.Output{}, err
 		}
-		return textOut("The tunnel is connected and running.\nNext: in the Cloudflare dashboard route your domain to http://127.0.0.1:PORT (the port of the site), and keep the site set to “through a Cloudflare Tunnel” in Ingress.\n"), nil
-	case "status":
-		if err := noArgs(args, cmd, "cloudflare"); err != nil {
+		if err := t.must("systemctl", "restart", svc); err != nil { // a new token for an existing tunnel takes effect
 			return plugin.Output{}, err
+		}
+		return textOut("The tunnel " + name + " is connected and running.\nNext: in the Cloudflare dashboard of that account route your domain to http://127.0.0.1:PORT (the port of the site), and keep the site set to “through a Cloudflare Tunnel” in Ingress.\n"), nil
+	case "status":
+		name, rest, err := cfName(args)
+		if err != nil || len(rest) != 0 {
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite cloudflare status [--name NAME]")
 		}
 		inst := t.ok("cloudflared", "--version")
-		active := t.ok("systemctl", "is-active", "--quiet", cfService)
-		_, terr := env.FS.Stat(cfToken)
+		var tunnels []map[string]any
+		for _, n := range cfTunnelNames(env) {
+			if len(args) > 0 && n != name {
+				continue
+			}
+			tunnels = append(tunnels, map[string]any{"name": n, "running": t.ok("systemctl", "is-active", "--quiet", cfServiceName(n))})
+		}
 		text := "cloudflared is not installed.\n"
 		if inst {
-			text = "cloudflared is installed; the tunnel is " + map[bool]string{true: "running", false: "not running"}[active] + ".\n"
+			text = "cloudflared is installed; tunnels: " + fmt.Sprint(len(tunnels)) + ".\n"
+			for _, x := range tunnels {
+				text += "  " + x["name"].(string) + ": " + map[bool]string{true: "running", false: "not running"}[x["running"].(bool)] + "\n"
+			}
 		}
-		return plugin.Output{Text: text, Data: map[string]any{"installed": inst, "running": active, "token": terr == nil}}, nil
+		if tunnels == nil {
+			tunnels = []map[string]any{}
+		}
+		return plugin.Output{Text: text, Data: map[string]any{"installed": inst, "tunnels": tunnels}}, nil
 	case "remove":
-		if err := noArgs(args, cmd, "cloudflare"); err != nil {
-			return plugin.Output{}, err
+		name, rest, err := cfName(args)
+		if err != nil || len(rest) != 0 {
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite cloudflare remove [--name NAME]")
 		}
-		_, _ = t.run("systemctl", "disable", "--now", cfService)
-		_ = env.FS.Remove(cfUnit)
-		_ = env.FS.Remove(cfToken)
+		_, _ = t.run("systemctl", "disable", "--now", cfServiceName(name))
+		_ = env.FS.Remove(cfUnitPath(name))
+		_ = env.FS.Remove(cfTokenPath(name))
 		_, _ = t.run("systemctl", "daemon-reload")
-		return textOut("The tunnel is stopped and its token is deleted. Your sites on Cloudflare no longer reach this server.\n"), nil
+		return textOut("The tunnel " + name + " is stopped and its token is deleted. Sites on Cloudflare that used it no longer reach this server.\n"), nil
 	}
 	return plugin.Output{}, plugin.Errorf("usage", "plugin cloudflare has no command %q", cmd)
+}
+
+// cfTunnelNames lists the connected tunnels (those with a token file), the default one first.
+func cfTunnelNames(env plugin.Env) []string {
+	var names []string
+	if _, err := env.FS.Stat(cfToken); err == nil {
+		names = append(names, cfDefault)
+	}
+	entries, _ := env.FS.ReadDir(cfDir)
+	for _, e := range entries {
+		if strings.HasPrefix(e, "tunnel-") && strings.HasSuffix(e, ".token") {
+			if n := strings.TrimSuffix(strings.TrimPrefix(e, "tunnel-"), ".token"); cfNameRe.MatchString(n) {
+				names = append(names, n)
+			}
+		}
+	}
+	return names
 }
 
 func (Cloudflare) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
@@ -190,11 +271,22 @@ func (Cloudflare) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	if !t.ok("cloudflared", "--version") {
 		return []plugin.Finding{finding("cloudflare", "installed", plugin.LevelOK, "Cloudflare Tunnel is not installed (not in use)", "")}
 	}
-	if _, err := env.FS.Stat(cfToken); err != nil {
+	names := cfTunnelNames(env)
+	if len(names) == 0 {
 		return []plugin.Finding{finding("cloudflare", "token", plugin.LevelWarn, "cloudflared is installed but no tunnel is connected", "echo TOKEN | lite cloudflare setup --token-stdin")}
 	}
-	if !t.ok("systemctl", "is-active", "--quiet", cfService) {
-		return []plugin.Finding{finding("cloudflare", "service", plugin.LevelFail, "the Cloudflare Tunnel is not running: sites published through it are unreachable", "systemctl restart "+cfService)}
+	var out []plugin.Finding
+	for _, n := range names {
+		label := "the Cloudflare Tunnel"
+		check := "service"
+		if len(names) > 1 || n != cfDefault {
+			label, check = "the Cloudflare Tunnel "+n, "service-"+n
+		}
+		if !t.ok("systemctl", "is-active", "--quiet", cfServiceName(n)) {
+			out = append(out, finding("cloudflare", check, plugin.LevelFail, label+" is not running: sites published through it are unreachable", "systemctl restart "+cfServiceName(n)))
+		} else {
+			out = append(out, finding("cloudflare", check, plugin.LevelOK, label+" is running", ""))
+		}
 	}
-	return []plugin.Finding{finding("cloudflare", "service", plugin.LevelOK, "the Cloudflare Tunnel is running", "")}
+	return out
 }
