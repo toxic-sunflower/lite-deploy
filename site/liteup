@@ -310,6 +310,7 @@ do_everything() {
     ufw allow "${sshport:-22}/tcp" >/dev/null 2>&1 || true
     ufw --force enable >/dev/null 2>&1 || true
   fi
+  if [ ! -x "$prefix/liteup" ] && [ -f "$0" ]; then install -m 755 "$0" "$prefix/liteup" 2>/dev/null || true; fi
   say "Done. The server is bare again. Your login user and SSH key were kept. Install again with: liteup install"
 }
 
