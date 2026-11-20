@@ -437,14 +437,15 @@ func (s *Server) Handler() http.Handler {
 		return s.call(r.Context(), "GET", "/v1/ingress", nil), 200
 	}))
 	mux.HandleFunc("/api/publish", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
-		var in struct{ Project, Site, Mode string }
+		var in struct{ Project, Site, Mode, Tunnel string }
 		if code := readBody(r, &in); code != 0 {
 			return errBody("usage", "invalid request"), code
 		}
-		if !projectRe.MatchString(in.Project) || !siteRe.MatchString(in.Site) || (in.Mode != "tunnel" && in.Mode != "direct") {
+		if !projectRe.MatchString(in.Project) || !siteRe.MatchString(in.Site) || (in.Mode != "tunnel" && in.Mode != "direct") ||
+			(in.Tunnel != "" && (in.Mode != "tunnel" || !tunnelNameRe.MatchString(in.Tunnel))) {
 			return errBody("usage", "invalid request"), 400
 		}
-		return s.call(r.Context(), "POST", "/v1/publish", map[string]string{"project": in.Project, "site": in.Site, "mode": in.Mode}), 200
+		return s.call(r.Context(), "POST", "/v1/publish", map[string]string{"project": in.Project, "site": in.Site, "mode": in.Mode, "tunnel": in.Tunnel}), 200
 	}))
 	mux.HandleFunc("/api/backup/keygen", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		// the private key is made here, handed to the page once to be saved on this computer, and never kept by lite-ui

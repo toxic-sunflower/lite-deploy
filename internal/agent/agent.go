@@ -355,11 +355,15 @@ func (a *Agent) Handler() http.Handler {
 	})
 	route(http.MethodGet, "/v1/ingress", func(*http.Request) (Request, bool) { return Request{Cmd: "ingress"}, true })
 	route(http.MethodPost, "/v1/publish", func(r *http.Request) (Request, bool) {
-		var in struct{ Project, Site, Mode string }
+		var in struct{ Project, Site, Mode, Tunnel string }
 		if !readJSON(r, &in) {
 			return Request{}, false
 		}
-		return Request{Cmd: "publish", Args: []string{in.Project, in.Site, in.Mode}}, true
+		args := []string{in.Project, in.Site, in.Mode}
+		if in.Tunnel != "" {
+			args = append(args, in.Tunnel)
+		}
+		return Request{Cmd: "publish", Args: args}, true
 	})
 	route(http.MethodPost, "/v1/fallback-auth", func(r *http.Request) (Request, bool) {
 		var in struct {

@@ -296,6 +296,9 @@ func projectPublishing(ctx context.Context, env Env) []plugin.Finding {
 		}
 		for _, s := range p.Sites {
 			if s.Publish != "direct" {
+				if f, ok := tunnelFinding(ctx, env, name, s); ok {
+					out = append(out, f)
+				}
 				continue
 			}
 			if st == nil {
@@ -315,6 +318,24 @@ func projectPublishing(ctx context.Context, env Env) []plugin.Finding {
 		}
 	}
 	return out
+}
+
+// tunnelFinding checks that the named Cloudflare Tunnel of a site is connected and running. Sites on the default tunnel
+// are covered by the check of the cloudflare plugin itself.
+func tunnelFinding(ctx context.Context, env Env, proj string, s project.Site) (plugin.Finding, bool) {
+	if s.Tunnel == "" || s.Tunnel == "default" || s.Publish == "direct" {
+		return plugin.Finding{}, false
+	}
+	check := proj + "/" + s.Name + "/tunnel"
+	what := "site " + s.Name + " of " + proj + " is reached through the tunnel " + s.Tunnel
+	if _, err := env.FS.Stat("/etc/cloudflared/tunnel-" + s.Tunnel + ".token"); err != nil {
+		return plugin.Finding{Plugin: "project", Check: check, Level: plugin.LevelFail, Message: what + ", but that tunnel is not connected on this server",
+			Fix: "echo TOKEN | lite cloudflare setup --token-stdin --name " + s.Tunnel}, true
+	}
+	if res, err := env.Runner.Run(ctx, host.Cmd{Name: "systemctl", Args: []string{"is-active", "--quiet", "lite-cloudflared-" + s.Tunnel}}); err != nil || res.ExitCode != 0 {
+		return plugin.Finding{Plugin: "project", Check: check, Level: plugin.LevelFail, Message: what + ", and that tunnel is not running", Fix: "systemctl restart lite-cloudflared-" + s.Tunnel}, true
+	}
+	return plugin.Finding{Plugin: "project", Check: check, Level: plugin.LevelOK, Message: what + " and it is running"}, true
 }
 
 func openTo(st *firewall.State, port int) bool {

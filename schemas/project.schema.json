@@ -368,6 +368,11 @@
               "none"
             ],
             "type": "string"
+          },
+          "tunnel": {
+            "description": "the Cloudflare Tunnel (a name from lite cloudflare status) this site is reached through; default: the default tunnel",
+            "pattern": "^[a-z][a-z0-9-]{0,20}$",
+            "type": "string"
           }
         },
         "required": [

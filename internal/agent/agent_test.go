@@ -458,3 +458,15 @@ func TestFallbackAuthArguments(t *testing.T) {
 		}
 	}
 }
+
+func TestPublishWithATunnelName(t *testing.T) {
+	got, err := Request{Cmd: "publish", Args: []string{"shop", "main", "tunnel", "acme"}}.CLIArgs()
+	if err != nil || strings.Join(got, " ") != "publish shop main tunnel acme --yes" {
+		t.Fatalf("%v %v", got, err)
+	}
+	for _, bad := range [][]string{{"shop", "main", "direct", "acme"}, {"shop", "main", "tunnel", "A b"}, {"shop", "main"}} {
+		if _, err := (Request{Cmd: "publish", Args: bad}).CLIArgs(); err == nil {
+			t.Errorf("%v must be refused", bad)
+		}
+	}
+}

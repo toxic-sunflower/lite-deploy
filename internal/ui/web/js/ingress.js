@@ -2,7 +2,7 @@
   // Ingress is how traffic reaches this server: the web server (Caddy), the web ports, and every domain with the way
   // visitors reach it.
   LU.components.Ingress = {
-    data: function () { return { caNew: '', info: null, error: '', pick: {}, cf: null, token: '', tname: '', open: '', fa: { user: '', password: '', paths: '' }, cfOpen: '', labels: [], ca: { label: 'default', token: '', remember: false, who: '', path: '', account: '' }, caApps: null, caAccounts: null }; },
+    data: function () { return { caNew: '', info: null, error: '', pick: {}, cf: null, token: '', tname: '', open: '', fa: { user: '', password: '', paths: '' }, cfOpen: '', pickT: {}, labels: [], ca: { label: 'default', token: '', remember: false, who: '', path: '', account: '' }, caApps: null, caAccounts: null }; },
     template: '\
 <div>\
   <h1>Ingress</h1>\
@@ -34,8 +34,10 @@
       <tr>\
         <td>{{ s.host }}</td><td>{{ s.project }} / {{ s.service }}</td>\
         <td><select :value="mode(s)" @change="pick[s.project + s.site] = $event.target.value">\
-          <option value="tunnel">Through a Cloudflare Tunnel</option><option value="direct">Directly (certificate from Caddy)</option></select></td>\
-        <td><button v-if="mode(s) !== s.publish" @click="apply(s)" :disabled="$root.state.busy">Apply</button></td></tr>\
+          <option value="tunnel">Through a Cloudflare Tunnel</option><option value="direct">Directly (certificate from Caddy)</option></select>\
+          <select v-if="mode(s) === \'tunnel\' && tunnelNames.length > 1" :value="tun(s)" @change="pickT[s.project + s.site] = $event.target.value" aria-label="Tunnel" style="margin-top:6px">\
+            <option v-for="n in tunnelNames" :key="n" :value="n">Tunnel: {{ n }}</option></select></td>\
+        <td><button v-if="changed(s)" @click="apply(s)" :disabled="$root.state.busy">Apply</button></td></tr>\
       <tr><td colspan="4" class="help">\
         <span v-if="s.protected">When served directly, {{ where(s) }} asks for a password (logins: {{ s.protected.users.join(", ") }}).</span>\
         <span v-else>When served directly, this site has no password.</span>\
@@ -81,6 +83,7 @@
       },
       labelChoices: function () { var l = this.labels.slice(); if (l.indexOf('default') < 0) l.unshift('default'); return l; },
       hasSaved: function () { return !this.caNew.trim() && this.labels.indexOf(this.ca.label) >= 0; },
+      tunnelNames: function () { return this.cf && this.cf.tunnels ? this.cf.tunnels.map(function (x) { return x.name; }) : []; },
       needsPorts: function () { return this.info && this.info.web_ports_open === false && this.info.sites.some(function (s) { return s.publish === 'direct'; }); }
     },
     methods: {
@@ -126,7 +129,9 @@
       toggleCf: function (s) {
         var k = s.project + s.site;
         this.cfOpen = this.cfOpen === k ? '' : k;
-        this.caApps = null; this.caAccounts = null;
+        this.caApps = null; this.caAccounts = null; this.caNew = '';
+        var tn = s.tunnel || 'default';
+        if (this.labels.indexOf(tn) >= 0 || tn === 'default') this.ca.label = tn; else { this.ca.label = 'default'; this.caNew = tn; }
       },
       where: function (s) { return s.protected.paths && s.protected.paths.length ? s.protected.paths.join(' ') : 'the whole site'; },
       toggle: function (s) {
@@ -149,6 +154,8 @@
         LU.run('Removing…', '/api/fallback-auth', { project: s.project, site: s.site, action: 'off' }, function () { return 'The password is removed.'; })
           .then(function () { self.open = ''; self.load(); });
       },
+      tun: function (s) { return this.pickT[s.project + s.site] || s.tunnel || 'default'; },
+      changed: function (s) { return this.mode(s) !== s.publish || (this.mode(s) === 'tunnel' && this.tun(s) !== (s.tunnel || 'default')); },
       mode: function (s) { return this.pick[s.project + s.site] || s.publish; },
       loadCf: function () {
         var self = this;
@@ -178,8 +185,8 @@
         var self = this, m = this.mode(s);
         var q = m === 'direct' ? 'Serve ' + s.host + ' directly? Point its DNS record at this server and open the web ports.' : 'Serve ' + s.host + ' only through the Cloudflare Tunnel?';
         if (!confirm(q)) return;
-        LU.run('Switching…', '/api/publish', { project: s.project, site: s.site, mode: m }, function () { return s.host + ' is now ' + (m === 'direct' ? 'served directly' : 'served through the tunnel') + '.'; })
-          .then(function () { self.pick = {}; self.load(); });
+        LU.run('Switching…', '/api/publish', { project: s.project, site: s.site, mode: m, tunnel: m === 'tunnel' && this.tun(s) !== 'default' ? this.tun(s) : (m === 'tunnel' && s.tunnel && s.tunnel !== 'default' ? 'default' : '') }, function () { return s.host + ' is now ' + (m === 'direct' ? 'served directly' : 'served through the tunnel') + '.'; })
+          .then(function () { self.pick = {}; self.pickT = {}; self.load(); });
       },
       openPorts: function () {
         var self = this;

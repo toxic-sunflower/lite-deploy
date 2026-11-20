@@ -97,6 +97,7 @@ type Site struct {
 	Service      string  `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
 	ListenPort   int     `json:"listen_port,omitempty" min:"18000" max:"18999" doc:"Caddy port on 127.0.0.1; if omitted, a free one is chosen"`
 	Publish      string  `json:"publish,omitempty" enum:"tunnel,direct" doc:"tunnel: Caddy listens on 127.0.0.1 only (Cloudflare Tunnel); direct: Caddy also serves the host on 80/443 with its own TLS certificate"`
+	Tunnel       string  `json:"tunnel,omitempty" pattern:"^[a-z][a-z0-9-]{0,20}$" doc:"the Cloudflare Tunnel (a name from lite cloudflare status) this site is reached through; default: the default tunnel"`
 	TrustedProxy string  `json:"trusted_proxy,omitempty" enum:"cloudflare,none"`
 	MaxBody      string  `json:"max_body,omitempty" pattern:"^[1-9][0-9]*(KB|MB)$"`
 	Routes       []Route `json:"routes,omitempty" maxItems:"16"`

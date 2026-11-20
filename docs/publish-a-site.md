@@ -73,7 +73,7 @@ lite cloudflare status
 lite cloudflare remove --name acme
 ```
 
-Many domains of one account share one tunnel: add a public hostname for each (step 3). Which tunnel a domain belongs to is decided in the Cloudflare dashboard of its account; the server only keeps every tunnel running and checks them in `lite verify`.
+Many domains of one account share one tunnel: add a public hostname for each (step 3). Each site remembers which tunnel it is reached through: in **Ingress**, when the server has more than one tunnel, a second list under “Through a Cloudflare Tunnel” picks it, and `lite publish shop main tunnel acme` does the same on the command line (`lite publish shop main` shows it). The choice is kept in the project description, so it travels with an exported project, `lite verify` checks that the named tunnel is connected and running, and the “Close with Cloudflare Access” form uses the account of that tunnel. The route from the domain to the port is still made in the Cloudflare dashboard of that account.
 
 ### 3. Route the name to the port
 

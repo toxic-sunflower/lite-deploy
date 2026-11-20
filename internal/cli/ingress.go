@@ -22,6 +22,7 @@ type ingressSite struct {
 	Host    string `json:"host"`
 	Service string `json:"service"`
 	Publish string `json:"publish"`
+	Tunnel  string `json:"tunnel"`
 	// Protected: the paths (empty: the whole site) and logins of the password asked for in direct mode; nil: none.
 	Protected *ingressProtected `json:"protected,omitempty"`
 }
@@ -56,7 +57,7 @@ func cmdIngress(env Env) result {
 			if mode == "" {
 				mode = "tunnel"
 			}
-			is := ingressSite{Project: name, Site: s.Name, Host: s.Host, Service: s.Service, Publish: mode}
+			is := ingressSite{Project: name, Site: s.Name, Host: s.Host, Service: s.Service, Publish: mode, Tunnel: tunnelOrDefault(s.Tunnel)}
 			if fa := s.FallbackAuth; fa != nil && len(fa.Users) > 0 {
 				is.Protected = &ingressProtected{Paths: fa.Paths}
 				for _, u := range fa.Users {

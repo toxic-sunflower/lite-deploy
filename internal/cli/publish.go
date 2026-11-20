@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"regexp"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/deploy"
 	"github.com/toxic-sunflower/lite-deploy/internal/project"
 )
 
-const publishUsage = "usage: lite-deploy publish <project> <site> [tunnel|direct] [--yes]"
+const publishUsage = "usage: lite-deploy publish <project> <site> [tunnel [tunnel-name] | direct] [--yes]"
 
 // cmdPublish shows or switches how a site reaches the internet: through a tunnel (Caddy on 127.0.0.1 only) or directly (Caddy serves 80/443 with its own certificate).
 // It changes the stored project description and applies it like `project create`.
@@ -18,7 +19,7 @@ func cmdPublish(args []string, env Env) result {
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	yes := fs.Bool("yes", false, "")
 	pos, err := parseArgs(fs, args)
-	if err != nil || len(pos) < 2 || len(pos) > 3 {
+	if err != nil || len(pos) < 2 || len(pos) > 4 {
 		return fail(command, CodeUsage, publishUsage)
 	}
 	name, siteName := pos[0], pos[1]
@@ -26,28 +27,58 @@ func cmdPublish(args []string, env Env) result {
 	if bad != nil {
 		return *bad
 	}
-	cur := "tunnel"
+	cur, curTunnel := "tunnel", ""
 	if v, ok := sites[idx]["publish"]; ok {
 		_ = json.Unmarshal(v, &cur)
 	}
-	if len(pos) == 2 {
-		return result{command: command, data: map[string]any{"project": name, "site": siteName, "publish": cur},
-			text: fmt.Sprintf("Site %s of %s: %s\n", siteName, name, cur)}
+	if v, ok := sites[idx]["tunnel"]; ok {
+		_ = json.Unmarshal(v, &curTunnel)
 	}
-	mode := pos[2]
+	shown := cur
+	if cur == "tunnel" {
+		shown = "tunnel " + tunnelOrDefault(curTunnel)
+	}
+	if len(pos) == 2 {
+		return result{command: command, data: map[string]any{"project": name, "site": siteName, "publish": cur, "tunnel": tunnelOrDefault(curTunnel)},
+			text: fmt.Sprintf("Site %s of %s: %s\n", siteName, name, shown)}
+	}
+	mode, want := pos[2], curTunnel
 	if mode != "tunnel" && mode != "direct" {
 		return fail(command, CodeUsage, publishUsage)
 	}
-	if mode == cur {
-		return result{command: command, data: map[string]any{"project": name, "site": siteName, "publish": cur, "changed": false},
-			text: fmt.Sprintf("Site %s of %s is already %s.\n", siteName, name, cur)}
+	if len(pos) == 4 {
+		if mode != "tunnel" || !cfTunnelNameRe.MatchString(pos[3]) {
+			return fail(command, CodeUsage, publishUsage)
+		}
+		want = pos[3]
+		if want == "default" {
+			want = ""
+		}
+	}
+	if mode == cur && want == curTunnel {
+		return result{command: command, data: map[string]any{"project": name, "site": siteName, "publish": cur, "tunnel": tunnelOrDefault(curTunnel), "changed": false},
+			text: fmt.Sprintf("Site %s of %s is already %s.\n", siteName, name, shown)}
 	}
 	sites[idx]["publish"], _ = json.Marshal(mode)
+	if want == "" {
+		delete(sites[idx], "tunnel")
+	} else {
+		sites[idx]["tunnel"], _ = json.Marshal(want)
+	}
 	r := applySiteChange(command, env, doc, sites, *yes)
 	if r.err == nil {
 		r.text += publishNote(mode)
 	}
 	return r
+}
+
+var cfTunnelNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,20}$`)
+
+func tunnelOrDefault(s string) string {
+	if s == "" {
+		return "default"
+	}
+	return s
 }
 
 func publishNote(mode string) string {

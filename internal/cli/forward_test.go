@@ -428,3 +428,33 @@ func TestFallbackAuthStoresOnlyAHash(t *testing.T) {
 		t.Fatal("a short password must be refused")
 	}
 }
+
+func TestPublishRemembersTheTunnelOfASite(t *testing.T) {
+	env, out, _ := testEnv(t)
+	env.IsRoot = func() bool { return false }
+	proj, err := os.ReadFile(projectFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = env.FS.WriteFile("/etc/lite-deploy/projects/shop.json", proj, 0o644)
+	var createBody string
+	env.AgentCall = func(_ context.Context, _, _, path string, b []byte) ([]byte, error) {
+		if strings.HasSuffix(path, "preview") {
+			return []byte(`{"ok":true,"api_version":"v1","command":"project.bundle","data":{"project_hash":"sha256:abc","steps":[]}}`), nil
+		}
+		createBody = string(b)
+		return []byte(`{"ok":true,"api_version":"v1","command":"project.bundle","data":{"steps":[]}}`), nil
+	}
+	if c := run(t, env, "publish", "shop", "main", "tunnel", "acme", "--yes"); c != 0 {
+		t.Fatalf("%d %s", c, out.String())
+	}
+	if !strings.Contains(createBody, `"tunnel":"acme"`) {
+		t.Fatalf("the site must remember its tunnel: %s", createBody)
+	}
+	if c := run(t, env, "publish", "shop", "main", "direct", "acme", "--yes"); c == 0 {
+		t.Fatal("a tunnel name only goes with the mode tunnel")
+	}
+	if c := run(t, env, "publish", "shop", "main", "tunnel", "Bad Name", "--yes"); c == 0 {
+		t.Fatal("a bad tunnel name must be refused")
+	}
+}

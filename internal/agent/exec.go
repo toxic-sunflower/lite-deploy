@@ -46,8 +46,9 @@ type Request struct {
 }
 
 var (
-	authUserRe = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,30}$`)
-	authPathRe = regexp.MustCompile(`^/[^\s{}]*$`)
+	authTunnelRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,20}$`)
+	authUserRe   = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,30}$`)
+	authPathRe   = regexp.MustCompile(`^/[^\s{}]*$`)
 )
 
 func checkSpec(spec, from string) error {
@@ -199,14 +200,17 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, err
 		}
 		return []string{"secret", "pubkey"}, nil
-	case "publish": // arguments: project, site, mode
-		if err := need(3); err != nil {
-			return nil, err
+	case "publish": // arguments: project, site, mode, and for the mode tunnel optionally the name of the tunnel
+		if len(a) != 3 && len(a) != 4 {
+			return nil, errors.New("publish: expected 3 or 4 arguments")
 		}
 		if !projectRe.MatchString(a[0]) || !siteRe.MatchString(a[1]) || (a[2] != "tunnel" && a[2] != "direct") {
 			return nil, errors.New("publish: a project, a site and the mode tunnel or direct are required")
 		}
-		return []string{"publish", a[0], a[1], a[2], "--yes"}, nil
+		if len(a) == 4 && (a[2] != "tunnel" || !authTunnelRe.MatchString(a[3])) {
+			return nil, errors.New("publish: a tunnel name goes with the mode tunnel (lowercase letters, digits, dashes)")
+		}
+		return append([]string{"publish"}, append(a, "--yes")...), nil
 	case "fallback.auth": // arguments: project, site, set|remove-user|off, then: set: user and paths; remove-user: user. The password is the body.
 		if len(a) < 3 || !projectRe.MatchString(a[0]) || !siteRe.MatchString(a[1]) {
 			return nil, errors.New("fallback.auth: a project, a site and an action are required")
