@@ -129,6 +129,8 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 
 - **T10 (done 2026-11-20). `init` checks the key login itself.** The person should never have to "keep a second session open". Before `init` closes password login, it waits until the person has really logged in with the new key (it watches the SSH login journal for a successful key login of that user) and only then applies the SSH protection; until then password login stays on. If the login does not appear within a few minutes, `init` leaves password login on and says so.
 
+- **T11 (done 2026-11-20). One connection per server.** `lite-ui` keeps one ssh connection to a server and sends every request through it (`lite-deploy call-stream` on the server), on every system including Windows. An older server without the command is served with one ssh per request. After a failed login `lite-ui` stops trying for a minute.
+
 ## Status
 
 | Session | Status |

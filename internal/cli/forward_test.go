@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -242,5 +243,39 @@ func TestMigrateDoesNothingWhereProtectionIsOff(t *testing.T) {
 	env2.IsRoot = func() bool { return false }
 	if c := run(t, env2, "migrate"); c == 0 {
 		t.Fatal("migrate must refuse to run without root")
+	}
+}
+
+func TestCallStreamAnswersManyRequestsOnOneStream(t *testing.T) {
+	dir := t.TempDir()
+	sock := dir + "/api.sock"
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Skip("no unix sockets here")
+	}
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"api_version":"v1","command":"x","data":{"path":"` + r.URL.Path + `"}}`))
+	})}
+	go func() { _ = srv.Serve(ln) }()
+	defer srv.Close()
+	env, out, _ := testEnv(t)
+	env.IsRoot = func() bool { return false }
+	env.Getenv = func(k string) string {
+		if k == "LITE_DEPLOY_SOCK" {
+			return sock
+		}
+		return ""
+	}
+	env.Stdin = strings.NewReader(`{"id":1,"method":"GET","path":"/v1/status"}` + "\n" +
+		`{"id":2,"method":"GET","path":"/v1/verify"}` + "\n" +
+		`{"id":3,"method":"GET","path":"/etc/passwd"}` + "\n")
+	if c := run(t, env, "call-stream"); c != 0 {
+		t.Fatalf("%d %s", c, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{`"stream":"lite-deploy"`, `"id":1,"response":{"ok":true`, `/v1/status`, `/v1/verify`, `"error":"invalid request","id":3`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in:\n%s", want, got)
+		}
 	}
 }

@@ -51,6 +51,8 @@ type Server struct {
 	Servers *ServerList
 	// SSHOptions are extra options for ssh (for example connection sharing, so one connection serves all requests).
 	SSHOptions []string
+	// Streamer starts the one long-lived ssh connection that carries all requests; nil: one ssh per request.
+	Streamer host.Starter
 
 	mu  sync.Mutex
 	ssh map[string]*sshState
@@ -60,10 +62,29 @@ type Server struct {
 // and after a failed login lite-ui stops trying for a while: several failed logins in a row get an address blocked by
 // the server's protection (fail2ban), so the interface must never produce a burst of them.
 type sshState struct {
+	open     sync.Mutex // guards conn, noStream and failUntil of the shared connection
+	conn     *streamConn
+	noStream bool
+
 	mu        sync.Mutex
 	ok        bool
 	failUntil time.Time
 	failMsg   string
+}
+
+// blocked reports whether lite-ui is pausing connection attempts after a failed login, and why.
+func (st *sshState) blocked() (string, bool) {
+	st.open.Lock()
+	defer st.open.Unlock()
+	return st.failMsg, time.Now().Before(st.failUntil)
+}
+
+// block pauses connection attempts for a minute.
+func (st *sshState) block(msg string) {
+	st.open.Lock()
+	defer st.open.Unlock()
+	st.failUntil = time.Now().Add(time.Minute)
+	st.failMsg = msg
 }
 
 func (s *Server) state(target string) *sshState {
@@ -195,11 +216,15 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 	held := false
 	if target != "" {
 		st = s.state(target)
+		if s.Streamer != nil {
+			if out, handled := s.viaStream(ctx, target, st, method, path, in); handled {
+				return out
+			}
+		}
 		st.mu.Lock()
 		if st.ok {
 			st.mu.Unlock()
-		} else if time.Now().Before(st.failUntil) {
-			msg := st.failMsg
+		} else if msg, blocked := st.blocked(); blocked {
 			st.mu.Unlock()
 			return errBody("ssh_failed", msg)
 		} else {
@@ -242,14 +267,13 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 		msg = "the command returned no answer"
 	}
 	if st != nil && sshFailure(msg) {
-		friendly := msg + "\nlite-ui stops trying for a minute so that your address is not blocked by the server after repeated failed logins. Check in a terminal that `ssh " + target + "` logs in without asking anything (a key with a passphrase must be loaded first: ssh-add), then reload the page."
+		friendly := friendlySSH(msg, target)
 		if !held {
 			st.mu.Lock()
 			defer st.mu.Unlock()
 		}
 		st.ok = false
-		st.failUntil = time.Now().Add(time.Minute)
-		st.failMsg = friendly
+		st.block(friendly)
 		return errBody("ssh_failed", friendly)
 	}
 	b, _ := json.Marshal(map[string]any{"ok": false, "api_version": "v1", "command": "ui",

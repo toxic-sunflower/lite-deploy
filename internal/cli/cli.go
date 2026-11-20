@@ -217,6 +217,8 @@ func dispatch(args []string, env Env) result {
 		return cmdIngress(env)
 	case "migrate":
 		return cmdMigrate(env)
+	case "call-stream":
+		return cmdCallStream(env)
 	case "ssh-key":
 		return cmdSSHKey(args[1:], env)
 	case "gate":

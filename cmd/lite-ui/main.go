@@ -59,7 +59,7 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 		return 1
 	}
 	runner := host.ExecRunner{}
-	srv := &ui.Server{Runner: runner, Servers: list, Token: hex.EncodeToString(raw), SSHOptions: sshSharing()}
+	srv := &ui.Server{Runner: runner, Servers: list, Token: hex.EncodeToString(raw), SSHOptions: sshSharing(), Streamer: runner}
 	if err := srv.Validate(); err != nil {
 		_, _ = fmt.Fprintln(errw, "ERROR:", err)
 		return 2

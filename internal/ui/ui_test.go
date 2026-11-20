@@ -1,10 +1,15 @@
 package ui
 
 import (
+	"bufio"
+	"context"
+	"encoding/json"
 	"filippo.io/age"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
@@ -377,5 +382,105 @@ func TestWorkingConnectionIsUsedInParallel(t *testing.T) {
 	}
 	if len(r.Calls) != 3 {
 		t.Fatalf("working requests must all go through: %d", len(r.Calls))
+	}
+}
+
+// fakeStarter plays the server side of `lite-deploy call-stream` for a test.
+type fakeStarter struct {
+	mu     sync.Mutex
+	starts int
+	mode   string // "ok", "old" (the command does not exist), "denied" (login fails)
+}
+
+func (f *fakeStarter) Start(_ context.Context, _ string, _ []string) (*host.Conn, error) {
+	f.mu.Lock()
+	f.starts++
+	f.mu.Unlock()
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	var conn *host.Conn
+	stderr := ""
+	switch f.mode {
+	case "denied":
+		stderr = "serafim@203.0.113.7: Permission denied (publickey)."
+	case "old":
+		stderr = "lite-deploy: unknown command: call-stream"
+	}
+	conn = host.NewConn(inW, outR, func() string { return stderr }, func() { _ = outW.Close() })
+	go func() {
+		if f.mode != "ok" {
+			_ = outW.Close()
+			conn.Finish()
+			return
+		}
+		_, _ = io.WriteString(outW, `{"stream":"lite-deploy","version":"test"}`+"\n")
+		sc := bufio.NewScanner(inR)
+		for sc.Scan() {
+			var req struct {
+				ID   int64  `json:"id"`
+				Path string `json:"path"`
+			}
+			_ = json.Unmarshal(sc.Bytes(), &req)
+			resp, _ := json.Marshal(map[string]any{"id": req.ID, "response": map[string]any{"ok": true, "command": "x", "data": map[string]string{"path": req.Path}}})
+			_, _ = io.WriteString(outW, string(resp)+"\n")
+		}
+		_ = outW.Close()
+		conn.Finish()
+	}()
+	return conn, nil
+}
+
+func TestOneConnectionCarriesAllRequests(t *testing.T) {
+	s, r := newServer("anna@203.0.113.7")
+	f := &fakeStarter{mode: "ok"}
+	s.Streamer = f
+	h := s.Handler()
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			path := []string{"/api/status", "/api/verify", "/api/plugins", "/api/firewall"}[i%4]
+			if w := do(h, "GET", path, "", tok); w.Code != 200 || !strings.Contains(w.Body.String(), `"ok":true`) {
+				t.Errorf("%s: %d %s", path, w.Code, w.Body.String())
+			}
+		}(i)
+	}
+	wg.Wait()
+	if f.starts != 1 {
+		t.Fatalf("all requests must share one connection, started %d", f.starts)
+	}
+	if len(r.Calls) != 0 {
+		t.Fatalf("no per-request ssh may run: %v", r.Calls)
+	}
+}
+
+func TestOlderServerFallsBackToOneSSHPerRequest(t *testing.T) {
+	s, r := newServer("anna@203.0.113.7")
+	f := &fakeStarter{mode: "old"}
+	s.Streamer = f
+	h := s.Handler()
+	for i := 0; i < 3; i++ {
+		if w := do(h, "GET", "/api/status", "", tok); w.Code != 200 || !strings.Contains(w.Body.String(), `"ok":true`) {
+			t.Fatalf("%d %s", w.Code, w.Body.String())
+		}
+	}
+	if f.starts != 1 || len(r.Calls) != 3 {
+		t.Fatalf("the stream is tried once, then every request uses its own ssh: starts %d, calls %d", f.starts, len(r.Calls))
+	}
+}
+
+func TestFailedLoginOnTheStreamStopsAllAttempts(t *testing.T) {
+	s, r := newServer("anna@203.0.113.7")
+	f := &fakeStarter{mode: "denied"}
+	s.Streamer = f
+	h := s.Handler()
+	for i := 0; i < 5; i++ {
+		if w := do(h, "GET", "/api/status", "", tok); !strings.Contains(w.Body.String(), "ssh_failed") {
+			t.Fatalf("%s", w.Body.String())
+		}
+	}
+	if f.starts != 1 || len(r.Calls) != 0 {
+		t.Fatalf("one failed login must stop all attempts: starts %d, ssh calls %d", f.starts, len(r.Calls))
 	}
 }
