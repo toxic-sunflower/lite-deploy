@@ -64,6 +64,16 @@ lite-ui
 
 The page opens in your browser at an address like `http://127.0.0.1:8787/?t=…`; only your computer can reach it. At the top of the page, press "Add server" and enter `YOUR_USER@YOUR_SERVER`. You can add several servers and switch between them in the same place; the list is kept on your workstation. (`lite-ui --host USER@SERVER` adds a server from the command line.) This needs the OpenSSH client (built into Windows 10 and later and into macOS) and a key login to the server.
 
+**Updating the page.** When a newer lite-ui exists, **Overview** shows "A new version of Lite Deploy (this page) is available" with an **Update** button. It downloads the program for your system from the release, checks its SHA256 against the `SHA256SUMS` of the same release, replaces itself and restarts at the same address; the page reloads by itself. The Claude Desktop extension runs the installed `lite-ui`, so it follows this update.
+
+**Always running.** To have the page ready after every login (a bookmark that always works), run once on the **workstation**:
+
+```sh
+lite-ui service install
+```
+
+It prints the address to bookmark; the address stays the same after restarts. On Linux it creates a user service (systemd, no root), on macOS a login agent (launchd). `lite-ui service status` shows whether it runs, `lite-ui service uninstall` turns it off. In WSL, systemd must be on (`[boot]` `systemd=true` in `/etc/wsl.conf`, then `wsl --shutdown`); the command tells you if it is not. Windows: not available yet, start `lite-ui` when you need it. While it runs in the background, `lite-ui` itself just opens the same page.
+
 ## Prepare the server
 
 After installing, run `lite init` once on the server (as root; the only command that works when logged in as root):

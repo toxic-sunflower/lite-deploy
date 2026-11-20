@@ -33,11 +33,15 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 	if len(args) > 0 && args[0] == "mcp" {
 		return runMCP(args[1:], in, out, errw)
 	}
+	if len(args) > 0 && args[0] == "service" {
+		return runService(args[1:], out, errw)
+	}
 	fs := flag.NewFlagSet("lite-ui", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	hostFlag := fs.String("host", "", "add a server as USER@ADDRESS to your list")
 	listen := fs.String("listen", "127.0.0.1:8787", "local address of the page (loopback only)")
 	noOpen := fs.Bool("no-open", false, "do not open the browser")
+	service := fs.Bool("service", false, "run in the background with a fixed address (used by `lite-ui service install`)")
 	version := fs.Bool("version", false, "print the version")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		_, _ = fmt.Fprintln(errw, "usage: lite-ui [--host USER@ADDRESS] [--no-open]")
@@ -60,6 +64,14 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 		}
 	}
 	token := os.Getenv("LITE_UI_TOKEN") // handed over by the previous run after an update, so an open page keeps working
+	if *service && token == "" {
+		tok, err := loadToken(true)
+		if err != nil {
+			_, _ = fmt.Fprintln(errw, "ERROR:", err)
+			return 1
+		}
+		token = tok
+	}
 	if token == "" {
 		raw := make([]byte, 16)
 		if _, err := io.ReadFull(rand.Reader, raw); err != nil {
@@ -78,6 +90,17 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 		return 2
 	}
 	ln, err := net.Listen("tcp", *listen)
+	if err != nil && !*service {
+		// the background copy already holds the address: open its page instead of failing
+		if tok, terr := loadToken(false); terr == nil {
+			u := pageURL(*listen, tok)
+			_, _ = fmt.Fprintf(out, "Lite Deploy is already running in the background:\n\n  %s\n", u)
+			if !*noOpen {
+				openBrowser(context.Background(), runner, u)
+			}
+			return 0
+		}
+	}
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "ERROR: could not take %s (is lite-ui already running?): %v\n", *listen, err)
 		return 1
