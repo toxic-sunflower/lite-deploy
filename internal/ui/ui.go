@@ -6,10 +6,11 @@ package ui
 import (
 	"context"
 	"crypto/subtle"
-	_ "embed" // the interface page
+	"embed"
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -24,8 +25,8 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
 
-//go:embed index.html
-var page []byte
+//go:embed web
+var webFiles embed.FS
 
 var (
 	projectRe = regexp.MustCompile(`\A[a-z][a-z0-9-]{1,30}\z`)
@@ -192,10 +193,22 @@ func (s *Server) Handler() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		b, err := webFiles.ReadFile("web/index.html")
+		if err != nil {
+			http.Error(w, "the page is missing", http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write(page)
+		_, _ = w.Write(b)
 	})
+	if sub, err := fs.Sub(webFiles, "web"); err == nil {
+		static := http.StripPrefix("/static/", http.FileServer(http.FS(sub)))
+		mux.HandleFunc("/static/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
+			static.ServeHTTP(w, r)
+		})
+	}
 	mux.HandleFunc("/api/info", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		b, _ := json.Marshal(map[string]string{"host": s.Host})
 		return b, 200
@@ -392,7 +405,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			return
 		}
 		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; connect-src 'self'; frame-ancestors 'none'")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		next.ServeHTTP(w, r)
 	})

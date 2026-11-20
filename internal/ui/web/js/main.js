@@ -1,0 +1,77 @@
+(function () {
+  var S = LU.state;
+  var ALL = [
+    { id: 'overview', title: 'Overview', comp: 'overview' },
+    { id: 'projects', title: 'Projects', comp: 'projects' },
+    { id: 'ingress', title: 'Ingress', plugin: 'caddy' },
+    { id: 'databases', title: 'Databases', plugin: 'pg' },
+    { id: 'backups', title: 'Backups', plugin: 'backup' },
+    { id: 'security', title: 'Protection', comp: 'security' },
+    { id: 'server', title: 'Server', comp: 'server' }
+  ];
+
+  var Root = {
+    template: '\
+<div class="layout">\
+  <aside class="side">\
+    <div class="brand">lite-deploy</div>\
+    <div class="srv"><select v-model="state.server" @change="pick" aria-label="Server">\
+      <option v-for="h in state.servers" :key="h" :value="h">{{ h }}</option></select></div>\
+    <div class="srvbtns"><button @click="addServer">Add server</button><button v-if="state.servers.length" @click="removeServer">Remove</button></div>\
+    <nav><a v-for="m in menu" :key="m.id" :class="{cur: state.page === m.id}" @click="go(m.id)">{{ m.title }}</a></nav>\
+  </aside>\
+  <main class="main">\
+    <div id="msg" :class="state.msg.kind" v-if="state.msg.kind">{{ state.msg.text }}</div>\
+    <div v-if="state.serversLoaded && !state.servers.length" class="empty">\
+      <h2>Add your server</h2><p>Press “Add server” and enter it as <code>user@address</code>, for example <code>serafim@203.0.113.7</code>.</p></div>\
+    <template v-else-if="state.server">\
+      <component :is="current.comp" :key="state.server + state.page" v-if="current.comp"></component>\
+      <div v-else>\
+        <h1>{{ current.title }}</h1>\
+        <p class="sub" v-if="!pluginObj">This part is not available on this server.</p>\
+        <plugin-panel v-else :plugin="pluginObj" @done="reload"></plugin-panel>\
+      </div>\
+    </template>\
+  </main>\
+</div>',
+    data: function () { return { state: S }; },
+    computed: {
+      menu: function () { return ALL.filter(function (m) { return !m.plugin || LU.present(m.plugin) || m.plugin === 'backup'; }); },
+      current: function () { return ALL.filter(function (m) { return m.id === S.page; })[0] || ALL[0]; },
+      pluginObj: function () { var n = this.current.plugin; return S.plugins.filter(function (p) { return p.name === n && p.installed !== false; })[0]; }
+    },
+    methods: {
+      go: function (id) { S.page = id; location.hash = id; LU.clear(); },
+      pick: function () { LU.setServer(S.server); LU.clear(); LU.loadPlugins(); },
+      reload: function () { LU.loadPlugins(); },
+      addServer: function () {
+        var v = prompt('Your server as user@address, for example serafim@203.0.113.7');
+        if (!v) return;
+        LU.api('/api/servers/add', { host: v.trim() }).then(function (r) {
+          if (r.ok === false) { LU.say('err', r.error ? r.error.message : 'Could not add the server.'); return; }
+          LU.setServer(v.trim());
+          LU.loadServers().then(LU.loadPlugins);
+        });
+      },
+      removeServer: function () {
+        if (!S.server || !confirm('Remove ' + S.server + ' from your list? Nothing changes on the server.')) return;
+        LU.api('/api/servers/remove', { host: S.server }).then(function () {
+          LU.setServer(''); LU.loadServers().then(LU.loadPlugins);
+        });
+      }
+    },
+    mounted: function () { LU.loadServers().then(LU.loadPlugins); }
+  };
+
+  var app = Vue.createApp(Root);
+  var C = LU.components;
+  app.component('overview', C.Overview);
+  app.component('projects', C.Projects);
+  app.component('security', C.Security);
+  app.component('server', C.Server);
+  app.component('project-card', C.ProjectCard);
+  app.component('new-project', C.NewProject);
+  app.component('plugin-panel', C.PluginPanel);
+  app.config.globalProperties.state = S;
+  app.mount('#app');
+})();

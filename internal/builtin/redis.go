@@ -124,3 +124,8 @@ func (Redis) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	}
 	return out
 }
+
+// Installed reports whether Redis is on this server.
+func (Redis) Installed(ctx context.Context, env plugin.Env) bool {
+	return tools{ctx, env}.ok("redis-server", "--version")
+}

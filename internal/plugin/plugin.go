@@ -103,6 +103,12 @@ type Plugin interface {
 	Check(ctx context.Context, env Env) []Finding
 }
 
+// Presence is optional: a plugin that can tell whether it is in use on this server (installed or configured).
+// A plugin without it is always shown. The interface shows only the plugins that are present.
+type Presence interface {
+	Installed(ctx context.Context, env Env) bool
+}
+
 // Registry is a set of plugins.
 type Registry struct {
 	byName map[string]Plugin

@@ -408,3 +408,9 @@ var SFTP = &RcloneStore{
 
 // Stores are all storage locations for backups outside the server.
 var Stores = []*RcloneStore{Backblaze, S3, SFTP}
+
+// Installed reports whether the storage is configured on this server.
+func (s *RcloneStore) Installed(ctx context.Context, env plugin.Env) bool {
+	_, err := s.load(tools{ctx, env})
+	return err == nil
+}

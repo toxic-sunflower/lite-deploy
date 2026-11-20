@@ -436,3 +436,13 @@ func (t tools) setPassword(role, pass string) error {
 	}
 	return t.psqlSecret(fmt.Sprintf("alter role %s password '%s'", role, pass))
 }
+
+// Installed reports whether podman is on this server.
+func (Podman) Installed(ctx context.Context, env plugin.Env) bool {
+	return tools{ctx, env}.ok("podman", "--version")
+}
+
+// Installed reports whether PostgreSQL is on this server.
+func (PG) Installed(ctx context.Context, env plugin.Env) bool {
+	return tools{ctx, env}.ok("psql", "--version")
+}

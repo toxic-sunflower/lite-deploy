@@ -216,3 +216,8 @@ func (Caddy) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	}
 	return out
 }
+
+// Installed reports whether Caddy is on this server.
+func (Caddy) Installed(ctx context.Context, env plugin.Env) bool {
+	return tools{ctx, env}.ok("caddy", "version")
+}

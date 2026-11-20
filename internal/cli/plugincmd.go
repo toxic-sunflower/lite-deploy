@@ -140,6 +140,8 @@ type pluginInfo struct {
 	Description string           `json:"description"`
 	Requires    []string         `json:"requires"`
 	Commands    []plugin.Command `json:"commands"`
+	// Installed is set for plugins that can tell: false means the plugin is not in use on this server.
+	Installed *bool `json:"installed,omitempty"`
 }
 
 // cmdInfo: lite info (plugins and their commands).
@@ -153,7 +155,12 @@ func cmdInfo(env Env, command string) result {
 		if req == nil {
 			req = []string{}
 		}
-		list = append(list, pluginInfo{Name: p.Name(), Kind: p.Kind(), Description: p.Description(), Requires: req, Commands: p.Commands()})
+		info := pluginInfo{Name: p.Name(), Kind: p.Kind(), Description: p.Description(), Requires: req, Commands: p.Commands()}
+		if pr, ok := p.(plugin.Presence); ok {
+			in := pr.Installed(context.Background(), env.pluginEnv())
+			info.Installed = &in
+		}
+		list = append(list, info)
 		fmt.Fprintf(&sb, "  %-12s %-9s %s\n", p.Name(), p.Kind(), p.Description())
 		for _, c := range p.Commands() {
 			fmt.Fprintf(&sb, "      %s — %s\n", strings.TrimSpace("lite "+p.Name()+" "+c.Name+" "+c.Args), c.Help)
