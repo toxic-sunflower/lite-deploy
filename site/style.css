@@ -31,7 +31,7 @@ code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, m
 .layout { display: grid; grid-template-columns: 252px minmax(0, 1fr); min-height: 100vh; }
 .side { background: var(--side); border-right: 1px solid var(--line); padding: 18px 12px 24px; position: sticky; top: 0;
         height: 100vh; overflow-y: auto; font-size: 14.5px; }
-.brand { display: flex; align-items: center; gap: 8px; font: 600 16px ui-monospace, SFMono-Regular, Menlo, monospace;
+.brand { display: flex; align-items: center; gap: 8px; font: 650 16px system-ui, -apple-system, "Segoe UI", sans-serif;
          color: var(--fg); margin: 2px 6px 14px; }
 .brand:hover { text-decoration: none; }
 .brand .logo { width: 26px; height: 26px; display: block; }

@@ -120,7 +120,7 @@ def render(text: str) -> str:
 
 
 def nav(cur: str) -> str:
-    parts = [f'<a class="brand" href="./"><span class="logo">{LOGO}</span>lite-deploy</a>',
+    parts = [f'<a class="brand" href="./"><span class="logo">{LOGO}</span>Lite Deploy</a>',
              f'<button class="theme" type="button" id="theme">{icon("moon")}<span>Theme</span></button>']
     items = [("index", "Home", "./")]
     parts.append('<h4>Start</h4>')
@@ -171,7 +171,7 @@ LOGO = (ROOT / "site" / "logo.svg").read_text().strip()
 
 def page(slug: str, title: str, body: str, src: str | None, crumb: str = "", extra: str = "") -> str:
     foot = f'<p class="src"><a href="{REPO}/blob/main/{src}">Edit this page on GitHub</a></p>' if src else ""
-    full_title = "lite-deploy" if slug == "index" else f"{title} · lite-deploy"
+    full_title = "Lite Deploy" if slug == "index" else f"{title} · Lite Deploy"
     cr = f'<div class="crumb">{html.escape(crumb)}</div>' if crumb else ""
     return f"""<!doctype html>
 <html lang="en">
@@ -188,7 +188,7 @@ def page(slug: str, title: str, body: str, src: str | None, crumb: str = "", ext
 <script>{HEAD_THEME}</script>
 </head>
 <body>
-<button class="menu-btn" id="menu" type="button">{icon("menu")} lite-deploy</button>
+<button class="menu-btn" id="menu" type="button">{icon("menu")} Lite Deploy</button>
 <div class="layout">
 <nav class="side">
 {nav(slug)}
