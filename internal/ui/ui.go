@@ -243,6 +243,12 @@ func (s *Server) Handler() http.Handler {
 		}
 		return []byte(`{"ok":true}`), 200
 	}))
+	mux.HandleFunc("/api/update", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
+		return s.call(r.Context(), "GET", "/v1/update", nil), 200
+	}))
+	mux.HandleFunc("/api/update/apply", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		return s.call(r.Context(), "POST", "/v1/update/apply", map[string]string{}), 200
+	}))
 	mux.HandleFunc("/api/status", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		return s.call(r.Context(), "GET", "/v1/status", nil), 200
 	}))

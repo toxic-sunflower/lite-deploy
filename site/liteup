@@ -356,8 +356,20 @@ case $cmd in
     fi
     say "Updating $cur -> $target"
     version=$target
-    do_install
-    say "Done: $(installed_version). The agent was restarted."
+    prev="$prefix/lite-deploy.prev"
+    cp -p "$prefix/lite-deploy" "$prev" 2>/dev/null || prev=""
+    if ( do_install ) && "$prefix/lite-deploy" version >/dev/null 2>&1 && systemctl is-active --quiet lite-deploy-agent.socket; then
+      [ -z "$prev" ] || rm -f "$prev"
+      say "Done: $(installed_version). The agent was restarted."
+    else
+      if [ -n "$prev" ] && [ -f "$prev" ]; then
+        say "The new version did not start. Putting $cur back."
+        install -m 755 "$prev" "$prefix/lite-deploy"
+        systemctl restart lite-deploy-agent.socket >/dev/null 2>&1 || true
+        rm -f "$prev"
+      fi
+      die "the update to $target failed; the previous version $cur is back"
+    fi
     ;;
   reinstall)
     need_root

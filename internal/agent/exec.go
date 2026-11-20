@@ -116,6 +116,16 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, err
 		}
 		return []string{"fix", "--yes"}, nil
+	case "update.check":
+		if err := need(0); err != nil {
+			return nil, err
+		}
+		return []string{"update", "--check"}, nil
+	case "update.apply":
+		if err := need(0); err != nil {
+			return nil, err
+		}
+		return []string{"update", "--yes"}, nil
 	case "project.key":
 		if err := need(0); err != nil {
 			return nil, err

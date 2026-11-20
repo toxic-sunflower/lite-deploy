@@ -32,7 +32,7 @@
       <button class="primary" type="submit" :disabled="$root.state.busy">Open port</button></form>\
   </div>\
 </div>',
-    computed: { needsFix: function () { return this.verify && this.verify.findings.some(function (f) { return f.fix && f.level !== 'ok'; }); } },
+    computed: { needsFix: function () { return this.verify && this.verify.findings.some(function (f) { return f.fix && f.level !== 'ok' && f.plugin !== 'lite'; }); } },
     methods: {
       cls: function (f) { return f.level === 'ok' ? 'up' : (f.level === 'warn' ? 'warntxt' : 'down'); },
       check: function () {

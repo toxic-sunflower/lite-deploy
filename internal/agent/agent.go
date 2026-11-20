@@ -194,6 +194,14 @@ func (a *Agent) Handler() http.Handler {
 		}
 		return Request{Cmd: "fix"}, true
 	})
+	route(http.MethodGet, "/v1/update", func(*http.Request) (Request, bool) { return Request{Cmd: "update.check"}, true })
+	route(http.MethodPost, "/v1/update/apply", func(r *http.Request) (Request, bool) {
+		var in struct{}
+		if !readJSON(r, &in) {
+			return Request{}, false
+		}
+		return Request{Cmd: "update.apply"}, true
+	})
 	route(http.MethodGet, "/v1/verify", func(*http.Request) (Request, bool) { return Request{Cmd: "verify"}, true })
 	route(http.MethodPost, "/v1/plugin", func(r *http.Request) (Request, bool) {
 		var in struct {

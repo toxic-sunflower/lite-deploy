@@ -3,6 +3,9 @@ package cli
 import (
 	"context"
 	"errors"
+	"github.com/toxic-sunflower/lite-deploy/internal/host"
+	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -154,5 +157,41 @@ func TestPublishSwitchesSiteThroughAgent(t *testing.T) {
 	}
 	if c := run(t, env, "publish", "shop", "nosuch", "direct", "--yes"); c == 0 {
 		t.Fatal("an unknown site must fail")
+	}
+}
+
+func TestVersionCompare(t *testing.T) {
+	for _, c := range []struct {
+		latest, cur string
+		want        bool
+	}{{"v0.7.8", "v0.7.7", true}, {"v0.7.7", "v0.7.7", false}, {"v0.10.0", "v0.9.9", true}, {"v0.7.7", "v0.7.8", false}, {"v0.7.7", "0.0.0-dev", false}} {
+		if got := newer(c.latest, c.cur); got != c.want {
+			t.Errorf("newer(%s, %s) = %v, want %v", c.latest, c.cur, got, c.want)
+		}
+	}
+}
+
+func TestUpdateCheckAndVerifyWarning(t *testing.T) {
+	old := Version
+	Version = "v0.7.7"
+	defer func() { Version = old }()
+	env, out, _ := testEnv(t)
+	env.HTTP = &host.FakeHTTP{Handler: func(url, _ string) (host.HTTPResponse, error) {
+		h := http.Header{}
+		h.Set("Location", "https://github.com/toxic-sunflower/lite-deploy/releases/tag/v0.7.9")
+		return host.HTTPResponse{Status: 302, Header: h}, nil
+	}}
+	if c := run(t, env, "update", "--check", "--json"); c != 0 {
+		t.Fatalf("%d %s", c, out.String())
+	}
+	if !strings.Contains(out.String(), `"available":true`) || !strings.Contains(out.String(), "v0.7.9") {
+		t.Fatalf("the update must be reported: %s", out.String())
+	}
+	found := false
+	for _, f := range versionFinding(context.Background(), env) {
+		found = found || (f.Check == "version" && f.Level == plugin.LevelWarn && f.Fix == "lite update")
+	}
+	if !found {
+		t.Error("verify must warn about a new version")
 	}
 }

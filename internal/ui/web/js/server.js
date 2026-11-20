@@ -6,6 +6,12 @@
 <div>\
   <h1>Server</h1>\
   <p class="sub">What is installed on this server and what you can add.</p>\
+  <h3>lite</h3>\
+  <div class="notice"><div class="t" v-if="$root.state.update">Version {{ $root.state.update.current }}.\
+      {{ $root.state.update.available ? "A new version is available: " + $root.state.update.latest + "." : "This is the latest version." }}</div>\
+    <div class="t muted" v-else>Checking for updates…</div>\
+    <button v-if="$root.state.update && $root.state.update.available" class="primary" @click="$root.applyUpdate" :disabled="$root.state.busy">Update</button>\
+    <button v-else @click="$root.checkUpdate">Check again</button></div>\
   <h3>Installed</h3>\
   <div v-for="p in installed" :key="p.name">\
     <div class="notice"><div class="t"><b>{{ p.name }}</b> <span class="muted">{{ p.description }}</span></div>\
@@ -21,6 +27,7 @@
   </div>\
   <template v-for="p in available" :key="p.name"><plugin-panel v-if="open === p.name" :plugin="p" @done="reload"></plugin-panel></template>\
 </div>',
+    mounted: function () { LU.checkUpdate(); },
     computed: {
       installed: function () { return LU.state.plugins.filter(function (p) { return p.installed !== false; }); },
       available: function () { return LU.state.plugins.filter(function (p) { return p.installed === false; }); }

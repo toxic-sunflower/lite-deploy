@@ -16,6 +16,10 @@
       <div class="metric"><div class="l">Checks passed</div><div class="v">{{ verify.ok }} of {{ verify.ok + verify.warnings + verify.failures }}</div></div>\
       <div class="metric"><div class="l">Protection</div><div class="v">{{ protectionOn ? "On" : "Needs work" }}</div></div>\
     </div>\
+    <div v-if="$root.state.update && $root.state.update.available" class="notice warn">\
+      <div class="t">A new version of lite is available: {{ $root.state.update.latest }} (you have {{ $root.state.update.current }}).</div>\
+      <button class="primary" @click="$root.applyUpdate" :disabled="$root.state.busy">Update</button>\
+    </div>\
     <h3>Needs your attention</h3>\
     <div v-for="f in attention" :key="f.plugin + f.check" class="notice" :class="f.level === \'fail\' ? \'bad\' : \'warn\'">\
       <div class="t">{{ f.message }}<div class="help" v-if="f.fix">{{ f.fix }}</div></div>\
@@ -36,7 +40,7 @@
   <p v-else-if="!error" class="empty">Checking the server…</p>\
 </div>',
     computed: {
-      attention: function () { return this.verify ? this.verify.findings.filter(function (f) { return f.level !== 'ok'; }) : []; },
+      attention: function () { return this.verify ? this.verify.findings.filter(function (f) { return f.level !== 'ok' && f.plugin !== 'lite'; }) : []; },
       health: function () {
         if (!this.verify) return { cls: 'warn', text: '…' };
         if (this.verify.failures) return { cls: 'bad', text: 'Needs attention' };
@@ -80,6 +84,6 @@
         LU.run('Fixing…', '/api/fix', {}, function (d) { return d.applied.length ? 'Done: ' + d.applied.join('; ') : 'Nothing to fix automatically.'; }).then(function () { self.load(); });
       }
     },
-    mounted: function () { this.load(); }
+    mounted: function () { this.load(); LU.checkUpdate(); }
   };
 })();

@@ -223,6 +223,7 @@ func collectFindings(env Env) []plugin.Finding {
 	}
 	all = append(all, projectRequirements(ctx, env)...)
 	all = append(all, projectPublishing(ctx, env)...)
+	all = append(all, versionFinding(ctx, env)...)
 	for _, e := range errs {
 		all = append(all, plugin.Finding{Plugin: "plugin", Check: "load", Level: plugin.LevelFail, Message: e.Error()})
 	}
@@ -315,4 +316,14 @@ func openTo(st *firewall.State, port int) bool {
 		}
 	}
 	return false
+}
+
+// versionFinding warns when a newer release of lite exists. If GitHub cannot be reached nothing is reported.
+func versionFinding(ctx context.Context, env Env) []plugin.Finding {
+	latest, err := latestVersion(ctx, env.HTTP)
+	if err != nil || !newer(latest, Version) {
+		return nil
+	}
+	return []plugin.Finding{{Plugin: "lite", Check: "version", Level: plugin.LevelWarn,
+		Message: "a new version of lite is available: " + latest + " (you have " + Version + ")", Fix: "lite update"}}
 }

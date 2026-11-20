@@ -7,7 +7,7 @@
 
   LU.state = Vue.reactive({
     server: saved, servers: [], editable: false, serversLoaded: false,
-    plugins: [], pluginsLoaded: false, busy: false, msg: { kind: '', text: '' }, page: (location.hash || '#overview').slice(1).split('/')[0] || 'overview'
+    plugins: [], pluginsLoaded: false, update: null, busy: false, msg: { kind: '', text: '' }, page: (location.hash || '#overview').slice(1).split('/')[0] || 'overview'
   });
 
   LU.api = function (path, body) {
@@ -31,6 +31,31 @@
       if (r.ok) LU.say('ok', okText ? okText(r.data) : 'Done.'); else LU.say('err', LU.errText(r));
       LU.state.busy = false;
       return r;
+    });
+  };
+
+  LU.checkUpdate = function () {
+    return LU.api('/api/update').then(function (r) { LU.state.update = r.ok ? r.data : null; });
+  };
+
+  // applyUpdate installs the new version on the server. The server restarts its agent, so the page waits until the
+  // version reported by the server changes.
+  LU.applyUpdate = function () {
+    var u = LU.state.update;
+    if (!u || LU.state.busy) return;
+    if (!confirm('Update lite on the server from ' + u.current + ' to ' + u.latest + '? The page is unavailable for about a minute.')) return;
+    var from = u.current, tries = 0;
+    LU.state.busy = true; LU.say('ok', 'Updating…');
+    LU.api('/api/update/apply', {}).then(function (r) {
+      if (!r.ok) { LU.state.busy = false; LU.say('err', LU.errText(r)); return; }
+      (function poll() {
+        tries++;
+        LU.api('/api/update').then(function (c) {
+          if (c.ok && c.data.current !== from) { LU.state.busy = false; LU.state.update = c.data; LU.say('ok', 'Updated to ' + c.data.current + '.'); LU.loadPlugins(); return; }
+          if (tries > 60) { LU.state.busy = false; LU.say('err', 'The update takes too long. Check the server.'); return; }
+          setTimeout(poll, 3000);
+        });
+      })();
     });
   };
 

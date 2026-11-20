@@ -73,5 +73,7 @@
   app.component('new-project', C.NewProject);
   app.component('plugin-panel', C.PluginPanel);
   app.config.globalProperties.state = S;
+  app.config.globalProperties.applyUpdate = LU.applyUpdate;
+  app.config.globalProperties.checkUpdate = LU.checkUpdate;
   app.mount('#app');
 })();
