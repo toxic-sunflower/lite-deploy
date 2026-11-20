@@ -100,8 +100,8 @@ Expected: a backup file is listed; the file ends with `.age`.
 
 This needs a release newer than the one on the server. Tell me and I publish a throw-away patch release.
 
-1. **Overview** shows “A new version of lite is available”.
-2. Press **Update**. Expected: the page waits about a minute, then says “Updated to …”. (After the update the settings that lite manages are brought up to date by themselves.) `lite version` on the **server** shows the new version.
+1. **Overview** shows “A new version of Lite Deploy on the server is available”.
+2. Press **Update**. Expected: the page waits about a minute, then says “Lite Deploy on the server is updated to …”. (After the update the settings that lite manages are brought up to date by themselves.) `lite version` on the **server** shows the new version.
 3. `lite verify` still has no errors, and the project still runs.
 
 ## 4b. Traffic switch (after the update to this version)
@@ -127,7 +127,7 @@ Install `lite-deploy.mcpb` from the Releases page (`lite-ui` must be installed o
 
 ## 6c. Updating the page, background run, the extension
 
-1. **workstation**: `lite-ui --version`, then install an older release if you have one. With a newer release out, **Overview** shows “A new version of Lite Deploy (this page)”; **Update**. Expected: the page reloads by itself and `lite-ui --version` shows the new version. If it does not come back, start `lite-ui` again and send me the text.
+1. **workstation**: `lite-ui --version`, then install an older release if you have one. With a newer release out, **Overview** shows “A new version of Lite Deploy UI”; **Update**. Expected: the page reloads by itself and `lite-ui --version` shows the new version. If it does not come back, start `lite-ui` again and send me the text.
 2. **workstation**: `lite-ui service install`, open the printed address, reboot or log out and in, open it again. Expected: the same address works. `lite-ui service status` says it runs; `lite-ui service uninstall` turns it off.
 3. Extension: install `lite-deploy.mcpb` (one file for all systems). Expected: it works with the installed `lite-ui`; after updating `lite-ui` in step 1 you do nothing to the extension.
 

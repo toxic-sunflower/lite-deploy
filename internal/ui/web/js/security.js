@@ -19,7 +19,7 @@
   <div class="notice" v-if="verify"><icon name="info"></icon><div class="t">{{ nextText }}</div></div>\
   <h3>Confirm with my key</h3>\
   <div class="card" v-if="own">\
-    <div v-if="!own.supported" class="muted">This server is older and cannot do this yet. Update lite on the server first.</div>\
+    <div v-if="!own.supported" class="muted">This server is older and cannot do this yet. Update Lite Deploy on the server first.</div>\
     <template v-else>\
       <div v-if="own.required && own.registered"><b>On.</b> Changes to the server (ports, SSH, backups, publishing…) only work from this workstation, which holds your key. Deploying and rolling back are not affected.</div>\
       <div v-else-if="own.required" class="warntxt">This server asks for a key, but this workstation does not have it. Changes work only from the workstation that was paired.</div>\
