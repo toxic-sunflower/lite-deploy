@@ -1,8 +1,8 @@
 #!/bin/sh
 # liteup: installs and manages lite-deploy (the way rustup does for Rust).
 #
-#   curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh                    install the latest version
-#   curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh -s -- install --version v0.6.1
+#   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh                    install the latest version
+#   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh -s -- --version v0.6.1
 #
 # After the first run `liteup` itself is installed next to lite-deploy:
 #
@@ -35,8 +35,8 @@ usage() {
   cat <<'USAGE'
 liteup: installs and manages lite-deploy.
 
-  curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh                 install the latest version
-  curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh -s -- install --version v0.6.1
+  curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh                 install the latest version
+  curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh -s -- --version v0.6.1
 
   sudo liteup install [--version vX.Y.Z]   install lite, the agent and liteup itself
   sudo liteup update                       move to the latest release (restarts the agent)

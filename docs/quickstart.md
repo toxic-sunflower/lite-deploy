@@ -13,7 +13,7 @@ You need:
 On the server, as root:
 
 ```sh
-curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh
+curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh
 ```
 
 This installs `liteup`, `lite` (the same as `lite-deploy`), `minisign` and the agent. Nothing else on the server changes. Check it:

@@ -9,7 +9,7 @@
 You need Linux with systemd (amd64 or arm64). One command, as root:
 
 ```sh
-curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh
+curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh
 ```
 
 This installs `liteup`, the tool that installs and manages `lite-deploy` (the way `rustup` does for Rust), and with it:
@@ -32,7 +32,7 @@ sudo liteup uninstall --everything      # the server back to bare: projects, dat
 liteup status                           # installed and latest versions
 ```
 
-The installer takes the **latest release** by default. It has been tested on Ubuntu; on Debian, Fedora, RHEL, openSUSE and Arch packages are installed with their package manager, but the installation was not tested there. The script is short and can be read before running: [site/liteup](site/liteup). The old one-liner `curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh` still works: it just runs `liteup install`.
+The installer takes the **latest release** by default. It has been tested on Ubuntu; on Debian, Fedora, RHEL, openSUSE and Arch packages are installed with their package manager, but the installation was not tested there. The scripts are short and can be read before running: [site/install.sh](site/install.sh) (downloads `liteup`) and [site/liteup](site/liteup). 
 
 ## The interface on your computer: lite-ui
 

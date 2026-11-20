@@ -1,6 +1,6 @@
 name: pages
 
-# Serves site/liteup at https://lite-deploy.prozorov.me/liteup (and site/install.sh as a compatibility wrapper)
+# Serves site/install.sh (the bootstrap) at https://lite-deploy.prozorov.me/install.sh, and site/liteup, site/lite-ui, site/lite-ui.ps1
 on:
   push:
     branches: [main]
