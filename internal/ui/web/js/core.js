@@ -123,6 +123,10 @@
         it.info = true;
         var n = /(\d+)/.exec(f.message);
         it.text = (n ? n[1] + ' security update(s) are' : 'Security updates are') + ' waiting. They are installed automatically.';
+      } else if (id === 'security/web-auth') {
+        it.text = f.level === 'ok' ? 'Guessing of the password of a site is guarded.' : 'A site has a password for direct mode, but guessing it is not guarded yet.';
+        if (f.level === 'ok') it.info = true;
+        else it.action = { label: 'Guard it', plugin: 'security', command: 'web-auth', args: [], confirm: 'Ban addresses that keep guessing the password of a site served directly?' };
       } else if (f.plugin === 'security' && /^(ssh-|fail2ban|auto-updates|sysctl)/.test(f.check)) {
         it.text = 'The server is not fully protected yet.';
         it.action = { label: 'Turn on protection', plugin: 'security', command: 'enable', args: [], confirm: 'Turn on protection? Password login over SSH will be closed: make sure you can log in with your key.' };

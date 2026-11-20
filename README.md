@@ -42,9 +42,9 @@ liteup status                           # installed and latest versions
 
 The installer takes the **latest release** by default. It has been tested on Ubuntu; on Debian, Fedora, RHEL, openSUSE and Arch packages are installed with their package manager, but the installation was not tested there. The scripts are short and can be read before running: [site/install.sh](site/install.sh) (downloads `liteup`) and [site/liteup](site/liteup). 
 
-## The interface on your computer: lite-ui
+## The interface on your workstation: lite-ui
 
-The web interface is a separate small program, `lite-ui`, that lives on **your own computer** and reaches the server over SSH with your key. It is never installed on the server, and the server opens nothing to the internet for it. Install it with one command:
+The web interface is a separate small program, `lite-ui`, that lives on **your workstation** and reaches the server over SSH with your key. It is never installed on the server, and the server opens nothing to the internet for it. Install it with one command:
 
 ```powershell
 # Windows (PowerShell)
@@ -62,9 +62,9 @@ Then start it in a terminal:
 lite-ui
 ```
 
-The page opens in your browser at an address like `http://127.0.0.1:8787/?t=…`; only your computer can reach it. At the top of the page, press "Add server" and enter `YOUR_USER@YOUR_SERVER`. You can add several servers and switch between them in the same place; the list is kept on your workstation. (`lite-ui --host USER@SERVER` adds a server from the command line.) This needs the OpenSSH client (built into Windows 10 and later and into macOS) and a key login to the server.
+The page opens in your browser at an address like `http://127.0.0.1:8787/?t=…`; only your workstation can reach it. At the top of the page, press "Add server" and enter `YOUR_USER@YOUR_SERVER`. You can add several servers and switch between them in the same place; the list is kept on your workstation. (`lite-ui --host USER@SERVER` adds a server from the command line.) This needs the OpenSSH client (built into Windows 10 and later and into macOS) and a key login to the server.
 
-**Updating the page.** When a newer lite-ui exists, **Overview** shows "A new version of Lite Deploy (this page) is available" with an **Update** button. It downloads the program for your system from the release, checks its SHA256 against the `SHA256SUMS` of the same release, replaces itself and restarts at the same address; the page reloads by itself. The Claude Desktop extension runs the installed `lite-ui`, so it follows this update.
+**Updating the page.** When a newer lite-ui exists, **Overview** shows "A new version of Lite Deploy (this page) is available" with an **Update** button. It downloads the program for your system from the release, checks that the `SHA256SUMS` of the release carry a valid minisign signature of the project key (a release without one is never installed) and that the program matches its checksum, replaces itself and restarts at the same address; the page reloads by itself. The Claude Desktop extension runs the installed `lite-ui`, so it follows this update.
 
 **Always running.** To have the page ready after every login (a bookmark that always works), run once on the **workstation**:
 
@@ -72,7 +72,7 @@ The page opens in your browser at an address like `http://127.0.0.1:8787/?t=…`
 lite-ui service install
 ```
 
-It prints the address to bookmark; the address stays the same after restarts. On Linux it creates a user service (systemd, no root), on macOS a login agent (launchd). `lite-ui service status` shows whether it runs, `lite-ui service uninstall` turns it off. In WSL, systemd must be on (`[boot]` `systemd=true` in `/etc/wsl.conf`, then `wsl --shutdown`); the command tells you if it is not. Windows: not available yet, start `lite-ui` when you need it. While it runs in the background, `lite-ui` itself just opens the same page.
+It prints the address to bookmark; the address stays the same after restarts. On Linux it creates a user service (systemd, no root), on macOS a login agent (launchd), on Windows a task of the Task Scheduler for your user (no administrator rights, no window). `lite-ui service install --listen 127.0.0.1:PORT` uses another port. `lite-ui service status` shows whether it runs, `lite-ui service uninstall` turns it off. In WSL, systemd must be on (`[boot]` `systemd=true` in `/etc/wsl.conf`, then `wsl --shutdown`); the command tells you if it is not. While it runs in the background, `lite-ui` itself just opens the same page.
 
 ## Prepare the server
 
@@ -108,7 +108,7 @@ lite rollback PROJECT
 
 A site is published through a Cloudflare Tunnel (`"publish": "tunnel"`, the default) or directly, with Caddy getting its own TLS certificate (`"publish": "direct"`). Switch at any time: `lite publish PROJECT SITE tunnel|direct` ([tutorial](docs/publish-a-site.md)). A fallback password for the day Cloudflare is down: `lite fallback-auth PROJECT SITE set --user NAME --password-stdin --path /admin*` (asked for only in direct mode).
 
-The web interface with the "Deploy" and "Roll back" buttons is `lite-ui` (see above): start `lite-ui` and choose your server at the top of the page. It listens on `127.0.0.1` of your computer only.
+The web interface with the "Deploy" and "Roll back" buttons is `lite-ui` (see above): start `lite-ui` and choose your server at the top of the page. It listens on `127.0.0.1` of your workstation only.
 
 The pages of `lite-ui`: **Overview** (the state in plain words, what needs attention, projects, updates), **Projects** (create, deploy, roll back), **Ingress** (domains, tunnel or direct publishing, Cloudflare Tunnel), **Databases**, **Backups** (guided setup, copies outside the server), **Protection** (checks, ports, confirming dangerous changes with your key), **Server** (installed and available plugins, updating `lite`). An AI assistant can use the same program in the MCP mode: [Use an AI assistant](docs/ai-assistants.md).
 
@@ -260,7 +260,7 @@ In `compose.yml` the port is published as `127.0.0.1:${PORT}:8080`. The `data` f
 
 ## Creating a project in the interface
 
-The interface (`lite-ui`) has a "New project" section: the name, the database (on this or another server), the image registry, the components (a container or a process on the server), the sites and the CI key. "Preview plan" builds the plan and shows the steps with no changes on the server; "Create project" applies it. Secret values are typed in the form and encrypted on your computer with the executor public key: only ciphertext goes to the server, and the values never enter the project description. If the description changed after the preview, creation is rejected and asks for a new plan.
+The interface (`lite-ui`) has a "New project" section: the name, the database (on this or another server), the image registry, the components (a container or a process on the server), the sites and the CI key. "Preview plan" builds the plan and shows the steps with no changes on the server; "Create project" applies it. Secret values are typed in the form and encrypted on your workstation with the executor public key: only ciphertext goes to the server, and the values never enter the project description. If the description changed after the preview, creation is rejected and asks for a new plan.
 
 From the command line the same is done by `lite project create FILE` (it shows a preview and asks for confirmation).
 
@@ -279,7 +279,7 @@ Automatic fixes cover SSH, automatic updates, sysctl and fail2ban, the backup ti
 Project secrets lie on the server in clear text (files with mode 600 under root), so they enter a backup only encrypted with a key whose private part only you have. Losing the server does not lose the key, and a leaked bucket does not reveal the secrets.
 
 ```sh
-age-keygen -o lite-backup.key                    # on your computer; keep the file off the server
+age-keygen -o lite-backup.key                    # on your workstation; keep the file off the server
 lite backup setup age1...                        # the public part from the age-keygen output
 lite backup run                                  # settings + secrets (encrypted), pg databases, upload to the configured locations
 lite backup schedule on                          # daily around 03:00

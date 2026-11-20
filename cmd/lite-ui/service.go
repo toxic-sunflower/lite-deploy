@@ -7,10 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
@@ -54,38 +57,65 @@ func loadToken(create bool) (string, error) {
 	return tok, os.WriteFile(p, []byte(tok+"\n"), 0o600)
 }
 
+// serviceArgs are the arguments of the program started in the background.
+func serviceArgs(addr string) []string {
+	a := []string{"--service", "--no-open"}
+	if addr != "" && addr != defaultAddr {
+		a = append(a, "--listen", addr)
+	}
+	return a
+}
+
+func plistStrings(a []string) string {
+	var b strings.Builder
+	for _, s := range a {
+		b.WriteString("<string>" + s + "</string>")
+	}
+	return b.String()
+}
+
+var listenRe = regexp.MustCompile(`--listen(?:\s+|</string><string>)(127\.0\.0\.1:[0-9]+|localhost:[0-9]+)`)
+
+// listenIn finds the address a background program was installed with in its unit, agent or task text.
+func listenIn(s string) string {
+	if m := listenRe.FindStringSubmatch(s); m != nil {
+		return m[1]
+	}
+	return defaultAddr
+}
+
 func pageURL(addr, token string) string { return fmt.Sprintf("http://%s/?t=%s", addr, token) }
 
 // systemdUnit is the service of the current user (no root): it starts at login and is restarted if it stops.
-func systemdUnit(exe string) string {
+func systemdUnit(exe, addr string) string {
 	return fmt.Sprintf(`[Unit]
 Description=Lite Deploy (the page on your workstation)
 
 [Service]
-ExecStart=%q --service --no-open
+ExecStart=%q %s
 Environment=LITE_UI_SERVICE=1
 Restart=always
 RestartSec=2
 
 [Install]
 WantedBy=default.target
-`, exe)
+`, exe, strings.Join(serviceArgs(addr), " "))
 }
 
 // launchdPlist is the agent of the current user on macOS: it starts at login and is restarted if it stops.
-func launchdPlist(exe, logPath string) string {
+func launchdPlist(exe, logPath, addr string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>%s</string>
-<key>ProgramArguments</key><array><string>%s</string><string>--service</string><string>--no-open</string></array>
+<key>ProgramArguments</key><array><string>%s</string>%s</array>
 <key>EnvironmentVariables</key><dict><key>LITE_UI_SERVICE</key><string>1</string></dict>
 <key>RunAtLoad</key><true/>
 <key>KeepAlive</key><true/>
 <key>StandardOutPath</key><string>%s</string>
 <key>StandardErrorPath</key><string>%s</string>
 </dict></plist>
-`, launchdLabel, exe, logPath, logPath)
+`, launchdLabel, exe, plistStrings(serviceArgs(addr)), logPath, logPath)
 }
 
 func isWSL() bool {
@@ -93,15 +123,19 @@ func isWSL() bool {
 	return err == nil && strings.Contains(strings.ToLower(string(b)), "microsoft")
 }
 
-// runService handles `lite-ui service install|uninstall|status`.
+// runService handles `lite-ui service install [--listen ADDR] | uninstall | status`.
 func runService(args []string, out, errw io.Writer) int {
-	if len(args) != 1 || (args[0] != "install" && args[0] != "uninstall" && args[0] != "status") {
-		_, _ = fmt.Fprintln(errw, "usage: lite-ui service install | uninstall | status")
-		return 2
+	addr := defaultAddr
+	if len(args) == 3 && args[0] == "install" && args[1] == "--listen" {
+		if h, _, err := net.SplitHostPort(args[2]); err != nil || (h != "127.0.0.1" && h != "localhost") {
+			_, _ = fmt.Fprintln(errw, "ERROR: the page listens on 127.0.0.1 only")
+			return 2
+		}
+		addr, args = args[2], args[:1]
 	}
-	if runtime.GOOS == "windows" {
-		_, _ = fmt.Fprintln(errw, "Running in the background is not available on Windows yet: start lite-ui from the Start menu or a terminal when you need the page.")
-		return 1
+	if len(args) != 1 || (args[0] != "install" && args[0] != "uninstall" && args[0] != "status") {
+		_, _ = fmt.Fprintln(errw, "usage: lite-ui service install [--listen 127.0.0.1:PORT] | uninstall | status")
+		return 2
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -114,17 +148,67 @@ func runService(args []string, out, errw io.Writer) int {
 	ctx := context.Background()
 	r := host.ExecRunner{}
 	sh := func(name string, a ...string) (string, bool) {
-		res, e := r.Run(ctx, host.Cmd{Name: name, Args: a})
+		res, e := r.Run(ctx, host.Cmd{Name: name, Args: a, Timeout: 60 * time.Second})
 		return strings.TrimSpace(string(res.Stdout) + string(res.Stderr)), e == nil && res.ExitCode == 0
 	}
 	home, _ := os.UserHomeDir()
-	if runtime.GOOS == "darwin" {
-		return macService(args[0], exe, home, out, errw, sh)
+	switch runtime.GOOS {
+	case "windows":
+		return windowsService(args[0], exe, addr, out, errw, sh)
+	case "darwin":
+		return macService(args[0], exe, home, addr, out, errw, sh)
 	}
-	return linuxService(args[0], exe, home, out, errw, sh)
+	return linuxService(args[0], exe, home, addr, out, errw, sh)
 }
 
-func linuxService(action, exe, home string, out, errw io.Writer, sh func(string, ...string) (string, bool)) int {
+const winTask = "Lite Deploy"
+
+func psQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+
+// windowsService keeps the page running with a task of the Task Scheduler that starts at login (no administrator rights:
+// it is a task of the current user) and is restarted if it stops.
+func windowsService(action, exe, addr string, out, errw io.Writer, sh func(string, ...string) (string, bool)) int {
+	ps := func(script string) (string, bool) {
+		return sh("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
+	}
+	switch action {
+	case "install":
+		tok, err := loadToken(true)
+		if err != nil {
+			_, _ = fmt.Fprintln(errw, "ERROR:", err)
+			return 1
+		}
+		script := "$ErrorActionPreference='Stop'; " +
+			"$a = New-ScheduledTaskAction -Execute " + psQuote(exe) + " -Argument " + psQuote(strings.Join(serviceArgs(addr), " ")) + "; " +
+			"$t = New-ScheduledTaskTrigger -AtLogOn -User ([Security.Principal.WindowsIdentity]::GetCurrent().Name); " +
+			"$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero); " +
+			"Register-ScheduledTask -TaskName " + psQuote(winTask) + " -Action $a -Trigger $t -Settings $s -Force | Out-Null; " +
+			"Start-ScheduledTask -TaskName " + psQuote(winTask)
+		if o, ok := ps(script); !ok {
+			_, _ = fmt.Fprintln(errw, "ERROR: could not create the task:", o)
+			return 1
+		}
+		_, _ = fmt.Fprintf(out, "Lite Deploy now runs in the background and starts by itself when you log in.\n\nOpen it (and make this a bookmark):\n\n  %s\n", pageURL(addr, tok))
+	case "uninstall":
+		ps("Stop-ScheduledTask -TaskName " + psQuote(winTask) + " -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName " + psQuote(winTask) + " -Confirm:$false -ErrorAction SilentlyContinue")
+		_, _ = fmt.Fprintln(out, "Lite Deploy no longer runs in the background. You can still start it with `lite-ui`.")
+	case "status":
+		o, ok := ps("(Get-ScheduledTask -TaskName " + psQuote(winTask) + " -ErrorAction Stop).State")
+		if !ok {
+			_, _ = fmt.Fprintln(out, "Not running in the background. Turn it on with `lite-ui service install`.")
+			return 0
+		}
+		if !strings.Contains(o, "Running") {
+			_, _ = fmt.Fprintf(out, "The task exists but is not running (%s). It starts at login.\n", o)
+			return 0
+		}
+		args, _ := ps("(Get-ScheduledTask -TaskName " + psQuote(winTask) + ").Actions[0].Arguments")
+		printRunning(out, listenIn(args))
+	}
+	return 0
+}
+
+func linuxService(action, exe, home, addr string, out, errw io.Writer, sh func(string, ...string) (string, bool)) int {
 	if _, err := os.Stat("/run/systemd/system"); err != nil {
 		msg := "This system does not run systemd, so lite-ui cannot be started in the background automatically."
 		if isWSL() {
@@ -146,7 +230,7 @@ func linuxService(action, exe, home string, out, errw io.Writer, sh func(string,
 			_, _ = fmt.Fprintln(errw, "ERROR:", err)
 			return 1
 		}
-		if err := os.WriteFile(unit, []byte(systemdUnit(exe)), 0o644); err != nil { //nolint:gosec // a unit file is not secret
+		if err := os.WriteFile(unit, []byte(systemdUnit(exe, addr)), 0o644); err != nil { //nolint:gosec // a unit file is not secret
 			_, _ = fmt.Fprintln(errw, "ERROR:", err)
 			return 1
 		}
@@ -157,7 +241,7 @@ func linuxService(action, exe, home string, out, errw io.Writer, sh func(string,
 			}
 		}
 		sh("loginctl", "enable-linger", os.Getenv("USER")) // keeps it running with no login; fine if refused
-		_, _ = fmt.Fprintf(out, "Lite Deploy now runs in the background and starts by itself.\n\nOpen it (and make this a bookmark):\n\n  %s\n", pageURL(defaultAddr, tok))
+		_, _ = fmt.Fprintf(out, "Lite Deploy now runs in the background and starts by itself.\n\nOpen it (and make this a bookmark):\n\n  %s\n", pageURL(addr, tok))
 	case "uninstall":
 		sh("systemctl", "--user", "disable", "--now", serviceName)
 		_ = os.Remove(unit)
@@ -169,12 +253,13 @@ func linuxService(action, exe, home string, out, errw io.Writer, sh func(string,
 			_, _ = fmt.Fprintf(out, "Not running in the background (%s). Turn it on with `lite-ui service install`.\n", o)
 			return 0
 		}
-		printRunning(out)
+		b, _ := os.ReadFile(filepath.Clean(unit))
+		printRunning(out, listenIn(string(b)))
 	}
 	return 0
 }
 
-func macService(action, exe, home string, out, errw io.Writer, sh func(string, ...string) (string, bool)) int {
+func macService(action, exe, home, addr string, out, errw io.Writer, sh func(string, ...string) (string, bool)) int {
 	plist := filepath.Join(home, "Library", "LaunchAgents", launchdLabel+".plist")
 	target := fmt.Sprintf("gui/%d", os.Getuid())
 	switch action {
@@ -189,7 +274,7 @@ func macService(action, exe, home string, out, errw io.Writer, sh func(string, .
 			_, _ = fmt.Fprintln(errw, "ERROR:", err)
 			return 1
 		}
-		if err := os.WriteFile(plist, []byte(launchdPlist(exe, logPath)), 0o644); err != nil { //nolint:gosec // an agent file is not secret
+		if err := os.WriteFile(plist, []byte(launchdPlist(exe, logPath, addr)), 0o644); err != nil { //nolint:gosec // an agent file is not secret
 			_, _ = fmt.Fprintln(errw, "ERROR:", err)
 			return 1
 		}
@@ -198,7 +283,7 @@ func macService(action, exe, home string, out, errw io.Writer, sh func(string, .
 			_, _ = fmt.Fprintln(errw, "ERROR: launchctl bootstrap failed:", o)
 			return 1
 		}
-		_, _ = fmt.Fprintf(out, "Lite Deploy now runs in the background and starts by itself.\n\nOpen it (and make this a bookmark):\n\n  %s\n", pageURL(defaultAddr, tok))
+		_, _ = fmt.Fprintf(out, "Lite Deploy now runs in the background and starts by itself.\n\nOpen it (and make this a bookmark):\n\n  %s\n", pageURL(addr, tok))
 	case "uninstall":
 		sh("launchctl", "bootout", target+"/"+launchdLabel)
 		_ = os.Remove(plist)
@@ -208,16 +293,17 @@ func macService(action, exe, home string, out, errw io.Writer, sh func(string, .
 			_, _ = fmt.Fprintln(out, "Not running in the background. Turn it on with `lite-ui service install`.")
 			return 0
 		}
-		printRunning(out)
+		b, _ := os.ReadFile(filepath.Clean(plist))
+		printRunning(out, listenIn(string(b)))
 	}
 	return 0
 }
 
-func printRunning(out io.Writer) {
+func printRunning(out io.Writer, addr string) {
 	tok, err := loadToken(false)
 	if err != nil {
 		_, _ = fmt.Fprintln(out, "Running in the background.")
 		return
 	}
-	_, _ = fmt.Fprintf(out, "Running in the background:\n\n  %s\n", pageURL(defaultAddr, tok))
+	_, _ = fmt.Fprintf(out, "Running in the background:\n\n  %s\n", pageURL(addr, tok))
 }

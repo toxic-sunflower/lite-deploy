@@ -12,7 +12,7 @@ import (
 )
 
 // projectIn is what the page sends: the project description and the secret values in plain text.
-// The values are encrypted here, on the owner computer, with the executor public key and go to the server only encrypted.
+// The values are encrypted here, on the owner workstation, with the executor public key and go to the server only encrypted.
 type projectIn struct {
 	Project        json.RawMessage   `json:"project"`
 	Secrets        map[string]string `json:"secrets"`

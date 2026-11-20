@@ -1,6 +1,6 @@
 (function () {
   // The secrets of one project: names and whether each is set. A value is never shown; it is typed here, encrypted on this
-  // computer, and the server stores it. The application picks up a new value at the next deploy.
+  // workstation, and the server stores it. The application picks up a new value at the next deploy.
   LU.components.SecretsPanel = {
     props: ['project'],
     data: function () { return { set: null, needed: [], shared: [], values: {}, newName: '', newValue: '', error: '' }; },

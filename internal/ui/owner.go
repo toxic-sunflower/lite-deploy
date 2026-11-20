@@ -20,7 +20,7 @@ type noSignKey struct{}
 type ownerInfo struct {
 	Supported bool
 	Required  bool
-	Mine      bool // the key of this computer is registered
+	Mine      bool // the key of this workstation is registered
 	ServerID  string
 	at        time.Time
 }
@@ -45,7 +45,7 @@ func (s *Server) createOwnerKey() (ed25519.PrivateKey, error) {
 		return priv, nil
 	}
 	if s.OwnerKeyPath == "" {
-		return nil, errors.New("no place to keep the key on this computer")
+		return nil, errors.New("no place to keep the key on this workstation")
 	}
 	_, priv, err := owner.GenerateKey()
 	if err != nil {
@@ -114,7 +114,7 @@ func (s *Server) forgetOwner(target string) {
 	s.mu.Unlock()
 }
 
-// signFor signs a changing request when the server asks for confirmation and this computer has a registered key.
+// signFor signs a changing request when the server asks for confirmation and this workstation has a registered key.
 func (s *Server) signFor(ctx context.Context, target, method, path string, body []byte) string {
 	if method != http.MethodPost || s.OwnerKeyPath == "" || ctx.Value(noSignKey{}) != nil {
 		return ""
@@ -163,7 +163,7 @@ func (s *Server) ownerRoutes(mux *http.ServeMux) {
 		pub, _ := priv.Public().(ed25519.PublicKey)
 		label := in.Label
 		if label == "" || len(label) > 40 {
-			label = "my computer"
+			label = "my workstation"
 		}
 		s.forgetOwner(target)
 		out := s.call(r.Context(), "POST", "/v1/owner/add", map[string]string{"pub": base64.StdEncoding.EncodeToString(pub), "label": label})
@@ -177,7 +177,7 @@ func (s *Server) ownerRoutes(mux *http.ServeMux) {
 		}
 		priv, ok := s.loadOwnerKey()
 		if !ok {
-			return errBody("usage", "this computer has no key"), 400
+			return errBody("usage", "this workstation has no key"), 400
 		}
 		pub, _ := priv.Public().(ed25519.PublicKey)
 		out := s.call(r.Context(), "POST", "/v1/owner/remove", map[string]string{"id": owner.KeyID(pub)})

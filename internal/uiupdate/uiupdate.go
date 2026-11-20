@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/toxic-sunflower/lite-deploy/internal/minisign"
 )
 
 // Info is what the page shows.
@@ -38,6 +40,9 @@ type Updater struct {
 	// Exe is the program to replace.
 	Exe    string
 	Client *http.Client
+	// PubKey is the minisign public key the releases are signed with (the line of minisign.pub). The signature of
+	// SHA256SUMS is always required: a release without a valid one is never installed.
+	PubKey string
 
 	mu     sync.Mutex
 	cached Info
@@ -45,6 +50,9 @@ type Updater struct {
 }
 
 const repo = "toxic-sunflower/lite-deploy"
+
+// ReleaseKey is minisign.pub of the repository: the key the releases are signed with.
+const ReleaseKey = "RWQXkl8IozvEWfo230NRtIvfuO4KI+SiT2s0p+Qynna/9WSATC/JDcyJ"
 
 // New makes an Updater for the running program.
 func New(current string) *Updater {
@@ -55,7 +63,7 @@ func New(current string) *Updater {
 	return &Updater{
 		Current: current, APIURL: "https://api.github.com/repos/" + repo + "/releases/latest",
 		DownloadBase: "https://github.com/" + repo + "/releases/download",
-		GOOS:         runtime.GOOS, GOARCH: runtime.GOARCH, Exe: exe,
+		GOOS:         runtime.GOOS, GOARCH: runtime.GOARCH, Exe: exe, PubKey: ReleaseKey,
 		Client: &http.Client{Timeout: 5 * time.Minute},
 	}
 }
@@ -169,6 +177,17 @@ func (u *Updater) Apply(ctx context.Context) (string, error) {
 	sums, err := u.get(ctx, base+"SHA256SUMS", 1<<20)
 	if err != nil {
 		return "", err
+	}
+	pk, err := minisign.ParsePublicKey(u.PubKey)
+	if err != nil {
+		return "", errors.New("this lite-ui has no valid key to check releases with")
+	}
+	sig, err := u.get(ctx, base+"SHA256SUMS.minisig", 64<<10)
+	if err != nil {
+		return "", errors.New("the release has no signature, so it was not installed: " + err.Error())
+	}
+	if err := pk.Verify(sums, sig); err != nil {
+		return "", errors.New("the signature of the release is not valid, nothing was changed (" + err.Error() + ")")
 	}
 	want := ""
 	for _, line := range strings.Split(string(sums), "\n") {

@@ -32,11 +32,11 @@ A copy of one project is a file `project-NAME-DATE.tar.gz.age`, of the server `s
 
 ## The short way: in the interface
 
-Open `lite-ui`, then **Backups**, and press **Create my key and turn on backups**. The page makes the key on your computer and downloads the file `lite-backup.key`: **keep it safe and off the server**, because without it backups cannot be opened and nobody can recover it for you. It then gives the server the public part, turns on encrypted backups with a daily schedule, and **Back up now** takes the first one. Below, **Copies outside this server** has forms for Backblaze, S3 and another server (SFTP). **Databases** lists your databases with *Back up now* and *Restore*.
+Open `lite-ui`, then **Backups**, and press **Create my key and turn on backups**. The page makes the key on your workstation and downloads the file `lite-backup.key`: **keep it safe and off the server**, because without it backups cannot be opened and nobody can recover it for you. It then gives the server the public part, turns on encrypted backups with a daily schedule, and **Back up now** takes the first one. Below, **Copies outside this server** has forms for Backblaze, S3 and another server (SFTP). **Databases** lists your databases with *Back up now* and *Restore*.
 
 The rest of this page does the same with commands, and explains what happens.
 
-On **your computer** (not the server):
+On **your workstation** (not the server):
 
 ```sh
 age-keygen -o lite-backup.key

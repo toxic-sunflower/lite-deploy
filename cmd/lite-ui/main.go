@@ -63,6 +63,9 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 			return 2
 		}
 	}
+	if *service {
+		host.HideConsole()
+	}
 	token := os.Getenv("LITE_UI_TOKEN") // handed over by the previous run after an update, so an open page keeps working
 	if *service && token == "" {
 		tok, err := loadToken(true)

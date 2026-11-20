@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -21,6 +22,8 @@ const (
 	SSHSecurity    = sshdDir + "/01-lite-security.conf"
 	sysctlFile     = "/etc/sysctl.d/60-lite-security.conf"
 	jailFile       = "/etc/fail2ban/jail.d/lite-deploy.local"
+	webJailFile    = "/etc/fail2ban/jail.d/lite-deploy-web.local"
+	webFilterFile  = "/etc/fail2ban/filter.d/lite-caddy-auth.conf"
 	aptAutoFile    = "/etc/apt/apt.conf.d/52lite-deploy-auto-upgrades"
 	dnfAutoFile    = "/etc/dnf/automatic.conf"
 	securityMark   = "# managed-by: lite-deploy (security): do not edit by hand, lite security rewrites this file"
@@ -67,7 +70,8 @@ func (Security) Commands() []plugin.Command {
 		{Name: "allow-users", Help: "SSH: allow only the listed users (any: remove the restriction); project users are added automatically", Args: "NAME…|any", Confirm: true},
 		{Name: "logins", Root: true, Help: "login journal: recent logins and failed attempts", Args: "[NUMBER]"},
 		{Name: "banned", Root: true, Help: "who fail2ban has banned right now"},
-		{Name: "unban", Help: "remove a fail2ban ban from an address", Args: "ADDRESS", Confirm: true},
+		{Name: "unban", Help: "release a fail2ban ban: one address, or all of them", Args: "ADDRESS|all", Confirm: true},
+		{Name: "web-auth", Help: "ban addresses that keep guessing the password of a site served directly (the fallback password)", Confirm: true},
 	}
 }
 
@@ -507,15 +511,31 @@ func (Security) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 		if err != nil || res.ExitCode != 0 {
 			return plugin.Output{}, plugin.Errorf("precondition_failed", "fail2ban is not working: lite security fail2ban")
 		}
-		return plugin.Output{Text: string(res.Stdout), Data: map[string]any{"output": strings.TrimSpace(string(res.Stdout))}}, nil
-	case "unban":
-		if len(args) != 1 || net.ParseIP(args[0]) == nil {
-			return plugin.Output{}, plugin.Errorf("usage", "usage: lite security unban ADDRESS")
+		text := string(res.Stdout)
+		if web, werr := s.run("fail2ban-client", "status", webJail); werr == nil && web.ExitCode == 0 {
+			text += "\n" + string(web.Stdout)
 		}
-		if err := s.must("fail2ban-client", "set", "sshd", "unbanip", args[0]); err != nil {
+		return plugin.Output{Text: text, Data: map[string]any{"output": strings.TrimSpace(text)}}, nil
+	case "unban":
+		if len(args) != 1 || (args[0] != "all" && net.ParseIP(args[0]) == nil) {
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite security unban ADDRESS|all")
+		}
+		if args[0] == "all" {
+			if err := s.must("fail2ban-client", "unban", "--all"); err != nil {
+				return plugin.Output{}, err
+			}
+			return plugin.Output{Text: "All bans are released.\n", Data: map[string]any{"all": true}}, nil
+		}
+		if err := s.must("fail2ban-client", "unban", args[0]); err != nil {
 			return plugin.Output{}, err
 		}
-		return plugin.Output{Text: "Lock released: " + args[0] + "\n", Data: map[string]any{"ip": args[0]}}, nil
+		return plugin.Output{Text: "Ban released: " + args[0] + "\n", Data: map[string]any{"ip": args[0]}}, nil
+	case "web-auth":
+		text, err := s.webAuth()
+		if err != nil {
+			return plugin.Output{}, err
+		}
+		return plugin.Output{Text: text}, nil
 	}
 	return plugin.Output{}, plugin.Errorf("usage", "plugin security has no command %q", cmd)
 }
@@ -629,6 +649,15 @@ func (s *sec) findings() []plugin.Finding {
 		add("fail2ban", plugin.LevelFail, "fail2ban does not protect SSH (not installed, not running, or no sshd jail)", "lite security enable")
 	} else {
 		add("fail2ban", plugin.LevelOK, "fail2ban protects SSH", "")
+	}
+
+	// the passwords of sites served directly
+	if logs := s.protectedLogs(); len(logs) > 0 {
+		if b, err := s.env.FS.ReadFile(webJailFile); err != nil || string(b) != webJailText(logs) {
+			add("web-auth", plugin.LevelWarn, "a site has a password for direct mode, but guessing it is not guarded", "lite security web-auth")
+		} else {
+			add("web-auth", plugin.LevelOK, "guessing of site passwords is guarded (fail2ban)", "")
+		}
 	}
 
 	// automatic updates and pending security updates
@@ -762,4 +791,91 @@ func (s *sec) portFindings() []plugin.Finding {
 
 func (Security) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	return newSec(ctx, env).findings()
+}
+
+const webJail = "lite-caddy-auth"
+
+// The filter counts only the answers that carry the Basic challenge of Caddy (a wrong or missing password for a site served
+// directly). The application's own 401 answers do not have it, so a legitimate client with an expired token is never banned.
+// The pattern was checked against real Caddy access logs.
+const webFilter = securityMark + `
+[Definition]
+failregex = ^.*"remote_ip":"<HOST>".*"status":401,"resp_headers":\{[^}]*"Www-Authenticate":\["Basic
+ignoreregex =
+`
+
+// protectedLogs are the access logs of the sites that have a fallback password.
+func (s *sec) protectedLogs() []string {
+	var out []string
+	for _, name := range s.projectNames() {
+		b, err := s.env.FS.ReadFile("/etc/lite-deploy/projects/" + name + ".json")
+		if err != nil || !strings.Contains(string(b), `"fallback_auth"`) {
+			continue
+		}
+		var p struct {
+			Sites []struct {
+				Name         string          `json:"name"`
+				FallbackAuth json.RawMessage `json:"fallback_auth"`
+			} `json:"sites"`
+		}
+		if json.Unmarshal(b, &p) != nil {
+			continue
+		}
+		for _, st := range p.Sites {
+			if len(st.FallbackAuth) > 0 && string(st.FallbackAuth) != "null" {
+				out = append(out, "/var/log/caddy/"+name+"-"+st.Name+".log")
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func webJailText(logs []string) string {
+	return securityMark + "\n[" + webJail + "]\nenabled = true\nfilter = " + webJail + "\nlogpath = " + strings.Join(logs, "\n          ") +
+		"\nport = http,https\nmaxretry = 8\nfindtime = 10m\nbantime = 1h\n"
+}
+
+// webAuth makes fail2ban watch the access logs of the sites that have a fallback password, and ban whoever keeps guessing.
+// It is safe to repeat; without such sites the jail is removed.
+func (s *sec) webAuth() (string, error) {
+	logs := s.protectedLogs()
+	if len(logs) == 0 {
+		if _, err := s.env.FS.Stat(webJailFile); err != nil {
+			return "No site has a password for direct mode, so there is nothing to guard.\n", nil
+		}
+		_ = s.env.FS.Remove(webJailFile)
+		_, _ = s.run("fail2ban-client", "reload")
+		return "No site has a password for direct mode any more: the guard is removed.\n", nil
+	}
+	if res, err := s.run("fail2ban-client", "ping"); err != nil || res.ExitCode != 0 {
+		return "", plugin.Errorf("precondition_failed", "fail2ban is not running: turn on protection first (lite security enable)")
+	}
+	if err := s.env.FS.MkdirAll("/etc/fail2ban/filter.d", 0o755); err != nil {
+		return "", plugin.Errorf("io_error", "%v", err)
+	}
+	if err := s.env.FS.WriteFile(webFilterFile, []byte(webFilter), 0o644); err != nil {
+		return "", plugin.Errorf("io_error", "%v", err)
+	}
+	if err := s.env.FS.WriteFile(webJailFile, []byte(webJailText(logs)), 0o644); err != nil {
+		return "", plugin.Errorf("io_error", "%v", err)
+	}
+	if err := s.must("fail2ban-client", "reload"); err != nil {
+		_ = s.env.FS.Remove(webJailFile) // a broken jail must not stop fail2ban for SSH
+		_, _ = s.run("fail2ban-client", "reload")
+		return "", err
+	}
+	var jailErr error
+	for i := 0; i < 10; i++ {
+		if jailErr = s.must("fail2ban-client", "status", webJail); jailErr == nil {
+			break
+		}
+		waitStep(time.Second)
+	}
+	if jailErr != nil {
+		_ = s.env.FS.Remove(webJailFile)
+		_, _ = s.run("fail2ban-client", "reload")
+		return "", plugin.Errorf("step_failed", "the guard for site passwords did not start: %v", jailErr)
+	}
+	return "Guessing of site passwords is now guarded: after 8 wrong attempts in 10 minutes an address is banned for an hour. Release a ban: lite security unban ADDRESS (or all).\n", nil
 }

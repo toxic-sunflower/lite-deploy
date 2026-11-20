@@ -1,7 +1,7 @@
 (function () {
   LU.components.Security = {
     data: function () {
-      return { verify: null, fw: null, fwErr: '', port: '', proto: 'tcp', from: '', error: '', own: null };
+      return { verify: null, fw: null, fwErr: '', port: '', proto: 'tcp', from: '', error: '', own: null, bans: null, banIp: '' };
     },
     template: '\
 <div>\
@@ -21,14 +21,24 @@
   <div class="card" v-if="own">\
     <div v-if="!own.supported" class="muted">This server is older and cannot do this yet. Update lite on the server first.</div>\
     <template v-else>\
-      <div v-if="own.required && own.registered"><b>On.</b> Changes to the server (ports, SSH, backups, publishing…) only work from this computer, which holds your key. Deploying and rolling back are not affected.</div>\
-      <div v-else-if="own.required" class="warntxt">This server asks for a key, but this computer does not have it. Changes work only from the computer that was paired.</div>\
-      <div v-else><b>Off.</b> Anyone who gets an administrator account on the server could change it. Turn this on and the changes will only work from this computer.</div>\
+      <div v-if="own.required && own.registered"><b>On.</b> Changes to the server (ports, SSH, backups, publishing…) only work from this workstation, which holds your key. Deploying and rolling back are not affected.</div>\
+      <div v-else-if="own.required" class="warntxt">This server asks for a key, but this workstation does not have it. Changes work only from the workstation that was paired.</div>\
+      <div v-else><b>Off.</b> Anyone who gets an administrator account on the server could change it. Turn this on and the changes will only work from this workstation.</div>\
       <div class="row" style="margin-top:10px">\
         <button v-if="!own.required" class="primary" @click="pair" :disabled="$root.state.busy">Turn on</button>\
         <button v-if="own.required && own.registered" @click="unpair" :disabled="$root.state.busy">Turn off</button></div>\
-      <div class="help" style="margin-top:8px">Commands typed in a terminal on the server for such changes are refused while this is on. If this computer is lost, a person with root on the server removes <code>/etc/lite-deploy/owner-keys</code>.</div>\
+      <div class="help" style="margin-top:8px">Commands typed in a terminal on the server for such changes are refused while this is on. If this workstation is lost, a person with root on the server removes <code>/etc/lite-deploy/owner-keys</code>.</div>\
     </template>\
+  </div>\
+  <h3>Banned addresses</h3>\
+  <div class="card">\
+    <div class="help">The server bans an address for an hour after repeated wrong SSH logins or wrong site passwords. If you locked yourself out, release the ban here.</div>\
+    <div class="row" style="margin-top:8px"><button @click="showBans" :disabled="$root.state.busy">Show who is banned</button>\
+      <button @click="release(\'all\')" :disabled="$root.state.busy">Release everyone</button></div>\
+    <pre v-if="bans" class="out">{{ bans }}</pre>\
+    <form class="row" style="margin-top:8px" @submit.prevent="release(banIp)">\
+      <input class="grow" type="text" v-model="banIp" placeholder="address to release, e.g. 203.0.113.9" autocomplete="off" spellcheck="false">\
+      <button type="submit" :disabled="$root.state.busy">Release this address</button></form>\
   </div>\
   <h3>Open ports</h3>\
   <p v-if="fwErr" class="down">{{ fwErr }}</p>\
@@ -54,6 +64,19 @@
       },
       needsFix: function () { return this.verify && this.verify.findings.some(function (f) { return f.fix && f.level !== 'ok' && f.plugin !== 'lite'; }); } },
     methods: {
+      showBans: function () {
+        var self = this;
+        LU.run('Asking the server…', '/api/plugin', { plugin: 'security', command: 'banned', args: [] }, function () { return 'Done.'; })
+          .then(function (r) { if (r.ok) self.bans = (r.data && r.data.output) || (r.data && r.data.text) || 'Nobody is banned.'; });
+      },
+      release: function (who) {
+        var self = this; who = (who || '').trim();
+        if (!who) { LU.say('err', 'Type an address first.'); return; }
+        if (who !== 'all' && !/^[0-9a-fA-F.:]{3,45}$/.test(who)) { LU.say('err', 'That does not look like an address.'); return; }
+        if (!confirm(who === 'all' ? 'Release every banned address?' : 'Release ' + who + '?')) return;
+        LU.run('Releasing…', '/api/plugin', { plugin: 'security', command: 'unban', args: [who] }, function () { return who === 'all' ? 'Everyone is released.' : who + ' is released.'; })
+          .then(function (r) { if (r.ok) { self.banIp = ''; self.bans = null; } });
+      },
       cls: function (f) { return f.level === 'ok' ? 'up' : (f.level === 'warn' ? 'warntxt' : 'down'); },
       check: function () {
         var self = this; self.error = '';
@@ -72,8 +95,8 @@
       },
       pair: function () {
         var self = this;
-        if (!confirm('Turn this on? From now on changes to the server only work from this computer. Terminal commands on the server for such changes will be refused.')) return;
-        LU.run('Registering your key…', '/api/owner/pair', { label: 'my computer' }, function () { return 'Done. Changes to the server now need this computer.'; }).then(function () { self.loadOwner(); });
+        if (!confirm('Turn this on? From now on changes to the server only work from this workstation. Terminal commands on the server for such changes will be refused.')) return;
+        LU.run('Registering your key…', '/api/owner/pair', { label: 'my workstation' }, function () { return 'Done. Changes to the server now need this workstation.'; }).then(function () { self.loadOwner(); });
       },
       unpair: function () {
         var self = this;

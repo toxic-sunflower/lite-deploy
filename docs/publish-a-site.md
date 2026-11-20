@@ -119,6 +119,8 @@ lite fallback-auth shop main off
 
 Caddy asks for the password (HTTP Basic, which is safe because the direct mode always uses HTTPS). Only a bcrypt hash is stored on the server, and an exported project does not carry it. Choose a long password: this is the lock that remains when Cloudflare is not in front.
 
+**Guessing is guarded.** `lite verify` (and the **Overview**) warns when a site has such a password and the guard is not on; the button, or `sudo lite security web-auth`, makes fail2ban watch the site's access log: after 8 wrong passwords in 10 minutes an address is banned for an hour. Only answers that carry Caddy's password challenge count, so the application's own 401 answers never ban anybody. A ban is released in **Protection**, “Banned addresses” (one address, or everyone), or with `lite security unban ADDRESS` / `lite security unban all`.
+
 ### Close it with Cloudflare Access from the interface
 
 In **Ingress**, press “Close with Cloudflare Access…” under the domain: the e-mail addresses (or `@example.com` for a whole mail domain) that may enter, and an optional path. Lite Deploy creates the Access application in your Cloudflare account; “Show what is closed” lists the applications of the domain and “Open it again” removes one.

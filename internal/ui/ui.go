@@ -1,5 +1,5 @@
 // Package ui is the local web interface: shows the state of projects and gives the "Deploy" and "Roll back" buttons.
-// The interface decides nothing itself: every action is a CLI call (`lite-deploy ... --json`) on this computer
+// The interface decides nothing itself: every action is a CLI call (`lite-deploy ... --json`) on this workstation
 // or on the server over SSH. It listens on 127.0.0.1 only; actions need the token from the address the command prints.
 package ui
 
@@ -59,7 +59,7 @@ type Server struct {
 	SSHOptions []string
 	// Streamer starts the one long-lived ssh connection that carries all requests; nil: one ssh per request.
 	Streamer host.Starter
-	// OwnerKeyPath is where the private key that confirms dangerous actions is kept on this computer (empty: not used).
+	// OwnerKeyPath is where the private key that confirms dangerous actions is kept on this workstation (empty: not used).
 	OwnerKeyPath string
 	// Updater updates lite-ui itself (nil: the page does not offer it). OnUpdated is called after a successful update, once
 	// the answer is sent: the program is expected to restart.
@@ -448,7 +448,7 @@ func (s *Server) Handler() http.Handler {
 		return s.call(r.Context(), "POST", "/v1/publish", map[string]string{"project": in.Project, "site": in.Site, "mode": in.Mode, "tunnel": in.Tunnel}), 200
 	}))
 	mux.HandleFunc("/api/backup/keygen", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
-		// the private key is made here, handed to the page once to be saved on this computer, and never kept by lite-ui
+		// the private key is made here, handed to the page once to be saved on this workstation, and never kept by lite-ui
 		id, err := age.GenerateX25519Identity()
 		if err != nil {
 			return errBody("internal", err.Error()), 500

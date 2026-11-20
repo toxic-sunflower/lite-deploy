@@ -12,7 +12,7 @@ The key gives no shell, no file access and no other commands, even if it leaks. 
 
 ## 1. Make a key for CI
 
-On your computer:
+On your workstation:
 
 ```sh
 ssh-keygen -t ed25519 -N '' -C 'shop-ci' -f shop-ci
@@ -32,7 +32,7 @@ Run `lite project create shop.json …` again. `lite` adds a line to the project
 
 The project user can now log in over SSH only to run those three commands. If you use `lite security allow-users`, project users are added to the allow list automatically.
 
-## 3. Test it from your computer
+## 3. Test it from your workstation
 
 ```sh
 ssh -i shop-ci shop@YOUR_SERVER status

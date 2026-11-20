@@ -86,7 +86,7 @@ if [ "$cmd" = help ]; then usage; exit 0; fi
 os=$(uname -s | tr 'A-Z' 'a-z')
 case $os in
   linux) ;;
-  *) die "liteup installs the server side and needs Linux; on your own computer use lite-ui (curl -fsSL https://lite-deploy.prozorov.me/install-ui.sh | sh, or install-ui.ps1 on Windows)" ;;
+  *) die "liteup installs the server side and needs Linux; on your workstation use lite-ui (curl -fsSL https://lite-deploy.prozorov.me/install-ui.sh | sh, or install-ui.ps1 on Windows)" ;;
 esac
 case $(uname -m) in
   x86_64|amd64)  arch=amd64 ;;

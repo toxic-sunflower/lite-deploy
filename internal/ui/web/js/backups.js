@@ -53,7 +53,7 @@
   <p v-if="error" class="down">{{ error }}</p>\
   <template v-if="st && !st.configured">\
     <div class="card"><h2>Set up backups</h2>\
-      <p>1. Press the button. A key is made on this computer and a file with the private part is saved on it. <b>Keep that file safe and off the server</b>: without it the backups cannot be opened.</p>\
+      <p>1. Press the button. A key is made on this workstation and a file with the private part is saved on it. <b>Keep that file safe and off the server</b>: without it the backups cannot be opened.</p>\
       <label class="check"><input type="checkbox" v-model="encrypt"> Encrypt database copies too (recommended)</label>\
       <p class="help">2. The matching public part is sent to the server, and the server starts making encrypted backups.</p>\
       <button class="primary" @click="setup" :disabled="$root.state.busy">Create my key and turn on backups</button></div>\
@@ -128,7 +128,7 @@
         var self = this;
         LU.run('Making your key…', '/api/backup/keygen', {}, function () { return ''; }).then(function (r) {
           if (!r.ok) return;
-          // the page saves the private part on this computer first: only then is it sent anywhere
+          // the page saves the private part on this workstation first: only then is it sent anywhere
           download('lite-backup.key', '# lite-deploy backup key. Keep it safe and OFF the server.\n# public key: ' + r.data.public + '\n' + r.data.private + '\n');
           if (!confirm('A file “lite-backup.key” was saved to your Downloads. Keep it somewhere safe, off the server: without it backups cannot be opened.\n\nIs the file saved? Press OK to turn on backups.')) { LU.say('err', 'Nothing was turned on. Run it again when the key is saved.'); return; }
           var args = [r.data.public]; if (self.encrypt) args.push('--encrypt-dumps');

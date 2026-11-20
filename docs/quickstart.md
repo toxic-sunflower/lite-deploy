@@ -5,7 +5,7 @@ From a bare Ubuntu server to a running site in one sitting. Every step links to 
 You need:
 
 - a server with Ubuntu 24.04 or newer, and SSH access to it as root (or a user with `sudo`);
-- your public SSH key (`~/.ssh/id_ed25519.pub` on your computer);
+- your public SSH key (`~/.ssh/id_ed25519.pub` on your workstation);
 - a container image of your application in a registry, tagged with the full git commit hash (for example `ghcr.io/you/shop-api:3f2c…`), **or** a built archive (see [A project without containers](process-project.md)).
 
 ## 1. Install

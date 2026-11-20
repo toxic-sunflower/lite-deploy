@@ -1,5 +1,5 @@
 #!/bin/sh
-# install-ui.sh: installs the lite-ui program (the web interface of lite-deploy) on your own computer (Linux, WSL, macOS). No root needed.
+# install-ui.sh: installs the lite-ui program (the web interface of lite-deploy) on your workstation (Linux, WSL, macOS). No root needed.
 #
 #   curl -fsSL https://lite-deploy.prozorov.me/install-ui.sh | sh
 #

@@ -3,6 +3,7 @@ package builtin
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -328,8 +329,14 @@ func TestLoginsBannedUnban(t *testing.T) {
 			t.Errorf("%q must be rejected", bad)
 		}
 	}
-	if len(r.Calls) == 0 || r.Calls[len(r.Calls)-1].Args[2] != "unbanip" {
+	if len(r.Calls) == 0 || r.Calls[len(r.Calls)-1].Args[0] != "unban" {
 		t.Fatalf("%+v", r.Calls)
+	}
+	if _, err := (Security{}).Run(context.Background(), env, "unban", []string{"all"}); err != nil {
+		t.Fatal(err)
+	}
+	if last := r.Calls[len(r.Calls)-1]; strings.Join(last.Args, " ") != "unban --all" {
+		t.Fatalf("%+v", last)
 	}
 }
 
@@ -359,5 +366,66 @@ func TestSSHDEffectiveNormalizesWithoutPassword(t *testing.T) {
 	m, err := sc.sshdEffective()
 	if err != nil || m["permitrootlogin"] != "prohibit-password" {
 		t.Fatalf("%v %v", m, err)
+	}
+}
+
+// A line of a real Caddy access log (a wrong password for a protected path, and an ordinary request): only the first is a
+// failed guess. <HOST> of fail2ban is an address pattern.
+const caddyBad = `{"level":"info","ts":1795166427.15,"logger":"http.log.access.log0","msg":"handled request","request":{"remote_ip":"203.0.113.9","remote_port":"51796","client_ip":"203.0.113.9","proto":"HTTP/1.1","method":"GET","host":"shop.example.com","uri":"/admin","headers":{"Authorization":["REDACTED"]}},"bytes_read":0,"user_id":"","duration":0.2,"size":0,"status":401,"resp_headers":{"Server":["Caddy"],"Www-Authenticate":["Basic realm=\"restricted\""]}}`
+const caddyApp401 = `{"level":"info","msg":"handled request","request":{"remote_ip":"203.0.113.10","uri":"/api/me"},"status":401,"resp_headers":{"Content-Type":["application/json"]}}`
+const caddyOK = `{"level":"info","msg":"handled request","request":{"remote_ip":"203.0.113.11","uri":"/"},"status":200,"resp_headers":{"Content-Type":["text/plain"]}}`
+
+func TestWebFilterCountsOnlyFailedPasswords(t *testing.T) {
+	var fr string
+	for _, l := range strings.Split(webFilter, "\n") {
+		if v, ok := strings.CutPrefix(l, "failregex = "); ok {
+			fr = v
+		}
+	}
+	if fr == "" {
+		t.Fatal("no failregex")
+	}
+	re := regexp.MustCompile(strings.ReplaceAll(fr, "<HOST>", `(\d{1,3}(?:\.\d{1,3}){3}|[0-9a-fA-F:]+)`))
+	if m := re.FindStringSubmatch(caddyBad); m == nil || m[1] != "203.0.113.9" {
+		t.Errorf("a wrong password must be counted for its address: %v", m)
+	}
+	for _, l := range []string{caddyApp401, caddyOK} {
+		if re.MatchString(l) {
+			t.Errorf("must not be counted: %s", l)
+		}
+	}
+}
+
+func TestWebAuthGuardFollowsTheProjects(t *testing.T) {
+	s := newServer()
+	s.f2b = true
+	_ = s.fs.MkdirAll("/etc/lite-deploy/projects", 0o755)
+	_ = s.fs.WriteFile("/etc/lite-deploy/projects/shop.json", []byte(`{"sites":[{"name":"main","fallback_auth":{"users":[]}},{"name":"api"}]}`), 0o644)
+	_ = s.fs.WriteFile("/etc/lite-deploy/projects/blog.json", []byte(`{"sites":[{"name":"web"}]}`), 0o644)
+	sc := newSec(context.Background(), s.env("anna"))
+	if logs := sc.protectedLogs(); len(logs) != 1 || logs[0] != "/var/log/caddy/shop-main.log" {
+		t.Fatalf("only the site with a password is watched: %v", logs)
+	}
+	out, err := Security{}.Run(context.Background(), s.env("anna"), "web-auth", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.Text, "guarded") {
+		t.Errorf("%s", out.Text)
+	}
+	jail, _ := s.fs.ReadFile(webJailFile)
+	if !strings.Contains(string(jail), "logpath = /var/log/caddy/shop-main.log") || !strings.Contains(string(jail), "[lite-caddy-auth]") {
+		t.Errorf("the jail: %s", jail)
+	}
+	if f, _ := s.fs.ReadFile(webFilterFile); !strings.Contains(string(f), "failregex") {
+		t.Errorf("the filter: %s", f)
+	}
+	// the password is removed: the guard goes away
+	_ = s.fs.WriteFile("/etc/lite-deploy/projects/shop.json", []byte(`{"sites":[{"name":"main"}]}`), 0o644)
+	if _, err := (Security{}).Run(context.Background(), s.env("anna"), "web-auth", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.fs.Stat(webJailFile); err == nil {
+		t.Error("the jail must be removed when no site has a password")
 	}
 }

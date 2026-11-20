@@ -66,6 +66,7 @@ Do this on a domain you can afford to touch for a few minutes.
 
 1. **Ingress**, under a domain: “Set a password…”, paths `/admin*`, a login and a password of 12+ characters, **Save**. Expected: the line “When served directly, /admin* asks for a password”. In tunnel mode nothing changes: open the site through Cloudflare, no password question.
 2. Switch the domain to “Directly” (the “Cloudflare is down” case) and open `https://your-domain/admin`. Expected: the browser asks for the login and password; a wrong one is refused; the rest of the site is open. Switch back to the tunnel.
+2b. With the password set, **Overview** (or `lite verify`) says guessing is not guarded: press the button (or `sudo lite security web-auth`). Then from another address (a phone on mobile data) enter a wrong password in the browser 8 times: the 9th answer never comes (the address is banned). **Protection**, “Banned addresses”, **Show who is banned** lists it; **Release this address** lets it in again.
 3. **Ingress**, under a domain: “Close with Cloudflare Access…”. Create an API token in Cloudflare (My Profile, API Tokens) with only “Access: Apps and Policies, Edit”, paste it, give your e-mail, path `/admin*`, **Close it**. Expected: “is now closed”, and in the Cloudflare dashboard (Zero Trust, Access, Applications) an application appears; open the address in a private window: a Cloudflare login page asks for a code sent to your e-mail. This was written against the Cloudflare API description and has not run against a real account: send me the exact error if Cloudflare refuses. “Open it again” removes the application.
 4. If you have a second Cloudflare account, and a project on each: in **Ingress** type a name and its tunnel token, **Add tunnel**. Expected: both tunnels listed as “connected and running”. Then pick the tunnel for each domain (second list in its row), **Apply**: `lite publish PROJECT SITE` on the server shows it, `lite verify` says the tunnel is running. Stop one tunnel (`sudo systemctl stop lite-cloudflared-acme`) and run `lite verify`: the sites on it are reported.
 
@@ -129,6 +130,12 @@ Install `lite-deploy.mcpb` from the Releases page (`lite-ui` must be installed o
 1. **workstation**: `lite-ui --version`, then install an older release if you have one. With a newer release out, **Overview** shows “A new version of Lite Deploy (this page)”; **Update**. Expected: the page reloads by itself and `lite-ui --version` shows the new version. If it does not come back, start `lite-ui` again and send me the text.
 2. **workstation**: `lite-ui service install`, open the printed address, reboot or log out and in, open it again. Expected: the same address works. `lite-ui service status` says it runs; `lite-ui service uninstall` turns it off.
 3. Extension: install `lite-deploy.mcpb` (one file for all systems). Expected: it works with the installed `lite-ui`; after updating `lite-ui` in step 1 you do nothing to the extension.
+
+## 6d. Windows background, WSL and updates
+
+1. **PowerShell**: `lite-ui service install`, open the printed address, log out and in, open it again. `lite-ui service status`; `lite-ui service uninstall`. Expected: no black window stays open.
+2. UI in WSL, Claude Desktop on Windows: install the extension; if `lite-ui` is only in WSL, Claude still answers (it starts it through WSL).
+3. The update of the page checks the project signature: nothing to do, it just works; a tampered release is refused with “the signature of the release is not valid”.
 
 ## 7. Clean-up (only if you want to start over)
 
