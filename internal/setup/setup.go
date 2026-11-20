@@ -476,7 +476,7 @@ var acceptedRe = regexp.MustCompile(`Accepted publickey for ([a-z_][a-z0-9_-]*) 
 
 // waitKeyLogin waits until one of the users logs in with the key, so that password login is closed only after the key
 // is proven to work. It returns false if no login is seen in time; true if one is seen, or if the SSH log cannot be read
-// (then nothing can be verified and the earlier behaviour is kept).
+// (then nothing can be verified and the earlier behavior is kept).
 func (e Env) waitKeyLogin(ctx context.Context, users []string, o Options) bool {
 	sleep, now := e.Sleep, e.Now
 	if sleep == nil {

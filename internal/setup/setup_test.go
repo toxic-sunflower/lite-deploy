@@ -407,6 +407,6 @@ func TestUnreadableSSHLogKeepsOldBehaviour(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := w.fs.Files[SSHDropIn]; !ok {
-		t.Error("when the log cannot be read nothing can be verified: the old behaviour stays")
+		t.Error("when the log cannot be read nothing can be verified: the old behavior stays")
 	}
 }
