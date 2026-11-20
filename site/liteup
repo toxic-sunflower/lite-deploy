@@ -299,6 +299,14 @@ do_everything() {
     /etc/systemd/system/lite-pg-backup.service /etc/systemd/system/lite-pg-backup.timer
   systemctl daemon-reload >/dev/null 2>&1 || true
   sysctl --system >/dev/null 2>&1 || true
+  # A bare server lets root in over SSH with a password: make sure of it, whatever the system defaults are.
+  if command -v sshd >/dev/null 2>&1 && [ -d /etc/ssh/sshd_config.d ]; then
+    eff=$(sshd -T 2>/dev/null | awk '$1=="permitrootlogin"{a=$2} $1=="passwordauthentication"{b=$2} END{print a" "b}')
+    if [ "$eff" != "yes yes" ]; then
+      printf 'PermitRootLogin yes\nPasswordAuthentication yes\n' > /etc/ssh/sshd_config.d/00-bare-server.conf
+      sshd -t >/dev/null 2>&1 || rm -f /etc/ssh/sshd_config.d/00-bare-server.conf
+    fi
+  fi
   if command -v sshd >/dev/null 2>&1 && sshd -t >/dev/null 2>&1; then
     systemctl reload ssh >/dev/null 2>&1 || systemctl reload sshd >/dev/null 2>&1 || true
   fi
