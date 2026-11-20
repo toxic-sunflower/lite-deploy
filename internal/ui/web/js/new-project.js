@@ -27,7 +27,8 @@
   <div v-if="!podman" class="notice warn"><div class="t">Container components need podman, which is not on this server yet. Add it in <b>Server</b> first.</div></div>\
   <div class="row"><div class="grow"><label>Project name (Latin letters, digits and “-”)</label><input type="text" v-model="name" placeholder="shop" autocomplete="off" spellcheck="false"></div>\
     <div class="grow"><label>Description (optional)</label><input type="text" v-model="desc" autocomplete="off"></div></div>\
-  <label class="check"><input type="checkbox" v-model="dbOn"> The project needs a PostgreSQL database</label>\
+  <p v-if="!pgHere" class="help">A database is just a secret: install the program in <b>Packages</b>, then add a secret setting to the component below, for example <code>DATABASE_URL=postgres://user:password@host/name</code>.</p>\
+  <label v-if="pgHere" class="check"><input type="checkbox" v-model="dbOn"> Make a PostgreSQL database for this project on this server</label>\
   <div class="box" v-if="dbOn">\
     <div class="help">The database is created on this server, with its own user and password; the application gets the address in a setting you name below.</div>\
     <details style="margin-top:8px"><summary class="help">Advanced: a database on another server, or another address format</summary>\
@@ -92,6 +93,7 @@
 </div>',
     computed: {
       podman: function () { return LU.present('podman'); },
+      pgHere: function () { return LU.present('pg') || this.dbOn; },
       snapshot: function () { return JSON.stringify([this.name, this.desc, this.dbOn, this.db, this.regOn, this.reg, this.services, this.sites, this.key]); }
     },
     watch: { snapshot: function () { this.hash = ''; } },

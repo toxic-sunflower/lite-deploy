@@ -223,3 +223,7 @@ Taken from the documentation of the projects themselves, 2026-10-29:
 ## D-80 (2026-11-20). No logic on the client
 
 `lite-ui`, the CLI and MCP are thin: every action is one command of the agent or a plugin (`lite PLUGIN COMMAND`), so the page, the terminal and an AI assistant do exactly the same thing. The Cloudflare side of a domain is `lite cloudflare connect` (and `access-*`), run on the server; the Cloudflare API token is read from standard input, used once and never stored. An earlier version had this logic in `lite-ui` (D-79 era) and it was removed. Client-only things stay client-only: updating `lite-ui`, running it in the background, encrypting a secret with the server key.
+
+## D-81 (2026-11-20). A database is a secret
+
+The core does not know databases. The connection to a database (PostgreSQL, MySQL, Redis, anything) is **a secret** of the project, for example `DATABASE_URL`, written in its secret settings like any other. Anyone can install a program on the host with a package and pass its connection as a secret. If a plugin for that kind of database is installed (`pg` today), it only **helps**: it makes the database and the user and puts the ready connection string into the project's secret. There is no list of address formats: whoever needs another notation writes the string. The fixed `database` field of the project description, the database code in `internal/plan` and `connection_format` are left over from the first design and are to be removed (PLAN.md, T22). Until then they still work for existing projects.
