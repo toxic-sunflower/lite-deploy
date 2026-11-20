@@ -94,7 +94,11 @@ func agentServe(args []string, env Env) result {
 	} else {
 		_, _ = fmt.Fprintf(env.Stderr, "the agent journal is unavailable: %v\n", err)
 	}
-	a := &agent.Agent{Version: Version, Audit: audit, Allowed: agent.GroupAllowed(env.FS, *group),
+	limit := 0
+	if cfg, bad := loadConfig(env, "agent.serve"); bad == nil {
+		limit = cfg.Quotas.ApplyPerHour
+	}
+	a := &agent.Agent{Version: Version, Audit: audit, ApplyPerHour: limit, Allowed: agent.GroupAllowed(env.FS, *group),
 		ExecDial: func(ctx context.Context) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", *execSock)
 		}}

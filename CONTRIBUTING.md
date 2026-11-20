@@ -15,7 +15,9 @@
 
 ## The code
 
-`cmd/`, `internal/`, `schemas/` and `testdata/` hold the Go code. Checks before every push:
+`cmd/`, `internal/`, `schemas/` and `testdata/` hold the Go code. Testing a release on a real server: see [TESTING.md](TESTING.md).
+
+Checks before every push:
 
 ```sh
 go vet ./...

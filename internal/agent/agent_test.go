@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
@@ -317,5 +318,29 @@ func TestUninstallRemovesEverythingAndIsRepeatable(t *testing.T) {
 	}
 	if _, ok := m.Files["/var/lib/lite-deploy/secrets/shop/api"]; !ok {
 		t.Error("secrets must not be removed")
+	}
+}
+
+func TestQuotaStopsTooManyChanges(t *testing.T) {
+	var ran []string
+	a, _ := newAgent(t, &ran, true)
+	a.ApplyPerHour = 3
+	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	a.Now = func() time.Time { return now }
+	h := a.Handler()
+	for i := 0; i < 3; i++ {
+		if w := req(h, 1000, "POST", "/v1/rollback", `{"project":"shop"}`); !strings.Contains(w.Body.String(), `"ok":true`) {
+			t.Fatalf("change %d must pass: %s", i+1, w.Body.String())
+		}
+	}
+	if w := req(h, 1000, "POST", "/v1/rollback", `{"project":"shop"}`); !strings.Contains(w.Body.String(), "quota_exceeded") {
+		t.Fatalf("the fourth change in an hour must be refused: %s", w.Body.String())
+	}
+	if w := req(h, 1000, "GET", "/v1/status", ""); !strings.Contains(w.Body.String(), `"ok":true`) {
+		t.Fatalf("reading never counts: %s", w.Body.String())
+	}
+	now = now.Add(61 * time.Minute)
+	if w := req(h, 1000, "POST", "/v1/rollback", `{"project":"shop"}`); !strings.Contains(w.Body.String(), `"ok":true`) {
+		t.Fatalf("after an hour changes are allowed again: %s", w.Body.String())
 	}
 }

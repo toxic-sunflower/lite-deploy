@@ -316,3 +316,14 @@ func TestPGRestoreAsAnotherDatabase(t *testing.T) {
 		}
 	}
 }
+
+func TestHBAWideRules(t *testing.T) {
+	good := "local all postgres peer\nlocal all all peer\nhost all all 127.0.0.1/32 scram-sha-256\nhost all all ::1/128 scram-sha-256\n# host all all 0.0.0.0/0 trust\nhostssl shop shop 10.0.0.5/32 scram-sha-256\n"
+	if w, tr := hbaWideRules(good); len(w) != 0 || len(tr) != 0 {
+		t.Errorf("the usual rules are fine: %v %v", w, tr)
+	}
+	w, tr := hbaWideRules("host all all 10.0.0.0/8 scram-sha-256\nhost shop shop 0.0.0.0/0 trust\n")
+	if len(w) != 1 || len(tr) != 1 {
+		t.Errorf("one wide rule and one trust rule are expected: %v %v", w, tr)
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/firewall"
@@ -41,6 +42,38 @@ type Agent struct {
 	Version string
 	// Timeout of the exchange with the executor; a deploy can take minutes.
 	Timeout time.Duration
+	// ApplyPerHour limits the actions that change the system (0: no limit). It stops a runaway script, or someone who got
+	// hold of an administrator account, from changing the server hundreds of times.
+	ApplyPerHour int
+
+	qmu     sync.Mutex
+	changes []time.Time
+}
+
+// readOnly are the commands that change nothing; they do not count against the quota.
+var readOnly = map[string]bool{"status": true, "info": true, "verify": true, "ingress": true, "project.key": true,
+	"project.preview": true, "firewall.status": true, "update.check": true}
+
+// overQuota records a changing action and reports whether the hourly quota is used up.
+func (a *Agent) overQuota(cmd string) bool {
+	if a.ApplyPerHour <= 0 || readOnly[cmd] {
+		return false
+	}
+	a.qmu.Lock()
+	defer a.qmu.Unlock()
+	now := a.now()
+	keep := a.changes[:0]
+	for _, t := range a.changes {
+		if now.Sub(t) < time.Hour {
+			keep = append(keep, t)
+		}
+	}
+	a.changes = keep
+	if len(a.changes) >= a.ApplyPerHour {
+		return true
+	}
+	a.changes = append(a.changes, now)
+	return false
 }
 
 func (a *Agent) now() time.Time {
@@ -71,6 +104,9 @@ func (a *Agent) audit(name string, uid int, method, path string, status int, res
 
 // exec sends a request to the executor and returns its answer (a JSON envelope).
 func (a *Agent) exec(ctx context.Context, req Request) []byte {
+	if a.overQuota(req.Cmd) {
+		return ErrorJSON(req.Cmd, "quota_exceeded", fmt.Sprintf("too many changes to the server in the last hour (the limit is %d): wait a while, or raise quotas.apply_per_hour in /etc/lite-deploy/config.json", a.ApplyPerHour))
+	}
 	to := a.Timeout
 	if to == 0 {
 		to = 25 * time.Minute

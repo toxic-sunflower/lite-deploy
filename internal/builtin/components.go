@@ -382,6 +382,7 @@ func (PG) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 	}
 	out := []plugin.Finding{finding("pg", "service", plugin.LevelOK, "the PostgreSQL service is running", "")}
 	out = append(out, t.backupFindings()...)
+	out = append(out, t.hbaFindings()...)
 	if la, err := t.psql("show listen_addresses"); err == nil {
 		la = strings.TrimSpace(la)
 		if bindLocalOnly(strings.ReplaceAll(la, ",", " ")) || la == "localhost" {

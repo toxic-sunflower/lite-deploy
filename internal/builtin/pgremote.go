@@ -240,3 +240,65 @@ func (t tools) pgListen(args []string) (plugin.Output, error) {
 	}
 	return textOut("PostgreSQL listens on: " + value + ". Allow access from an address with lite pg allow.\n"), nil
 }
+
+// hbaWideRules finds the rules of pg_hba.conf (outside the block lite manages) that open PostgreSQL wider than the
+// isolation of projects allows: a rule without a password (trust), or a rule for every database and every user from an
+// address that is not this server. The result has one description per rule and whether it is serious (trust).
+func hbaWideRules(text string) (wide []string, trust []string) {
+	for _, l := range strings.Split(text, "\n") {
+		if i := strings.Index(l, "#"); i >= 0 {
+			l = l[:i]
+		}
+		f := strings.Fields(l)
+		if len(f) < 4 {
+			continue
+		}
+		typ := f[0]
+		method := f[len(f)-1]
+		if strings.HasPrefix(method, "trust") || method == "trust" {
+			trust = append(trust, strings.Join(f, " "))
+			continue
+		}
+		if typ != "host" && typ != "hostssl" && typ != "hostnossl" && typ != "hostgssenc" && typ != "hostnogssenc" {
+			continue
+		}
+		if len(f) < 5 {
+			continue
+		}
+		db, user, addr := f[1], f[2], f[3]
+		if !strings.Contains(","+db+",", ",all,") || !strings.Contains(","+user+",", ",all,") {
+			continue
+		}
+		switch addr {
+		case "127.0.0.1/32", "::1/128", "localhost", "127.0.0.1", "::1":
+			continue
+		}
+		wide = append(wide, strings.Join(f, " "))
+	}
+	return wide, trust
+}
+
+// hbaFindings reports the wide rules of pg_hba.conf found outside the lite block.
+func (t tools) hbaFindings() []plugin.Finding {
+	path, err := t.hbaFile()
+	if err != nil {
+		return nil
+	}
+	b, err := t.env.FS.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	outside, _ := hbaSplit(string(b))
+	wide, trust := hbaWideRules(outside)
+	var out []plugin.Finding
+	if len(trust) > 0 {
+		out = append(out, finding("pg", "hba-trust", plugin.LevelFail, "pg_hba.conf lets someone in without a password: "+trust[0], "remove the rule with method trust from "+path))
+	}
+	if len(wide) > 0 {
+		out = append(out, finding("pg", "hba-wide", plugin.LevelWarn, "pg_hba.conf lets other addresses reach every database as every user: "+wide[0]+". One project could reach the data of another.", "narrow the rule in "+path+" to one database and one user"))
+	}
+	if len(out) == 0 {
+		out = append(out, finding("pg", "hba", plugin.LevelOK, "the PostgreSQL access rules keep projects apart", ""))
+	}
+	return out
+}
