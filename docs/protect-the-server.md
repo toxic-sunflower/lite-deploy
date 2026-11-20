@@ -39,6 +39,12 @@ A few related commands:
 
 **Before** you close password login on a server that was not set up by `lite init`: open a second terminal and prove that your key login works.
 
+## Confirm dangerous changes with your key
+
+By default anyone with an administrator account on the server can change it. In the interface, **Protection**, “Confirm with my key”, press **Turn on**. Your computer makes a key pair (the private part never leaves it) and registers the public part on the server. From then on the changes to the server (opening ports, SSH settings, backups, publishing, installing programs) only work from the interface on that computer, because each one is signed with the key. Someone who got hold of an administrator account on the server does not have the key and cannot make them. Deploying and rolling back stay open so that CI keeps working, and reading is never blocked.
+
+While this is on, such commands typed in a terminal on the server are refused. If you lose the computer, someone with root on the server deletes `/etc/lite-deploy/owner-keys` and the protection is off.
+
 ## The firewall
 
 ```sh

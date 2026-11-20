@@ -219,6 +219,8 @@ func dispatch(args []string, env Env) result {
 		return cmdMigrate(env)
 	case "call-stream":
 		return cmdCallStream(env)
+	case "owner":
+		return cmdOwner(args[1:], env)
 	case "ssh-key":
 		return cmdSSHKey(args[1:], env)
 	case "gate":

@@ -484,3 +484,54 @@ func TestFailedLoginOnTheStreamStopsAllAttempts(t *testing.T) {
 		t.Fatalf("one failed login must stop all attempts: starts %d, ssh calls %d", f.starts, len(r.Calls))
 	}
 }
+
+func TestPostsAreSignedWhenTheServerAsksForTheOwnerKey(t *testing.T) {
+	dir := t.TempDir()
+	var calls [][]string
+	var pubID string
+	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		calls = append(calls, c.Args)
+		path := ""
+		for i, a := range c.Args {
+			if a == "call" && i+2 < len(c.Args) {
+				path = c.Args[i+2]
+			}
+		}
+		switch path {
+		case "/v1/owner":
+			return host.Result{Stdout: []byte(`{"ok":true,"data":{"required":true,"keys":[{"id":"` + pubID + `"}]}}`)}, nil
+		case "/v1/project/key":
+			return host.Result{Stdout: []byte(`{"ok":true,"data":{"public_key":"age1server"}}`)}, nil
+		}
+		return host.Result{Stdout: []byte(`{"ok":true,"data":{}}`)}, nil
+	}}
+	s := &Server{Runner: r, Host: "anna@203.0.113.7", Token: tok, OwnerKeyPath: dir + "/owner.key"}
+	priv, err := s.createOwnerKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubID = ownerKeyID(priv)
+	h := s.Handler()
+	if w := do(h, "POST", "/api/deploy", `{"project":"shop","sha":"`+sha+`"}`, tok); w.Code != 200 {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	last := calls[len(calls)-1]
+	hasSig := false
+	for _, a := range last {
+		hasSig = hasSig || a == "--sig"
+	}
+	if !hasSig {
+		t.Fatalf("a changing request must be signed when the server asks for the owner key: %v", last)
+	}
+	// reading is never signed
+	calls = nil
+	s.forgetOwner("anna@203.0.113.7")
+	do(h, "GET", "/api/status", "", tok)
+	for _, c := range calls {
+		for _, a := range c {
+			if a == "--sig" {
+				t.Fatalf("a read must not be signed: %v", c)
+			}
+		}
+	}
+}

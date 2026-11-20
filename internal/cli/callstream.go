@@ -46,6 +46,7 @@ func cmdCallStream(env Env) result {
 				Method string          `json:"method"`
 				Path   string          `json:"path"`
 				Body   json.RawMessage `json:"body"`
+				Sig    string          `json:"sig"`
 			}
 			if json.Unmarshal(line, &req) != nil || (req.Method != "GET" && req.Method != "POST") || !strings.HasPrefix(req.Path, "/v1/") {
 				write(map[string]any{"id": req.ID, "error": "invalid request"})
@@ -57,8 +58,13 @@ func cmdCallStream(env Env) result {
 					var body []byte
 					if req.Method == "POST" {
 						body = req.Body
+						// a signed request carries its body as a string, so that the bytes that were signed arrive unchanged
+						var text string
+						if len(body) > 0 && body[0] == '"' && json.Unmarshal(body, &text) == nil {
+							body = []byte(text)
+						}
 					}
-					out, cerr := agent.Call(context.Background(), sock, req.Method, req.Path, body)
+					out, cerr := agent.CallSigned(context.Background(), sock, req.Method, req.Path, body, req.Sig)
 					out = bytes.TrimSpace(out)
 					if cerr != nil || len(out) == 0 || out[0] != '{' {
 						msg := "the agent returned something that is not JSON"

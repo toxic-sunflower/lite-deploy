@@ -120,7 +120,7 @@ func (c *streamConn) alive() bool {
 }
 
 // do sends one request and waits for its answer.
-func (c *streamConn) do(ctx context.Context, method, path string, body []byte) ([]byte, bool) {
+func (c *streamConn) do(ctx context.Context, method, path string, body []byte, sig string) ([]byte, bool) {
 	c.mu.Lock()
 	if c.dead {
 		c.mu.Unlock()
@@ -132,7 +132,10 @@ func (c *streamConn) do(ctx context.Context, method, path string, body []byte) (
 	c.pending[id] = ch
 	c.mu.Unlock()
 	req := map[string]any{"id": id, "method": method, "path": path}
-	if len(body) > 0 {
+	if sig != "" {
+		// a signed request carries its body as a string, so the signed bytes reach the agent unchanged
+		req["body"], req["sig"] = string(body), sig
+	} else if len(body) > 0 {
 		req["body"] = json.RawMessage(body)
 	}
 	b, _ := json.Marshal(req)
@@ -155,7 +158,7 @@ func (c *streamConn) do(ctx context.Context, method, path string, body []byte) (
 }
 
 // viaStream sends the request through the shared connection. handled=false means: use one ssh per request instead.
-func (s *Server) viaStream(ctx context.Context, target string, st *sshState, method, path string, body []byte) ([]byte, bool) {
+func (s *Server) viaStream(ctx context.Context, target string, st *sshState, method, path string, body []byte, sig string) ([]byte, bool) {
 	st.open.Lock()
 	if st.noStream {
 		st.open.Unlock()
@@ -186,7 +189,7 @@ func (s *Server) viaStream(ctx context.Context, target string, st *sshState, met
 		}
 	}
 	st.open.Unlock()
-	return c.do(ctx, method, path, body)
+	return c.do(ctx, method, path, body, sig)
 }
 
 func friendlySSH(msg, target string) string {

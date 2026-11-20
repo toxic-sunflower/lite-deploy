@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/toxic-sunflower/lite-deploy/internal/owner"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -342,5 +343,53 @@ func TestQuotaStopsTooManyChanges(t *testing.T) {
 	now = now.Add(61 * time.Minute)
 	if w := req(h, 1000, "POST", "/v1/rollback", `{"project":"shop"}`); !strings.Contains(w.Body.String(), `"ok":true`) {
 		t.Fatalf("after an hour changes are allowed again: %s", w.Body.String())
+	}
+}
+
+func TestOwnerKeyProtectsDangerousActions(t *testing.T) {
+	var ran []string
+	a, _ := newAgent(t, &ran, true)
+	mem := host.NewMemFS()
+	a.FS, a.KeysPath = mem, "/etc/lite-deploy/owner-keys"
+	a.serverID = "age1testserver"
+	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	a.Now = func() time.Time { return now }
+	h := a.Handler()
+
+	body := `{"port":8080,"proto":"tcp","from":""}`
+	// no key registered: nothing is required
+	if w := req(h, 1000, "POST", "/v1/firewall/allow", body); !strings.Contains(w.Body.String(), `"ok":true`) {
+		t.Fatalf("without a registered key a change is allowed: %s", w.Body.String())
+	}
+	pub, priv, _ := owner.GenerateKey()
+	_ = mem.MkdirAll("/etc/lite-deploy", 0o755)
+	_ = mem.WriteFile(a.KeysPath, []byte(owner.Line(pub, "laptop")+"\n"), 0o644)
+
+	if w := req(h, 1000, "POST", "/v1/firewall/allow", body); w.Code != 403 || !strings.Contains(w.Body.String(), "owner_confirmation_required") {
+		t.Fatalf("a dangerous action without a signature must be refused: %d %s", w.Code, w.Body.String())
+	}
+	// reading and deploying stay open (CI deploys with a restricted key)
+	for _, c := range []struct{ m, p, b string }{{"GET", "/v1/status", ""}, {"GET", "/v1/verify", ""}, {"POST", "/v1/rollback", `{"project":"shop"}`}} {
+		if w := req(h, 1000, c.m, c.p, c.b); !strings.Contains(w.Body.String(), `"ok":true`) {
+			t.Fatalf("%s %s must stay open: %s", c.m, c.p, w.Body.String())
+		}
+	}
+	sig, _ := owner.Sign(priv, "age1testserver", "POST", "/v1/firewall/allow", []byte(body), now)
+	r := httptest.NewRequest("POST", "/v1/firewall/allow", strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Lite-Sig", sig)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r.WithContext(WithUID(r.Context(), 1000)))
+	if !strings.Contains(w.Body.String(), `"ok":true`) {
+		t.Fatalf("a signed action must pass: %d %s", w.Code, w.Body.String())
+	}
+	// the same signature cannot be used again
+	r2 := httptest.NewRequest("POST", "/v1/firewall/allow", strings.NewReader(body))
+	r2.Header.Set("Content-Type", "application/json")
+	r2.Header.Set("X-Lite-Sig", sig)
+	w2 := httptest.NewRecorder()
+	h.ServeHTTP(w2, r2.WithContext(WithUID(r2.Context(), 1000)))
+	if w2.Code != 403 {
+		t.Fatalf("a replayed signature must be refused: %d %s", w2.Code, w2.Body.String())
 	}
 }

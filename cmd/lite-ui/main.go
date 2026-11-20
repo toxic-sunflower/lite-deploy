@@ -59,7 +59,7 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 		return 1
 	}
 	runner := host.ExecRunner{}
-	srv := &ui.Server{Runner: runner, Servers: list, Token: hex.EncodeToString(raw), SSHOptions: sshSharing(), Streamer: runner}
+	srv := &ui.Server{Runner: runner, Servers: list, Token: hex.EncodeToString(raw), SSHOptions: sshSharing(), Streamer: runner, OwnerKeyPath: ownerKeyPath()}
 	if err := srv.Validate(); err != nil {
 		_, _ = fmt.Fprintln(errw, "ERROR:", err)
 		return 2
@@ -123,4 +123,13 @@ func sshSharing() []string {
 		return nil
 	}
 	return []string{"-o", "ControlMaster=auto", "-o", "ControlPath=" + filepath.Join(dir, "%C"), "-o", "ControlPersist=120"}
+}
+
+// ownerKeyPath is where the key that confirms dangerous actions is kept (next to the list of servers).
+func ownerKeyPath() string {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "lite-ui", "owner.key")
 }

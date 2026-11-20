@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/toxic-sunflower/lite-deploy/internal/firewall"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
+	"github.com/toxic-sunflower/lite-deploy/internal/owner"
 )
 
 type ctxKey struct{}
@@ -45,9 +47,115 @@ type Agent struct {
 	// ApplyPerHour limits the actions that change the system (0: no limit). It stops a runaway script, or someone who got
 	// hold of an administrator account, from changing the server hundreds of times.
 	ApplyPerHour int
+	// FS and KeysPath: where the registered owner keys are (public, readable). With at least one key registered, the
+	// actions that change the server must be signed by it (package owner).
+	FS       host.FS
+	KeysPath string
 
-	qmu     sync.Mutex
-	changes []time.Time
+	qmu      sync.Mutex
+	changes  []time.Time
+	verifier owner.Verifier
+	omu      sync.Mutex
+	serverID string
+	confirm  map[string]bool
+	confirmT time.Time
+}
+
+// ownerKeys returns the registered owner keys.
+func (a *Agent) ownerKeys() []owner.Key {
+	if a.FS == nil {
+		return nil
+	}
+	p := a.KeysPath
+	if p == "" {
+		p = owner.KeysFile
+	}
+	b, err := a.FS.ReadFile(p)
+	if err != nil {
+		return nil
+	}
+	return owner.ParseKeys(string(b))
+}
+
+// pluginConfirm tells which plugin commands change the system (they need confirmation), from what the executor reports.
+func (a *Agent) pluginConfirm(ctx context.Context) map[string]bool {
+	a.omu.Lock()
+	defer a.omu.Unlock()
+	if a.confirm != nil && a.now().Sub(a.confirmT) < 10*time.Minute {
+		return a.confirm
+	}
+	var env struct {
+		Data struct {
+			Plugins []struct {
+				Name     string `json:"name"`
+				Commands []struct {
+					Name    string `json:"name"`
+					Confirm bool   `json:"confirm"`
+				} `json:"commands"`
+			} `json:"plugins"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(a.exec(ctx, Request{Cmd: "info"}), &env) != nil || len(env.Data.Plugins) == 0 {
+		return nil
+	}
+	m := map[string]bool{}
+	for _, p := range env.Data.Plugins {
+		for _, c := range p.Commands {
+			m[p.Name+"/"+c.Name] = c.Confirm
+		}
+	}
+	a.confirm, a.confirmT = m, a.now()
+	return m
+}
+
+// ServerID is the public key of the executor: it ties a signature to this server.
+func (a *Agent) ServerID(ctx context.Context) string {
+	a.omu.Lock()
+	defer a.omu.Unlock()
+	if a.serverID != "" {
+		return a.serverID
+	}
+	var env struct {
+		Data struct {
+			PublicKey string `json:"public_key"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(a.exec(ctx, Request{Cmd: "project.key"}), &env) == nil {
+		a.serverID = env.Data.PublicKey
+	}
+	return a.serverID
+}
+
+// dangerous tells whether the request changes the server and so must be signed once an owner key is registered.
+// Deploys and rollbacks stay open: CI does them with a restricted key, and they only move between versions.
+func (a *Agent) dangerous(ctx context.Context, req Request) bool {
+	switch {
+	case readOnly[req.Cmd], req.Cmd == "deploy", req.Cmd == "rollback":
+		return false
+	case req.Cmd == "plugin.run" && len(req.Args) >= 2:
+		if m := a.pluginConfirm(ctx); m != nil {
+			if confirm, known := m[req.Args[0]+"/"+req.Args[1]]; known {
+				return confirm
+			}
+		}
+	}
+	return true
+}
+
+// guardOwner returns an error text if the request needs the owner's signature and does not have a valid one.
+func (a *Agent) guardOwner(ctx context.Context, r *http.Request, req Request, body []byte) string {
+	keys := a.ownerKeys()
+	if len(keys) == 0 || !a.dangerous(ctx, req) {
+		return ""
+	}
+	sid := a.ServerID(ctx)
+	if sid == "" {
+		return "the server could not be identified to check your confirmation"
+	}
+	if err := a.verifier.Verify(keys, sid, r.Method, r.URL.Path, body, r.Header.Get("X-Lite-Sig"), a.now()); err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 // readOnly are the commands that change nothing; they do not count against the quota.
@@ -173,9 +281,16 @@ func (a *Agent) Handler() http.Handler {
 			case r.Method != method:
 				status, body = 405, ErrorJSON("api", "usage", "method not allowed")
 			default:
+				var in []byte
+				if r.Method == http.MethodPost && r.Body != nil {
+					in, _ = io.ReadAll(io.LimitReader(r.Body, 2*MaxBody+MaxRequest))
+					r.Body = io.NopCloser(bytes.NewReader(in))
+				}
 				req, valid := build(r)
 				if !valid {
 					status, body = 400, ErrorJSON("api", "usage", "invalid request")
+				} else if why := a.guardOwner(r.Context(), r, req, in); why != "" {
+					status, body = 403, ErrorJSON(req.Cmd, "owner_confirmation_required", why)
 				} else {
 					req.Caller = name
 					body = a.exec(r.Context(), req)
@@ -246,6 +361,21 @@ func (a *Agent) Handler() http.Handler {
 		}
 		return Request{Cmd: "publish", Args: []string{in.Project, in.Site, in.Mode}}, true
 	})
+	route(http.MethodPost, "/v1/owner/add", func(r *http.Request) (Request, bool) {
+		var in struct{ Pub, Label string }
+		if !readJSON(r, &in) {
+			return Request{}, false
+		}
+		return Request{Cmd: "owner.add", Args: []string{in.Pub, in.Label}}, true
+	})
+	route(http.MethodPost, "/v1/owner/remove", func(r *http.Request) (Request, bool) {
+		var in struct{ ID string }
+		if !readJSON(r, &in) {
+			return Request{}, false
+		}
+		return Request{Cmd: "owner.remove", Args: []string{in.ID}}, true
+	})
+	route(http.MethodGet, "/v1/owner", func(*http.Request) (Request, bool) { return Request{Cmd: "owner.list"}, true })
 	route(http.MethodGet, "/v1/verify", func(*http.Request) (Request, bool) { return Request{Cmd: "verify"}, true })
 	route(http.MethodPost, "/v1/plugin", func(r *http.Request) (Request, bool) {
 		var in struct {
@@ -361,6 +491,11 @@ func GroupAllowed(fs host.FS, group string) func(uid int) (string, bool) {
 
 // Call sends a request to the agent over a unix socket and returns the response body.
 func Call(ctx context.Context, sock, method, path string, body []byte) ([]byte, error) {
+	return CallSigned(ctx, sock, method, path, body, "")
+}
+
+// CallSigned is Call with the owner's signature (the value of the X-Lite-Sig header; empty: none).
+func CallSigned(ctx context.Context, sock, method, path string, body []byte, sig string) ([]byte, error) {
 	tr := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", sock)
 	}}
@@ -371,6 +506,9 @@ func Call(ctx context.Context, sock, method, path string, body []byte) ([]byte, 
 	}
 	if len(body) > 0 {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if sig != "" {
+		req.Header.Set("X-Lite-Sig", sig)
 	}
 	resp, err := (&http.Client{Transport: tr, Timeout: 30 * time.Minute}).Do(req)
 	if err != nil {

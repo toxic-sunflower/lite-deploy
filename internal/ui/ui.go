@@ -53,9 +53,12 @@ type Server struct {
 	SSHOptions []string
 	// Streamer starts the one long-lived ssh connection that carries all requests; nil: one ssh per request.
 	Streamer host.Starter
+	// OwnerKeyPath is where the private key that confirms dangerous actions is kept on this computer (empty: not used).
+	OwnerKeyPath string
 
-	mu  sync.Mutex
-	ssh map[string]*sshState
+	mu     sync.Mutex
+	ssh    map[string]*sshState
+	owners map[string]ownerInfo
 }
 
 // sshState remembers how connecting to one server is going. Until a connection has worked, requests go one at a time,
@@ -212,12 +215,16 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 			return errBody("unknown_server", "this server is not in your list: choose another or add it")
 		}
 	}
+	sig := ""
+	if target != "" {
+		sig = s.signFor(ctx, target, method, path, in)
+	}
 	var st *sshState
 	held := false
 	if target != "" {
 		st = s.state(target)
 		if s.Streamer != nil {
-			if out, handled := s.viaStream(ctx, target, st, method, path, in); handled {
+			if out, handled := s.viaStream(ctx, target, st, method, path, in, sig); handled {
 				return out
 			}
 		}
@@ -238,6 +245,9 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 	if target != "" {
 		args := append([]string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=10"}, s.SSHOptions...)
 		args = append(args, target, "lite-deploy", "call", method, path)
+		if sig != "" {
+			args = append(args, "--sig", sig)
+		}
 		cmd = host.Cmd{Name: "ssh", Args: args}
 	} else {
 		bin := s.Bin
@@ -358,6 +368,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		return s.call(r.Context(), "POST", "/v1/publish", map[string]string{"project": in.Project, "site": in.Site, "mode": in.Mode}), 200
 	}))
+	s.ownerRoutes(mux)
 	mux.HandleFunc("/api/status", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		return s.call(r.Context(), "GET", "/v1/status", nil), 200
 	}))

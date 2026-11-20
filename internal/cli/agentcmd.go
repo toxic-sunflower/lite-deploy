@@ -98,7 +98,7 @@ func agentServe(args []string, env Env) result {
 	if cfg, bad := loadConfig(env, "agent.serve"); bad == nil {
 		limit = cfg.Quotas.ApplyPerHour
 	}
-	a := &agent.Agent{Version: Version, Audit: audit, ApplyPerHour: limit, Allowed: agent.GroupAllowed(env.FS, *group),
+	a := &agent.Agent{Version: Version, Audit: audit, ApplyPerHour: limit, FS: env.FS, Allowed: agent.GroupAllowed(env.FS, *group),
 		ExecDial: func(ctx context.Context) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", *execSock)
 		}}
@@ -130,6 +130,7 @@ func cmdExec(env Env) result {
 // cmdCall is the agent client: lite-deploy call GET|POST /v1/path (the POST body on standard input). The agent answer is printed as is.
 func cmdCall(args []string, env Env) result {
 	fs := flag.NewFlagSet("call", flag.ContinueOnError)
+	sig := fs.String("sig", "", "")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 2 || (pos[0] != "GET" && pos[0] != "POST") || !strings.HasPrefix(pos[1], "/v1/") {
 		return fail("call", CodeUsage, "usage: lite-deploy call GET|POST /v1/path (the POST body is read from standard input)")
@@ -145,7 +146,7 @@ func cmdCall(args []string, env Env) result {
 	if env.Getenv != nil && env.Getenv("LITE_DEPLOY_SOCK") != "" {
 		sock = env.Getenv("LITE_DEPLOY_SOCK")
 	}
-	out, err := agent.Call(context.Background(), sock, pos[0], pos[1], body)
+	out, err := agent.CallSigned(context.Background(), sock, pos[0], pos[1], body, *sig)
 	if err != nil {
 		return result{command: "call", err: &ErrorBody{Code: "precondition_failed", Message: err.Error(),
 			Hint: "the agent is installed by liteup: curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh; the user must be a system administrator (sudo or wheel)"}}

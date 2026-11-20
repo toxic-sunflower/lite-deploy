@@ -4,6 +4,7 @@
 package agent
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,6 +28,7 @@ const (
 var (
 	projectRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,30}$`)
 	siteRe    = regexp.MustCompile(`^[a-z][a-z0-9-]{0,15}$`)
+	keyIDRe   = regexp.MustCompile(`^[0-9a-f]{12}$`)
 	shaRe     = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	specRe    = regexp.MustCompile(`^([0-9]{1,5})/(tcp|udp)$`)
 	userRe    = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
@@ -127,6 +129,30 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, err
 		}
 		return []string{"update", "--yes"}, nil
+	case "owner.list":
+		if err := need(0); err != nil {
+			return nil, err
+		}
+		return []string{"owner", "list"}, nil
+	case "owner.add": // arguments: the public key (base64, 32 bytes), a label
+		if err := need(2); err != nil {
+			return nil, err
+		}
+		if raw, err := base64.StdEncoding.DecodeString(a[0]); err != nil || len(raw) != 32 {
+			return nil, errors.New("owner.add: a public key of 32 bytes in base64 is required")
+		}
+		if len(a[1]) > 40 || strings.ContainsAny(a[1], "\n\r") {
+			return nil, errors.New("owner.add: the label is at most 40 characters")
+		}
+		return []string{"owner", "add", a[0], a[1]}, nil
+	case "owner.remove":
+		if err := need(1); err != nil {
+			return nil, err
+		}
+		if !keyIDRe.MatchString(a[0]) {
+			return nil, errors.New("owner.remove: invalid key id")
+		}
+		return []string{"owner", "remove", a[0]}, nil
 	case "project.key":
 		if err := need(0); err != nil {
 			return nil, err

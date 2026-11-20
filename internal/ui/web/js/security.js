@@ -1,7 +1,7 @@
 (function () {
   LU.components.Security = {
     data: function () {
-      return { verify: null, fw: null, fwErr: '', port: '', proto: 'tcp', from: '', error: '' };
+      return { verify: null, fw: null, fwErr: '', port: '', proto: 'tcp', from: '', error: '', own: null };
     },
     template: '\
 <div>\
@@ -17,6 +17,19 @@
       <td>{{ f.message }}<div class="help" v-if="f.fix && f.level !== \'ok\'">{{ f.fix }}</div></td></tr>\
   </table>\
   <div class="notice" v-if="verify"><div class="t">{{ nextText }}</div></div>\
+  <h3>Confirm with my key</h3>\
+  <div class="card" v-if="own">\
+    <div v-if="!own.supported" class="muted">This server is older and cannot do this yet. Update lite on the server first.</div>\
+    <template v-else>\
+      <div v-if="own.required && own.registered"><b>On.</b> Changes to the server (ports, SSH, backups, publishing…) only work from this computer, which holds your key. Deploying and rolling back are not affected.</div>\
+      <div v-else-if="own.required" class="warntxt">This server asks for a key, but this computer does not have it. Changes work only from the computer that was paired.</div>\
+      <div v-else><b>Off.</b> Anyone who gets an administrator account on the server could change it. Turn this on and the changes will only work from this computer.</div>\
+      <div class="row" style="margin-top:10px">\
+        <button v-if="!own.required" class="primary" @click="pair" :disabled="$root.state.busy">Turn on</button>\
+        <button v-if="own.required && own.registered" @click="unpair" :disabled="$root.state.busy">Turn off</button></div>\
+      <div class="help" style="margin-top:8px">Commands typed in a terminal on the server for such changes are refused while this is on. If this computer is lost, a person with root on the server removes <code>/etc/lite-deploy/owner-keys</code>.</div>\
+    </template>\
+  </div>\
   <h3>Open ports</h3>\
   <p v-if="fwErr" class="down">{{ fwErr }}</p>\
   <div class="card" v-if="fw">\
@@ -53,6 +66,20 @@
         if (!confirm('Apply the safe fixes? The firewall, users and keys are not touched.')) return;
         LU.run('Fixing…', '/api/fix', {}, function (d) { return d.applied.length ? 'Done: ' + d.applied.join('; ') : 'Nothing to fix automatically.'; }).then(function () { self.check(); });
       },
+      loadOwner: function () {
+        var self = this;
+        LU.api('/api/owner').then(function (r) { self.own = r.ok ? r.data : null; });
+      },
+      pair: function () {
+        var self = this;
+        if (!confirm('Turn this on? From now on changes to the server only work from this computer. Terminal commands on the server for such changes will be refused.')) return;
+        LU.run('Registering your key…', '/api/owner/pair', { label: 'my computer' }, function () { return 'Done. Changes to the server now need this computer.'; }).then(function () { self.loadOwner(); });
+      },
+      unpair: function () {
+        var self = this;
+        if (!confirm('Turn this off? Changes to the server will no longer need your key.')) return;
+        LU.run('Removing…', '/api/owner/unpair', {}, function () { return 'Done. Changes no longer need your key.'; }).then(function () { self.loadOwner(); });
+      },
       loadFw: function () {
         var self = this; self.fwErr = '';
         LU.api('/api/firewall').then(function (r) {
@@ -77,6 +104,6 @@
         LU.run('Closing…', '/api/firewall/remove', { port: r.port, proto: r.proto, from: r.from === 'any' ? '' : r.from, action: r.action }, function () { return 'Port ' + r.port + ' is closed.'; }).then(function () { self.loadFw(); });
       }
     },
-    mounted: function () { this.check(); this.loadFw(); }
+    mounted: function () { this.check(); this.loadFw(); this.loadOwner(); }
   };
 })();
