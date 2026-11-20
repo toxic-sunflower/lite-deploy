@@ -242,7 +242,7 @@ protected. You work in a clear web page on your workstation; the terminal stays 
 {card("backup", "Backups you control", "Per project: settings, secrets, database, files. Encrypted with a key you keep, copied to Backblaze, S3 or another server.")}
 {card("database", "Databases and secrets", "PostgreSQL on the server or on another one. Secrets are encrypted on your workstation and never shown again; share one between projects.")}
 {card("settings", "A server as a file", "Save a server as a small file, or write one, and set up the next server exactly the same way.")}
-{card("sparkles", "Works with AI assistants", "Let Claude read your servers and deploy with your approval, through a ready extension for Claude Desktop.")}
+{card("sparkles", "Works with AI assistants", "Let Claude read your servers and deploy with your approval, through a ready extension for Claude Desktop. <a href='ai-assistants.html'>Get the extension →</a>")}
 {card("server", "Made for one server", "Not a platform to run. A few programs you already know on one Linux machine, looked after for you.")}
 </div>
 
