@@ -10,6 +10,7 @@
     settings: 'M4 6h16 M4 12h16 M4 18h16 M8 4v4 M16 10v4 M8 16v4',
     server: 'M3 4h18v6H3z M3 14h18v6H3z M7 7v.01 M7 17v.01',
     plus: 'M12 5v14 M5 12h14',
+    box: 'M21 8l-9-5l-9 5v8l9 5l9-5z M3 8l9 5l9-5 M12 13v8',
     lock: 'M5 11h14v10H5z M8 11V7a4 4 0 0 1 8 0v4',
     refresh: 'M20 11a8 8 0 1 0-2 5.5 M20 4v7h-7',
     alert: 'M12 3l10 18H2z M12 10v4 M12 17v.01',

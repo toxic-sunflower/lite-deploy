@@ -195,3 +195,27 @@ func TestDockerIsForbidden(t *testing.T) {
 		t.Error("extra packages fell under the ban")
 	}
 }
+
+func TestSearchApt(t *testing.T) {
+	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		if c.Name == "apt-cache" {
+			return host.Result{Stdout: []byte("redis-server - Persistent key-value database\nredis-tools - Persistent key-value database (client)\nnot a line\n")}, nil
+		}
+		return host.Result{}, nil
+	}}
+	m := &Manager{Runner: r, FS: host.NewMemFS()}
+	found, err := m.Search(context.Background(), "redis")
+	if err != nil || len(found) != 2 || found[0].Name != "redis-server" || !strings.Contains(found[0].Summary, "key-value") {
+		t.Fatalf("%+v %v", found, err)
+	}
+	for _, bad := range []string{"", "a", "x; rm -rf /", "--help"} {
+		if _, err := m.Search(context.Background(), bad); err == nil {
+			t.Errorf("%q must be refused", bad)
+		}
+	}
+	for _, c := range r.Calls {
+		if c.Name == "apt-cache" && c.Args[1] != "--" {
+			t.Errorf("the query must come after --: %v", c.Args)
+		}
+	}
+}

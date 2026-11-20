@@ -371,3 +371,59 @@ func (m *Manager) Remove(ctx context.Context, names ...string) error {
 	}
 	return m.saveJournal(keep)
 }
+
+// Found is one result of a search.
+type Found struct {
+	Name    string `json:"name"`
+	Summary string `json:"summary"`
+}
+
+var searchRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 .+_-]{1,60}$`)
+
+// Search looks for packages by name or description (at most 30 answers). It reads only, nothing is changed.
+func (m *Manager) Search(ctx context.Context, query string) ([]Found, error) {
+	query = strings.TrimSpace(query)
+	if !searchRe.MatchString(query) {
+		return nil, fail("usage", "search for 2 to 60 letters, digits, spaces, dots, dashes")
+	}
+	mgr, err := m.Detect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var c host.Cmd
+	switch mgr {
+	case "apt":
+		c = host.Cmd{Name: "apt-cache", Args: []string{"search", "--", query}}
+	case "dnf":
+		c = host.Cmd{Name: "dnf", Args: []string{"-q", "search", "--", query}}
+	default:
+		return nil, fail("precondition_failed", "search is not available for %s yet: type the package name", mgr)
+	}
+	res, err := m.Runner.Run(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	if res.ExitCode != 0 {
+		return []Found{}, nil
+	}
+	out := []Found{}
+	for _, line := range strings.Split(string(res.Stdout), "\n") {
+		var name, sum string
+		switch mgr {
+		case "apt":
+			name, sum, _ = strings.Cut(line, " - ")
+		default:
+			name, sum, _ = strings.Cut(line, " : ")
+			name, _, _ = strings.Cut(name, ".") // drop the architecture: tool.x86_64
+		}
+		name, sum = strings.TrimSpace(name), strings.TrimSpace(sum)
+		if !nameRe.MatchString(name) || strings.HasPrefix(line, "=") {
+			continue
+		}
+		out = append(out, Found{Name: name, Summary: sum})
+		if len(out) == 30 {
+			break
+		}
+	}
+	return out, nil
+}

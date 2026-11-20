@@ -8,6 +8,7 @@
     { id: 'databases', title: 'Databases', icon: 'database', plugin: 'pg', comp: 'databases' },
     { id: 'backups', title: 'Backups', icon: 'backup', plugin: 'backup', comp: 'backups' },
     { id: 'security', title: 'Protection', icon: 'shield', comp: 'security' },
+    { id: 'packages', title: 'Packages', icon: 'box', plugin: 'package', comp: 'packages' },
     { id: 'server', title: 'Server', icon: 'settings', comp: 'server' }
   ];
 
@@ -74,6 +75,7 @@
   app.component('projects', C.Projects);
   app.component('ingress', C.Ingress);
   app.component('shared-secrets', C.SharedSecrets);
+  app.component('packages', C.Packages);
   app.component('databases', C.Databases);
   app.component('backups', C.Backups);
   app.component('store-form', C.StoreForm);

@@ -23,6 +23,7 @@ func (Pkg) Description() string {
 func (Pkg) Commands() []plugin.Command {
 	return []plugin.Command{
 		{Name: "list", Help: "packages installed through lite"},
+		{Name: "search", Help: "find packages by name or description (reads only)", Args: "WORDS"},
 		{Name: "check", Help: "whether a package is installed and its version", Args: "PACKAGE"},
 		{Name: "install", Help: "install packages", Args: "PACKAGE…", Confirm: true},
 		{Name: "update", Help: "update packages", Args: "PACKAGE…", Confirm: true},
@@ -64,6 +65,22 @@ func (Pkg) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (
 			fmt.Fprintf(&sb, "%-30s %-20s %s\n", e.Name, e.Version, e.InstalledAt)
 		}
 		return plugin.Output{Text: sb.String(), Data: map[string]any{"packages": es}}, nil
+	case "search":
+		if len(args) == 0 {
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite package search WORDS")
+		}
+		found, err := m.Search(ctx, strings.Join(args, " "))
+		if err != nil {
+			return plugin.Output{}, pkgErr(err)
+		}
+		var sb strings.Builder
+		for _, f := range found {
+			fmt.Fprintf(&sb, "%-30s %s\n", f.Name, f.Summary)
+		}
+		if len(found) == 0 {
+			sb.WriteString("Nothing found.\n")
+		}
+		return plugin.Output{Text: sb.String(), Data: map[string]any{"found": found}}, nil
 	case "check":
 		if len(args) != 1 {
 			return plugin.Output{}, plugin.Errorf("usage", "usage: lite package check PACKAGE")

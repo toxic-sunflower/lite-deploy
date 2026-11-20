@@ -29,10 +29,13 @@
     <div class="grow"><label>Description (optional)</label><input type="text" v-model="desc" autocomplete="off"></div></div>\
   <label class="check"><input type="checkbox" v-model="dbOn"> The project needs a PostgreSQL database</label>\
   <div class="box" v-if="dbOn">\
-    <div class="row"><div class="grow"><label>Database server (empty: this server)</label><input type="text" v-model="db.server" autocomplete="off"></div>\
-      <div class="grow"><label>Port (for another server)</label><input type="text" v-model="db.port"></div>\
-      <div class="grow"><label>How your application reads the database address</label><select v-model="db.fmt"><option value="url">As a link (most applications)</option><option value="npgsql">.NET style (Npgsql)</option><option value="libpq">Key = value style (libpq)</option></select></div></div>\
-    <label>Password of the database role (only for a database on another server)</label><input type="password" v-model="db.pass" autocomplete="off">\
+    <div class="help">The database is created on this server, with its own user and password; the application gets the address in a setting you name below.</div>\
+    <details style="margin-top:8px"><summary class="help">Advanced: a database on another server, or another address format</summary>\
+      <div class="row"><div class="grow"><label>Database server (empty: this server)</label><input type="text" v-model="db.server" autocomplete="off"></div>\
+        <div class="grow"><label>Port (for another server)</label><input type="text" v-model="db.port"></div>\
+        <div class="grow"><label>Address format (leave as it is unless the application says otherwise)</label><select v-model="db.fmt"><option value="url">Standard (most applications)</option><option value="npgsql">.NET (Npgsql)</option><option value="libpq">Key = value (libpq)</option></select></div></div>\
+      <label>Password of the database user (only for a database on another server)</label><input type="password" v-model="db.pass" autocomplete="off">\
+    </details>\
   </div>\
   <label class="check"><input type="checkbox" v-model="regOn"> The container image is in a private registry</label>\
   <div class="box" v-if="regOn">\
@@ -52,11 +55,15 @@
       <label>Public key your build is signed with (a minisign key, starts with RWQ)</label><input type="text" v-model="s.rkey" placeholder="RWQ…" autocomplete="off">\
       <label>Download token (optional)</label><input type="password" v-model="s.rtok" autocomplete="off">\
     </template>\
-    <div class="row"><div class="grow"><label>Memory this component may use</label><input type="text" v-model="s.mem"></div>\
-      <div class="grow"><label>Address that answers “I am ready” after start</label><input type="text" v-model="s.health"></div></div>\
     <label>Settings that are not secret (one per line: NAME=value)</label><textarea v-model="s.env" placeholder="ENVIRONMENT=Production" spellcheck="false"></textarea>\
     <label>Secret settings: passwords, keys (one per line: NAME=value; stored encrypted on the server; write NAME=shared:KEY to use a shared secret)</label><textarea v-model="s.sec" spellcheck="false"></textarea>\
+    <template v-if="dbOn">\
     <label>Name of the setting that receives the database address (optional)</label><input type="text" v-model="s.dbenv" placeholder="DATABASE_URL" autocomplete="off">\
+    </template>\
+    <details style="margin-top:8px"><summary class="help">Advanced: memory limit, readiness address</summary>\
+    <div class="row"><div class="grow"><label>Memory this component may use</label><input type="text" v-model="s.mem"></div>\
+      <div class="grow"><label>Address that answers “I am ready” after start</label><input type="text" v-model="s.health"></div></div>\
+    </details>\
     <div style="margin-top:10px"><button type="button" @click="services.splice(i, 1)" v-if="services.length > 1">Remove this component</button></div>\
   </div>\
   <button type="button" @click="services.push(newService())">Add a component</button>\
@@ -66,8 +73,12 @@
       <div class="grow"><label>Domain</label><input type="text" v-model="s.host" placeholder="shop.example.com" autocomplete="off"></div>\
       <div class="grow"><label>Which component answers</label><input type="text" v-model="s.service" autocomplete="off"></div></div>\
     <div class="row"><div class="grow"><label>How visitors reach it</label><select v-model="s.publish"><option value="tunnel">Through a Cloudflare Tunnel</option><option value="direct">Directly (Caddy gets the certificate itself)</option></select></div>\
+    </div>\
+    <details style="margin-top:8px"><summary class="help">Advanced: upload limit, real visitor address</summary>\
+    <div class="row">\
       <div class="grow"><label>Visitors come through Cloudflare (so the real visitor address is kept)</label><select v-model="s.proxy"><option value="none">No</option><option value="cloudflare">Yes</option></select></div>\
       <div class="grow"><label>Largest upload allowed (for example 5MB)</label><input type="text" v-model="s.body"></div></div>\
+    </details>\
     <div style="margin-top:10px"><button type="button" @click="sites.splice(i, 1)">Remove this address</button></div>\
   </div>\
   <button type="button" @click="sites.push(newSite())">Add an address</button>\
