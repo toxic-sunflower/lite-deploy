@@ -202,7 +202,7 @@ func (s *sec) readSSHConf() sshConf {
 func (c sshConf) body() string {
 	var sb strings.Builder
 	sb.WriteString(securityMark + "\n")
-	fmt.Fprintf(&sb, "PermitRootLogin %s\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPubkeyAuthentication yes\nPermitEmptyPasswords no\nMaxAuthTries 4\nLoginGraceTime 30\nX11Forwarding no\n", c.Root)
+	fmt.Fprintf(&sb, "PermitRootLogin %s\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPubkeyAuthentication yes\nPermitEmptyPasswords no\nMaxAuthTries 4\nLoginGraceTime 30\nX11Forwarding no\nClientAliveInterval 60\nClientAliveCountMax 3\n", c.Root)
 	if len(c.AllowUsers) > 0 {
 		fmt.Fprintf(&sb, "AllowUsers %s\n", strings.Join(c.AllowUsers, " "))
 	}

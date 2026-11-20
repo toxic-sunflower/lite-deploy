@@ -153,7 +153,7 @@ func TestEnableFull(t *testing.T) {
 		t.Fatalf("%s", out.Text)
 	}
 	body, _ := s.fs.ReadFile(SSHSecurity)
-	for _, want := range []string{"PermitRootLogin prohibit-password", "PasswordAuthentication no", "KbdInteractiveAuthentication no", "MaxAuthTries 4"} {
+	for _, want := range []string{"PermitRootLogin prohibit-password", "PasswordAuthentication no", "KbdInteractiveAuthentication no", "MaxAuthTries 4", "ClientAliveInterval 60", "ClientAliveCountMax 3"} {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("the sshd file has no %q:\n%s", want, body)
 		}

@@ -28,7 +28,7 @@ lite security enable --yes
 lite security status
 ```
 
-`enable` sets SSH to key-only login for everyone (root only by key; `lite security enable no-root --yes` forbids root entirely), turns on protection against password guessing, automatic security updates and protective kernel parameters. It refuses to close password login unless an administrator with a key will remain, it checks the SSH configuration before applying it and puts the old one back on an error.
+`enable` sets SSH to key-only login for everyone (root only by key; `lite security enable no-root --yes` forbids root entirely), turns on protection against password guessing, automatic security updates, protective kernel parameters, and the closing of dead SSH sessions (a connection that stops answering is dropped after about three minutes, so it does not hang on the server). It refuses to close password login unless an administrator with a key will remain, it checks the SSH configuration before applying it and puts the old one back on an error.
 
 A few related commands:
 
