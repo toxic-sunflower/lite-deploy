@@ -319,6 +319,14 @@ func (s *Server) Handler() http.Handler {
 		}
 		return s.call(r.Context(), "POST", "/v1/plugin", in), 200
 	}))
+	mux.HandleFunc("/api/cloudflare/setup", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		var in struct{ Token string }
+		if code := readBody(r, &in); code != 0 || len(in.Token) < 20 || len(in.Token) > 2000 {
+			return errBody("usage", "invalid request"), 400
+		}
+		// the token travels as standard input of the plugin, never as an argument
+		return s.call(r.Context(), "POST", "/v1/plugin", map[string]any{"plugin": "cloudflare", "command": "setup", "args": []string{"--token-stdin"}, "stdin": in.Token + "\n"}), 200
+	}))
 	mux.HandleFunc("/api/firewall", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		return s.call(r.Context(), "GET", "/v1/firewall", nil), 200
 	}))

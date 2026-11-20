@@ -20,7 +20,7 @@ const pluginUsage = "usage: lite plugin list | lite plugin run PLUGIN COMMAND [a
 // registry gathers the built-in and external plugins. Load errors of external plugins are returned separately.
 func registry(env Env) (*plugin.Registry, []error) {
 	r := plugin.NewRegistry()
-	for _, p := range []plugin.Plugin{builtin.Pkg{}, builtin.Security{}, builtin.Firewall{}, builtin.Caddy{}, builtin.Podman{}, builtin.PG{}, builtin.Redis{}, builtin.Backblaze, builtin.S3, builtin.SFTP, builtin.Server{}, builtin.Backup{}} {
+	for _, p := range []plugin.Plugin{builtin.Pkg{}, builtin.Security{}, builtin.Firewall{}, builtin.Caddy{}, builtin.Podman{}, builtin.PG{}, builtin.Redis{}, builtin.Cloudflare{}, builtin.Backblaze, builtin.S3, builtin.SFTP, builtin.Server{}, builtin.Backup{}} {
 		if err := r.Add(p); err != nil {
 			panic(err) // an error in the program itself: the built-in names are fixed
 		}

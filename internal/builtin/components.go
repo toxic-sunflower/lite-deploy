@@ -395,7 +395,7 @@ func (PG) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 
 // PluginNames are the names of the plugins that lite init --plugins installs (postgres is accepted as the old name of pg).
 func PluginNames() []string {
-	return []string{"caddy", "pg", "podman", "redis", "security", "backblaze", "s3", "sftp"}
+	return []string{"caddy", "pg", "podman", "redis", "cloudflare", "security", "backblaze", "s3", "sftp"}
 }
 
 // InstallPlugin installs a plugin by name for lite init. For security the whole server protection is enabled.
@@ -409,6 +409,8 @@ func InstallPlugin(ctx context.Context, env plugin.Env, name string, say Say) er
 		return InstallPG(ctx, env, say)
 	case "redis":
 		return InstallRedis(ctx, env, say)
+	case "cloudflare":
+		return InstallCloudflare(ctx, env, say)
 	case "backblaze", "s3", "sftp":
 		return InstallRclone(ctx, env, say)
 	case "security":

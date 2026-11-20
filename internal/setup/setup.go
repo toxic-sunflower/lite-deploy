@@ -198,7 +198,7 @@ func (e Env) Plan(o Options, users []string) ([]string, error) {
 			p = append(p, "plugin caddy: install Caddy, the main Caddyfile (serves the project sites from /etc/caddy/conf.d), start the service")
 		case "security":
 			p = append(p, "plugin security: server protection: SSH by key only for everyone and root by key only, fail2ban, automatic security updates, protective kernel parameters")
-		case "podman", "pg", "postgres", "redis", "backblaze", "s3", "sftp":
+		case "podman", "pg", "postgres", "redis", "cloudflare", "backblaze", "s3", "sftp":
 			p = append(p, "plugin "+pl+": install packages")
 		default:
 			return nil, fmt.Errorf("unknown plugin %q (available: %s)", pl, strings.Join(builtin.PluginNames(), ", "))
