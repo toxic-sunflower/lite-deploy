@@ -82,7 +82,7 @@ def nav(cur: str) -> str:
     parts.append(f'<a href="{REPO}">Source code</a>')
     parts.append(f'<a href="{REPO}/releases">Releases</a>')
     parts.append('<a href="install.sh">install.sh (server)</a>')
-    parts.append('<a href="lite-ui">lite-ui (your computer)</a>')
+    parts.append('<a href="install-ui.sh">install-ui.sh (your computer)</a>')
     return "\n".join(parts)
 
 
@@ -117,8 +117,11 @@ def main() -> int:
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir()
-    for f in ("style.css", "install.sh", "liteup", "lite-ui", "lite-ui.ps1", "CNAME"):
+    for f in ("style.css", "install.sh", "liteup", "install-ui.sh", "install-ui.ps1", "CNAME"):
         shutil.copy(ROOT / "site" / f, OUT / f)
+    # the old addresses of the interface installer keep working
+    shutil.copy(ROOT / "site" / "install-ui.sh", OUT / "lite-ui")
+    shutil.copy(ROOT / "site" / "install-ui.ps1", OUT / "lite-ui.ps1")
 
     for _, items in GROUPS:
         for fname, slug, title, _ in items:

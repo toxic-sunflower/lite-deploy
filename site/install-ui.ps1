@@ -1,6 +1,6 @@
-# lite-ui.ps1: installs the web interface of lite-deploy on Windows. Nothing is installed on the server.
+# install-ui.ps1: installs the lite-ui program (the web interface of lite-deploy) on Windows. Nothing is installed on the server.
 #
-#   irm https://lite-deploy.prozorov.me/lite-ui.ps1 | iex
+#   irm https://lite-deploy.prozorov.me/install-ui.ps1 | iex
 #
 # It downloads the small lite-ui.exe from the latest GitHub release into %LOCALAPPDATA%\lite-ui, checks its
 # SHA256 against the signed SHA256SUMS of the same release (and the minisign signature too, if minisign

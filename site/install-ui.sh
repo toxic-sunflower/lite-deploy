@@ -1,7 +1,7 @@
 #!/bin/sh
-# lite-ui: installs the web interface of lite-deploy on your own computer (Linux, WSL, macOS). No root needed.
+# install-ui.sh: installs the lite-ui program (the web interface of lite-deploy) on your own computer (Linux, WSL, macOS). No root needed.
 #
-#   curl -fsSL https://lite-deploy.prozorov.me/lite-ui | sh
+#   curl -fsSL https://lite-deploy.prozorov.me/install-ui.sh | sh
 #
 # It downloads the small lite-ui program from the latest release into ~/.local/bin, checks its SHA256 against the
 # SHA256SUMS of the same release (and the minisign signature too, if minisign is installed). Nothing is installed on
@@ -25,7 +25,7 @@ case $version in latest|v[0-9]*) ;; *) die "the version must look like v1.2.3 or
 case $(uname -s) in
   Linux) os=linux ;;
   Darwin) os=darwin ;;
-  *) die "this script is for Linux, WSL and macOS; on Windows use PowerShell: irm https://lite-deploy.prozorov.me/lite-ui.ps1 | iex" ;;
+  *) die "this script is for Linux, WSL and macOS; on Windows use PowerShell: irm https://lite-deploy.prozorov.me/install-ui.ps1 | iex" ;;
 esac
 case $(uname -m) in
   x86_64|amd64)  arch=amd64 ;;

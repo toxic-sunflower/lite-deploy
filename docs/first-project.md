@@ -121,7 +121,7 @@ Edit `shop.json` and run `lite project create` again with the same `--ciphertext
 
 ## Using the web interface instead
 
-Everything above is also in the web interface, including a form for a new project. The interface is the small program `lite-ui` on **your computer**: it reaches the server over SSH and is never installed on the server. Install it (Windows PowerShell: `irm https://lite-deploy.prozorov.me/lite-ui.ps1 | iex`; WSL, Linux and macOS: `curl -fsSL https://lite-deploy.prozorov.me/lite-ui | sh`), then:
+Everything above is also in the web interface, including a form for a new project. The interface is the small program `lite-ui` on **your computer**: it reaches the server over SSH and is never installed on the server. Install it (Windows PowerShell: `irm https://lite-deploy.prozorov.me/install-ui.ps1 | iex`; WSL, Linux and macOS: `curl -fsSL https://lite-deploy.prozorov.me/install-ui.sh | sh`), then:
 
 ```sh
 lite-ui

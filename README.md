@@ -48,12 +48,12 @@ The web interface is a separate small program, `lite-ui`, that lives on **your o
 
 ```powershell
 # Windows (PowerShell)
-irm https://lite-deploy.prozorov.me/lite-ui.ps1 | iex
+irm https://lite-deploy.prozorov.me/install-ui.ps1 | iex
 ```
 
 ```sh
 # WSL, Linux, macOS: no root, goes into ~/.local/bin
-curl -fsSL https://lite-deploy.prozorov.me/lite-ui | sh
+curl -fsSL https://lite-deploy.prozorov.me/install-ui.sh | sh
 ```
 
 Then start it in a terminal:
