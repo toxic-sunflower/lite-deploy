@@ -13,6 +13,9 @@ var secretNameRe = regexp.MustCompile(`\A[a-z][a-z0-9_]{1,63}\z`)
 // secretRoutes: the secrets of a project (names only), changing one (the value is encrypted here, on the person's
 // computer, with the executor key of the server), removing one, and exporting a project description without secrets.
 func (s *Server) secretRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/api/server/config", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
+		return s.call(r.Context(), "GET", "/v1/server/config", nil), 200
+	}))
 	mux.HandleFunc("/api/secrets", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		p := r.URL.Query().Get("project")
 		if !projectRe.MatchString(p) {

@@ -428,3 +428,17 @@ func TestInitSavesTheOriginalStateOnce(t *testing.T) {
 		t.Error("a second init must not overwrite the original state")
 	}
 }
+
+func TestKeysFromAConfigAreUsedWithoutAsking(t *testing.T) {
+	w := newWorld()
+	w.noPass["anna"] = false
+	if err := w.env("").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Yes: true, Keys: map[string][]string{"anna": {key}}}); err != nil {
+		t.Fatalf("a configuration with keys needs no question: %v", err)
+	}
+	if got := string(w.fs.Files["/home/anna/.ssh/authorized_keys"]); !strings.Contains(got, "AAAAC3NzaC1lZDI1NTE5AAAAIFakeFake") {
+		t.Errorf("the key from the configuration was not added: %q", got)
+	}
+	if err := w.env("").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Yes: true, Keys: map[string][]string{"anna": {"not a key"}}}); err == nil {
+		t.Error("a bad key in the configuration must stop init")
+	}
+}

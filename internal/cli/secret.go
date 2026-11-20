@@ -15,8 +15,10 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/toxic-sunflower/lite-deploy/internal/builtin"
 	"github.com/toxic-sunflower/lite-deploy/internal/plan"
 	"github.com/toxic-sunflower/lite-deploy/internal/secrets"
+	"github.com/toxic-sunflower/lite-deploy/internal/serverconfig"
 	"github.com/toxic-sunflower/lite-deploy/internal/setup"
 )
 
@@ -68,7 +70,7 @@ func readSecretValue(env Env) ([]byte, error) {
 	return b, nil
 }
 
-const initUsage = "usage: lite init [--user name[,name…]] [--all-users] [--ufw keep|off|http|max] [--plugins caddy,podman,pg,redis] [--no-security] [--yes]"
+const initUsage = "usage: lite init [--config server.json] [--user name[,name…]] [--all-users] [--ufw keep|off|http|max] [--plugins caddy,podman,pg,redis] [--no-security] [--yes]"
 
 // cmdInit prepares the server for work: the executor key and directories, administrator users with SSH keys,
 // SSH login by key only, the firewall mode, the plugins. The only command that may be run directly as root.
@@ -80,6 +82,7 @@ func cmdInit(args []string, env Env) result {
 	ufw := fl.String("ufw", "max", "")
 	plugins := fl.String("plugins", "", "")
 	noSecurity := fl.Bool("no-security", false, "")
+	configFile := fl.String("config", "", "")
 	yes := fl.Bool("yes", false, "")
 	pos, err := parseArgs(fl, args)
 	if err != nil || len(pos) != 0 {
@@ -126,8 +129,37 @@ func cmdInit(args []string, env Env) result {
 	}
 	se := setup.Env{Runner: env.Runner, FS: env.FS, In: bufio.NewReader(stdin), Out: env.Stderr, Projects: projects, Sleep: env.Sleep, Now: env.Now}
 	opts := setup.Options{Users: split(users), AllUsers: *allUsers, Current: current, Firewall: *ufw, Plugins: withSecurity(split([]string{*plugins}), *noSecurity), Yes: *yes, WaitLogin: !*yes}
+	var cfg *serverconfig.Config
+	if *configFile != "" {
+		raw, err := env.FS.ReadFile(*configFile)
+		if err != nil {
+			return fail("init", CodeIO, "could not read the configuration "+*configFile+": "+err.Error())
+		}
+		var bad []string
+		if cfg, bad = serverconfig.Parse(raw); cfg == nil {
+			return fail("init", CodeUsage, "the server configuration is not valid:\n  - "+strings.Join(bad, "\n  - "))
+		}
+		given := map[string]bool{}
+		fl.Visit(func(f *flag.Flag) { given[f.Name] = true })
+		opts = applyServerConfig(opts, cfg, given, *noSecurity)
+	}
 	if err := se.Apply(context.Background(), opts); err != nil {
 		return fail("init", plan.CodePrecondition, err.Error())
+	}
+	if cfg != nil && cfg.Backup != nil {
+		args := []string{cfg.Backup.Recipient}
+		if cfg.Backup.EncryptDumps {
+			args = append(args, "--encrypt-dumps")
+		}
+		pe := env.pluginEnv()
+		if _, err := (builtin.Backup{}).Run(context.Background(), pe, "setup", args); err != nil {
+			return fail("init", plan.CodePrecondition, "backups from the configuration: "+err.Error())
+		}
+		if cfg.Backup.Schedule {
+			if _, err := (builtin.Backup{}).Run(context.Background(), pe, "schedule", []string{"on"}); err != nil {
+				return fail("init", plan.CodePrecondition, "the backup schedule from the configuration: "+err.Error())
+			}
+		}
 	}
 	text := "The executor key already exists and was not changed.\n"
 	if created {

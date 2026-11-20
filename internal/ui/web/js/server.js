@@ -12,6 +12,9 @@
     <div class="t muted" v-else>Checking for updates…</div>\
     <button v-if="$root.state.update && $root.state.update.available" class="primary" @click="$root.applyUpdate" :disabled="$root.state.busy">Update</button>\
     <button v-else @click="$root.checkUpdate">Check again</button></div>\
+  <h3>Server configuration</h3>\
+  <div class="card"><div class="row spread"><div><b>Save this server as a file</b><div class="help">Who may log in (with public keys), the firewall, the programs, protection and backups. No passwords or secrets. Give the file to <code>lite init --config</code> on a new server.</div></div>\
+    <button @click="saveConfig" :disabled="$root.state.busy"><icon name="backup"></icon>Save configuration</button></div></div>\
   <h3>Installed</h3>\
   <div v-for="p in installed" :key="p.name">\
     <div class="notice"><icon name="check"></icon><div class="t"><b>{{ p.name }}</b> <span class="muted">{{ p.description }}</span></div>\
@@ -35,6 +38,15 @@
     methods: {
       hasInstall: function (p) { return (p.commands || []).some(function (c) { return c.name === 'install' && !c.args; }); },
       reload: function () { LU.loadPlugins(); },
+      saveConfig: function () {
+        LU.api('/api/server/config').then(function (r) {
+          if (!r.ok) { LU.say('err', LU.errText(r)); return; }
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob([JSON.stringify(r.data.config, null, 2) + '\n'], { type: 'application/json' }));
+          a.download = 'server.lite-config.json'; document.body.appendChild(a); a.click(); a.remove();
+          LU.say('ok', 'Saved server.lite-config.json. On a new server: lite init --config server.lite-config.json');
+        });
+      },
       install: function (p) {
         if (!confirm('Install ' + p.name + ' on this server?')) return;
         LU.run('Installing ' + p.name + '…', '/api/plugin', { plugin: p.name, command: 'install', args: [] }, function () { return p.name + ' is installed. Next: create a project in Projects.'; })

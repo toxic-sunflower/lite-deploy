@@ -159,7 +159,7 @@ func (a *Agent) guardOwner(ctx context.Context, r *http.Request, req Request, bo
 }
 
 // readOnly are the commands that change nothing; they do not count against the quota.
-var readOnly = map[string]bool{"project.export": true, "secret.list": true, "status": true, "info": true, "verify": true, "ingress": true, "project.key": true,
+var readOnly = map[string]bool{"config.export": true, "project.export": true, "secret.list": true, "status": true, "info": true, "verify": true, "ingress": true, "project.key": true,
 	"project.preview": true, "firewall.status": true, "update.check": true}
 
 // overQuota records a changing action and reports whether the hourly quota is used up.
@@ -404,6 +404,7 @@ func (a *Agent) Handler() http.Handler {
 		}
 		return Request{Cmd: "secret.remove", Args: []string{in.Project, in.Name}}, true
 	})
+	route(http.MethodGet, "/v1/server/config", func(*http.Request) (Request, bool) { return Request{Cmd: "config.export"}, true })
 	route(http.MethodGet, "/v1/verify", func(*http.Request) (Request, bool) { return Request{Cmd: "verify"}, true })
 	route(http.MethodPost, "/v1/plugin", func(r *http.Request) (Request, bool) {
 		var in struct {

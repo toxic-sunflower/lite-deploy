@@ -84,7 +84,7 @@ The command first shows what it will do and asks for confirmation. Then it:
 
 Before it closes password login, `init` waits (up to 5 minutes) until you have logged in with your key from a new terminal; if no login is seen it leaves password login on and tells you how to finish later (`lite security enable`). With `--yes` it does not wait. After `init` log in as the regular user. Daily work needs **no root and no sudo**: if a command needs privileges, the CLI hands it to the agent (see "Working without root"). When logged in as root, the commands other than `lite init` and `lite --help` refuse to run.
 
-Without `--user`, the user who ran `sudo lite init` is configured. `lite` is the short name of `lite-deploy`; `lite --help` lists everything.
+Without `--user`, the user who ran `sudo lite init` is configured. Everything `init` takes can also come from a file saved from a running server: `lite init --config server.lite-config.json` ([Describe the server in a file](docs/server-config.md)). `lite` is the short name of `lite-deploy`; `lite --help` lists everything.
 
 ## Deploy and the interface
 

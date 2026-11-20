@@ -5,6 +5,8 @@ import (
 	"errors"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
+	"github.com/toxic-sunflower/lite-deploy/internal/serverconfig"
+	"github.com/toxic-sunflower/lite-deploy/internal/setup"
 	"net"
 	"net/http"
 	"os"
@@ -353,5 +355,46 @@ func TestMigrationMovesToTheSwitchHelper(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "traffic switch helper") {
 		t.Errorf("the person is told: %s", out.String())
+	}
+}
+
+func TestServerConfigFlowsIntoInitOptions(t *testing.T) {
+	off := false
+	c := &serverconfig.Config{Schema: serverconfig.Schema, Firewall: "http", Plugins: []string{"caddy", "pg"}, Security: &off,
+		Users: []serverconfig.User{{Name: "anna", SSHKeys: []string{keyA}}, {Name: "bob"}}}
+	o := applyServerConfig(setup.Options{Firewall: "max"}, c, map[string]bool{}, false)
+	if strings.Join(o.Users, ",") != "anna,bob" || o.Firewall != "http" || o.Keys["anna"][0] != keyA {
+		t.Fatalf("%+v", o)
+	}
+	if strings.Contains(strings.Join(o.Plugins, ","), "security") {
+		t.Errorf("security: false in the file must not add the security plugin: %v", o.Plugins)
+	}
+	// a flag on the command line wins over the file
+	o = applyServerConfig(setup.Options{Firewall: "off", Users: []string{"root2"}}, c, map[string]bool{"ufw": true, "user": true}, false)
+	if o.Firewall != "off" || strings.Join(o.Users, ",") != "root2" {
+		t.Errorf("flags must win over the file: %+v", o)
+	}
+	// protection is on unless the file or the flag says otherwise
+	on := &serverconfig.Config{Schema: serverconfig.Schema}
+	if o := applyServerConfig(setup.Options{}, on, map[string]bool{}, false); !strings.Contains(strings.Join(o.Plugins, ","), "security") {
+		t.Errorf("protection is on by default: %v", o.Plugins)
+	}
+}
+
+func TestConfigExportIsAValidConfigAndHoldsNoSecrets(t *testing.T) {
+	env, out, _ := testEnv(t)
+	_ = env.FS.WriteFile("/etc/lite-deploy/backup.json", []byte(`{"recipient":"age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p","encrypt_dumps":true}`), 0o644)
+	if c := run(t, env, "config", "export"); c != 0 {
+		t.Fatalf("%d %s", c, out.String())
+	}
+	cfg, bad := serverconfig.Parse(out.Bytes())
+	if cfg == nil {
+		t.Fatalf("the export must read back as a valid configuration: %v\n%s", bad, out.String())
+	}
+	if cfg.Backup == nil || !cfg.Backup.EncryptDumps {
+		t.Errorf("the backup key must be exported: %+v", cfg.Backup)
+	}
+	if strings.Contains(out.String(), "AGE-SECRET-KEY") {
+		t.Error("no private key may ever be exported")
 	}
 }

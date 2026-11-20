@@ -907,6 +907,26 @@
         },
         "x-changes-server": true
       }
+    },
+    "/v1/server/config": {
+      "get": {
+        "summary": "The configuration of this server as a file (users with their public keys, firewall mode, installed programs, protection, backup key); `lite init --config` can use it on a new server. It holds only public values.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: data.config is the file.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access."
+          }
+        }
+      }
     }
   },
   "components": {

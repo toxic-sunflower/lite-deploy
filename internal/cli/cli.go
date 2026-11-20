@@ -227,6 +227,8 @@ func dispatch(args []string, env Env) result {
 		return cmdOwner(args[1:], env)
 	case "switch-serve":
 		return cmdSwitchServe(env)
+	case "config":
+		return cmdConfig(args[1:], env)
 	case "ssh-key":
 		return cmdSSHKey(args[1:], env)
 	case "gate":

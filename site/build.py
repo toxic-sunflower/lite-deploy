@@ -30,6 +30,7 @@ GROUPS = [
         ("docs/backups.md", "backups", "Backups and restore", "Encrypted backups, storage outside the server and restoring a lost server."),
         ("docs/protect-the-server.md", "protect-the-server", "Protect the server", "SSH, fail2ban, updates, the firewall and `lite verify`."),
         ("docs/ai-assistants.md", "ai-assistants", "Use an AI assistant", "Let an AI assistant read your servers and deploy, with your approval."),
+        ("docs/server-config.md", "server-config", "Describe the server in a file", "Save a server as a file, or write one, and set up a new server with it."),
         ("docs/maintenance.md", "maintenance", "Update and troubleshoot", "Updating, uninstalling and what to do when something fails."),
     ]),
 ]

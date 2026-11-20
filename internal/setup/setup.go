@@ -41,6 +41,8 @@ type Options struct {
 	Firewall string   // off, http, max or keep (do not change)
 	Plugins  []string // podman, postgres
 	Yes      bool     // do not ask for confirmation of the plan
+	// Keys are public SSH keys given up front (from a server configuration file) per user; with keys a user is not asked.
+	Keys map[string][]string
 	// WaitLogin: before closing password login, wait until the person has really logged in with the key (the SSH log).
 	WaitLogin    bool
 	LoginTimeout time.Duration // how long to wait; 5 minutes by default
@@ -235,7 +237,7 @@ func (e Env) Apply(ctx context.Context, o Options) error {
 	}
 	var keyed []string
 	for _, u := range users {
-		if err := e.user(ctx, u, group); err != nil {
+		if err := e.user(ctx, u, group, o.Keys[u]); err != nil {
 			return fmt.Errorf("user %s: %w", u, err)
 		}
 		keyed = append(keyed, u)
@@ -288,7 +290,7 @@ func (e Env) Apply(ctx context.Context, o Options) error {
 }
 
 // user creates or finishes configuring one user.
-func (e Env) user(ctx context.Context, name, group string) error {
+func (e Env) user(ctx context.Context, name, group string, keys []string) error {
 	accs, err := e.accounts()
 	if err != nil {
 		return err
@@ -332,7 +334,47 @@ func (e Env) user(ctx context.Context, name, group string) error {
 	if err := e.must(ctx, "usermod", "-aG", group, name); err != nil {
 		return err
 	}
+	if len(keys) > 0 {
+		return e.addKeys(name, acc.Home, keys)
+	}
 	return e.key(name, acc.Home)
+}
+
+// addKeys adds the given public keys (from a configuration file) to authorized_keys, those that are missing, without asking.
+func (e Env) addKeys(name, home string, keys []string) error {
+	dir, file := home+"/.ssh", home+"/.ssh/authorized_keys"
+	old, _ := e.FS.ReadFile(file)
+	text := string(old)
+	added := false
+	for _, k := range keys {
+		k = strings.TrimSpace(k)
+		if !keyRe.MatchString(k) {
+			return fmt.Errorf("the key %q of user %s is not a public SSH key", k, name)
+		}
+		if strings.Contains(text, strings.Fields(k)[1]) {
+			continue
+		}
+		if text != "" && !strings.HasSuffix(text, "\n") {
+			text += "\n"
+		}
+		text += k + "\n"
+		added = true
+	}
+	if !added {
+		return nil
+	}
+	if err := e.FS.MkdirAll(dir, fs.FileMode(0o700)); err != nil {
+		return err
+	}
+	if err := e.FS.WriteFile(file, []byte(text), fs.FileMode(0o600)); err != nil {
+		return err
+	}
+	for _, p := range []string{dir, file} {
+		if err := e.FS.Chown(p, name, ""); err != nil {
+			return err
+		}
+	}
+	return e.FS.Chmod(dir, fs.FileMode(0o700))
 }
 
 // key asks for a public SSH key and adds it to authorized_keys. Without a key init does not continue.

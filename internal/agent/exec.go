@@ -160,6 +160,11 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, errors.New("secret.remove: invalid project or secret name")
 		}
 		return []string{"secret", "remove", a[0], a[1]}, nil
+	case "config.export":
+		if err := need(0); err != nil {
+			return nil, err
+		}
+		return []string{"config", "export"}, nil
 	case "owner.list":
 		if err := need(0); err != nil {
 			return nil, err
