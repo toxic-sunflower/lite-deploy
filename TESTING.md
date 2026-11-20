@@ -70,6 +70,14 @@ Do this on a domain you can afford to touch for a few minutes.
 3. **Ingress**, under a domain: “Close with Cloudflare Access…”. Create an API token in Cloudflare (My Profile, API Tokens) with only “Access: Apps and Policies, Edit”, paste it, give your e-mail, path `/admin*`, **Close it**. Expected: “is now closed”, and in the Cloudflare dashboard (Zero Trust, Access, Applications) an application appears; open the address in a private window: a Cloudflare login page asks for a code sent to your e-mail. This was written against the Cloudflare API description and has not run against a real account: send me the exact error if Cloudflare refuses. “Open it again” removes the application.
 4. If you have a second Cloudflare account, and a project on each: in **Ingress** type a name and its tunnel token, **Add tunnel**. Expected: both tunnels listed as “connected and running”. Then pick the tunnel for each domain (second list in its row), **Apply**: `lite publish PROJECT SITE` on the server shows it, `lite verify` says the tunnel is running. Stop one tunnel (`sudo systemctl stop lite-cloudflared-acme`) and run `lite verify`: the sites on it are reported.
 
+## 2c. The Cloudflare side from the interface
+
+Use a test subdomain of a domain in a Cloudflare account you control, with a project already created (the site has a port).
+1. Create an API token in Cloudflare with only: Account: Cloudflare Tunnel: Edit, Zone: DNS: Edit, Zone: Zone: Read.
+2. **Ingress**, under the domain: “Cloudflare for this domain…”, a name for the account, the token, **Connect this domain through a tunnel**. Expected: a message listing the steps (tunnel created, domain routed, DNS record, tunnel connected on the server, site goes through the tunnel). In the Cloudflare dashboard: a tunnel `lite-NAME` (Healthy), a public hostname, a proxied CNAME record. After a minute the domain answers.
+3. Do the same for a second domain of the same account: the tunnel is reused (no second tunnel).
+4. This was written against the Cloudflare API description and has not run against a real account: send me the exact error text if a step fails (the message also lists what was done before it).
+
 ## 3. Backups
 
 1. **workstation**: `age-keygen -o lite-backup.key`. Keep the file off the server. Copy the `age1…` line.

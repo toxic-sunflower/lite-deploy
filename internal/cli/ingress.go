@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"github.com/toxic-sunflower/lite-deploy/internal/plan"
 	"sort"
 	"strings"
 
@@ -23,6 +24,7 @@ type ingressSite struct {
 	Service string `json:"service"`
 	Publish string `json:"publish"`
 	Tunnel  string `json:"tunnel"`
+	Port    int    `json:"port"` // the port of the site on 127.0.0.1 (where a tunnel must point); 0 until the project is created
 	// Protected: the paths (empty: the whole site) and logins of the password asked for in direct mode; nil: none.
 	Protected *ingressProtected `json:"protected,omitempty"`
 }
@@ -41,6 +43,7 @@ func cmdIngress(env Env) result {
 		webOpen = !st.Active || (openTo(st, 80) && openTo(st, 443))
 	}
 	sites := []ingressSite{}
+	st, _ := plan.LoadState(env.FS, env.Paths)
 	names := projectNames(env)
 	sort.Strings(names)
 	for _, name := range names {
@@ -57,7 +60,7 @@ func cmdIngress(env Env) result {
 			if mode == "" {
 				mode = "tunnel"
 			}
-			is := ingressSite{Project: name, Site: s.Name, Host: s.Host, Service: s.Service, Publish: mode, Tunnel: tunnelOrDefault(s.Tunnel)}
+			is := ingressSite{Project: name, Site: s.Name, Host: s.Host, Service: s.Service, Publish: mode, Tunnel: tunnelOrDefault(s.Tunnel), Port: st.Projects[name].Ports.Sites[s.Name]}
 			if fa := s.FallbackAuth; fa != nil && len(fa.Users) > 0 {
 				is.Protected = &ingressProtected{Paths: fa.Paths}
 				for _, u := range fa.Users {

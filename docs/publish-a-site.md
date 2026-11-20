@@ -42,6 +42,10 @@ Caddy asks Let's Encrypt for the certificate as soon as the name points at the s
 
 ## Tunnel: Cloudflare Tunnel
 
+> **The short way: from the interface.** In **Ingress**, press “Cloudflare for this domain…” under the domain, choose the Cloudflare account (a name of your own), paste a Cloudflare API token and press **Connect this domain through a tunnel**. Lite Deploy creates the tunnel in the account that owns the domain (once per account, reused for every domain of it), routes the domain to the port of the site, makes the DNS record, installs `cloudflared` and connects the tunnel on the server, and points the site at it. Nothing is done by hand in the Cloudflare dashboard.
+>
+> The API token is created by the owner of the Cloudflare account once (My Profile, API Tokens, Create Custom Token) with only: **Account: Cloudflare Tunnel: Edit**, **Zone: DNS: Edit** and **Zone: Zone: Read** (and **Account: Access: Apps and Policies: Edit** for Access). It is used by `lite-ui` on your workstation and goes to Cloudflare only; by default it is forgotten after use. To the server goes only the token of the tunnel, which can run that one tunnel and nothing else. If the domain belongs to a friend, they create the API token for you, or do it themselves in the dashboard as below. The text below is the same thing done by hand.
+
 The `cloudflare` plugin installs `cloudflared` and runs it as its own unprivileged user. The tunnel token is kept in a file that only that user can read, and it never appears on a command line. This mode needs no open inbound port (`lite firewall mode max`).
 
 ### What you need

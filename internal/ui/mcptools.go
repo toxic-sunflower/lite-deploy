@@ -173,6 +173,9 @@ func (s *Server) MCPTools() []mcp.Tool {
 				}
 				return renderEnvelope(func() []byte { raw, _ := s.cfAccess(ctx, in); return raw }())
 			}},
+		{Name: "cloudflare_tunnel", Description: "Do the whole Cloudflare side for a domain of a site: create the tunnel in the Cloudflare account that owns the domain (one per account), route the domain to the site port, make the DNS record, connect the tunnel on the server and point the site at it. host is the domain, port is the port of the site (see ingress), label names the Cloudflare account. The Cloudflare API token (permissions: Account Cloudflare Tunnel Edit, Zone DNS Edit, Zone Zone Read) is used on this workstation only and never sent to the server. Ask the person first; prefer that the person types the token in the page.",
+			Schema: obj(map[string]any{"server": serverArg, "label": str("The Cloudflare account name; default: default."), "token": str("The Cloudflare API token (not needed if saved)."), "remember": map[string]any{"type": "boolean"}, "account": str("Cloudflare account id, if the token sees several."), "host": str("The domain."), "port": map[string]any{"type": "integer", "description": "The port of the site on the server (from ingress)."}, "project": str("The project of the site."), "site": str("The site name.")}, "host", "port"),
+			Run: post("/api/cf-tunnel")},
 		{Name: "add_server", Description: "Add a server (user@address) to the list of lite-ui on this workstation. A login with the SSH key must already work.", Schema: obj(map[string]any{"server": str("The server as user@address.")}, "server"),
 			Run: func(_ context.Context, a map[string]any) (string, error) {
 				v, _ := a["server"].(string)

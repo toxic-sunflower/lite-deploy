@@ -370,6 +370,7 @@ func (s *Server) Handler() http.Handler {
 		return s.call(r.Context(), "POST", "/v1/fallback-auth", map[string]any{"project": in.Project, "site": in.Site, "action": in.Action, "user": in.User, "password": in.Password, "paths": in.Paths}), 200
 	}))
 	s.registerCFAccess(mux)
+	s.registerCFTunnel(mux)
 	mux.HandleFunc("/api/ui-update", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		if s.Updater == nil {
 			return okBody(uiupdate.Info{}), 200

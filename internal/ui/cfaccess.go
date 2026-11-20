@@ -53,33 +53,9 @@ func (s *Server) cfAccess(ctx context.Context, in cfAccessRequest) ([]byte, int)
 	default:
 		return errBody("usage", "invalid request"), 400
 	}
-	token, account := in.Token, in.Account
-	if token == "" && s.CF != nil {
-		if v, ok := s.CF.Get(in.Label); ok {
-			token = v.Token
-			if account == "" {
-				account = v.Account
-			}
-		}
-	}
-	if token == "" {
-		return errBody("usage", "paste the Cloudflare API token first"), 400
-	}
-	c := s.cfClient(token)
-	if account == "" {
-		accs, err := c.Accounts(ctx)
-		if err != nil {
-			return errBody("cloudflare", err.Error()), 502
-		}
-		if len(accs) != 1 {
-			return okBody(map[string]any{"need_account": true, "accounts": accs}), 200
-		}
-		account = accs[0].ID
-	}
-	remember := func() {
-		if in.Remember && s.CF != nil && in.Token != "" {
-			_ = s.CF.Put(in.Label, cfaccess.Saved{Token: in.Token, Account: account})
-		}
+	c, account, remember, early := s.cfSession(ctx, in)
+	if early != nil {
+		return early, 200
 	}
 	switch in.Action {
 	case "list":
@@ -119,4 +95,39 @@ func (s *Server) registerCFAccess(mux *http.ServeMux) {
 		}
 		return s.cfAccess(r.Context(), in)
 	}))
+}
+
+// cfSession finds the token (from the form, or the one kept on this workstation) and the account. If the token sees several
+// accounts and none is chosen, early is an answer that asks to choose; the token is kept only if the person asked for it.
+func (s *Server) cfSession(ctx context.Context, in cfAccessRequest) (c *cfaccess.Client, account string, remember func(), early []byte) {
+	token, account := in.Token, in.Account
+	if token == "" && s.CF != nil {
+		if v, ok := s.CF.Get(in.Label); ok {
+			token = v.Token
+			if account == "" {
+				account = v.Account
+			}
+		}
+	}
+	if token == "" {
+		return nil, "", nil, errBody("usage", "paste the Cloudflare API token first")
+	}
+	c = s.cfClient(token)
+	if account == "" {
+		accs, err := c.Accounts(ctx)
+		if err != nil {
+			return nil, "", nil, errBody("cloudflare", err.Error())
+		}
+		if len(accs) != 1 {
+			return nil, "", nil, okBody(map[string]any{"need_account": true, "accounts": accs})
+		}
+		account = accs[0].ID
+	}
+	acc := account
+	remember = func() {
+		if in.Remember && s.CF != nil && in.Token != "" {
+			_ = s.CF.Put(in.Label, cfaccess.Saved{Token: in.Token, Account: acc})
+		}
+	}
+	return c, account, remember, nil
 }

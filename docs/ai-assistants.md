@@ -46,7 +46,7 @@ Two cases need a small change:
 | `deploy`, `rollback` | A version (full commit hash) with traffic switched only when healthy; back to the previous one |
 | `secrets_list`, `secret_set`, `secret_remove` | Names of secrets (never values), setting and deleting one |
 | `ingress`, `publish`, `fallback_password` | Domains, tunnel or direct publishing, the password of direct mode |
-| `connect_cloudflare_tunnel`, `cloudflare_access` | Tunnels, and closing a domain with Cloudflare Access |
+| `cloudflare_tunnel`, `connect_cloudflare_tunnel`, `cloudflare_access` | The whole Cloudflare side of a domain (tunnel, route, DNS); connecting a ready tunnel by its token; closing a domain with Cloudflare Access |
 | `firewall_status`, `plugins`, `run_plugin` | The firewall; the plugins; any command of a plugin (firewall, security, backup, pg, caddy…) |
 | `server_config`, `update_check`, `update_server` | The server as a file; whether a newer lite exists; installing it |
 
