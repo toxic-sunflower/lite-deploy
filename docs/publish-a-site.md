@@ -40,7 +40,7 @@ Caddy asks Let's Encrypt for the certificate as soon as the name points at the s
 
 ## Tunnel: Cloudflare Tunnel
 
-`lite` does not install or manage the tunnel. The steps below are a short recipe; the Cloudflare documentation is the authority for its side. This mode needs no open inbound port (`lite firewall mode max`).
+The `cloudflare` plugin installs `cloudflared` and runs it as its own unprivileged user. The tunnel token is kept in a file that only that user can read, and it never appears on a command line. This mode needs no open inbound port (`lite firewall mode max`).
 
 ### What you need
 
@@ -51,18 +51,17 @@ Caddy asks Let's Encrypt for the certificate as soon as the name points at the s
 
 The port is the `listen_port` of the site in `shop.json` (`18080` in the examples). If you did not set one, `lite` chose a free one: see the plan step "Site main: …", or `lite status`.
 
-### 2. Install `cloudflared` as a separate, unprivileged user
+### 2. Install the plugin and connect the tunnel
 
-Install `cloudflared` from the Cloudflare packages, then run it as its own system user, not as root and not as a project user. Create the tunnel in the Cloudflare dashboard (Zero Trust → Networks → Tunnels), copy its token and put it into a file that only that user can read, for example:
+In the interface: **Server**, “Can be added”, **cloudflare**, Install. Then create a tunnel in the Cloudflare dashboard (Zero Trust, Networks, Tunnels), copy its token, open **Ingress** and paste it into “Cloudflare Tunnel”, then press Connect.
+
+On the command line:
 
 ```sh
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin cloudflared
-sudo install -d -m 755 /etc/cloudflared
-sudo sh -c 'umask 077; cat > /etc/cloudflared/token'   # paste the token, then Ctrl+D
-sudo chown cloudflared: /etc/cloudflared/token
+lite cloudflare install
+echo 'PASTE_THE_TOKEN' | lite cloudflare setup --token-stdin
+lite cloudflare status
 ```
-
-Do not use `cloudflared service install <token>` on a shared server: the token would end up in a service file readable by everyone and in the process list.
 
 ### 3. Route the name to the port
 

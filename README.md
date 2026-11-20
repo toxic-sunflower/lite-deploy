@@ -119,7 +119,7 @@ lite verify                # check the server: read-only, exit code 8 on errors
 lite fix --dry-run         # what can be fixed automatically
 ```
 
-Built-in plugins: `package`, `security`, `firewall`, `caddy`, `podman`, `pg`, `redis`, `server`, `backup`, `backblaze`, `s3`, `sftp`. Your own plugin is a directory `/etc/lite-deploy/plugins/NAME/` (owned by root, not writable by others) with a `plugin.json` file and scripts or programs that `lite` calls:
+Built-in plugins: `package`, `security`, `firewall`, `caddy`, `podman`, `pg`, `redis`, `cloudflare`, `server`, `backup`, `backblaze`, `s3`, `sftp`. Your own plugin is a directory `/etc/lite-deploy/plugins/NAME/` (owned by root, not writable by others) with a `plugin.json` file and scripts or programs that `lite` calls:
 
 ```json
 {
