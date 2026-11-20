@@ -3,6 +3,7 @@ package deploy
 import (
 	"bufio"
 	"context"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -324,7 +325,7 @@ func TestHelperFailureKeepsTraffic(t *testing.T) {
 func TestHelperSwitcherTalksToASocketAndNoticesAMissingOne(t *testing.T) {
 	dir := t.TempDir()
 	sock := dir + "/switch.sock"
-	if err := HelperSwitcher(sock)(context.Background(), "blue"); err != ErrNoHelper {
+	if err := HelperSwitcher(sock)(context.Background(), "blue"); !errors.Is(err, ErrNoHelper) {
 		t.Fatalf("a missing socket means no helper: %v", err)
 	}
 	ln, err := net.Listen("unix", sock)
