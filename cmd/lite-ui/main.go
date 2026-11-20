@@ -12,7 +12,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -133,10 +132,7 @@ func restart(exe string, args []string, token string, out, errw io.Writer) int {
 		return 0
 	}
 	args = append([]string{"--no-open"}, withoutNoOpen(args)...)
-	cmd := exec.Command(exe, args...) //nolint:gosec // our own program, replaced a moment ago
-	cmd.Env = append(os.Environ(), "LITE_UI_TOKEN="+token)
-	cmd.Stdout, cmd.Stderr = out, errw
-	if err := cmd.Start(); err != nil {
+	if err := host.StartDetached(exe, args, []string{"LITE_UI_TOKEN=" + token}, out, errw); err != nil {
 		_, _ = fmt.Fprintln(errw, "Updated. Start lite-ui again to use the new version:", err)
 		return 1
 	}
