@@ -28,7 +28,7 @@ sudo liteup install --version vX.Y.Z    # a specific version (the numbers are on
 sudo liteup reinstall                   # uninstall and install the same version again
 sudo liteup uninstall                   # remove lite and the agent; settings, secrets and backups stay
 sudo liteup uninstall --purge --yes     # also delete settings, secrets and backups (irreversible)
-sudo liteup uninstall --everything      # the server back to bare: projects, databases, Caddy, PostgreSQL... (asks to type the server name)
+sudo liteup uninstall --everything      # the server back to bare: projects, databases, Caddy, PostgreSQL...
 liteup status                           # installed and latest versions
 ```
 

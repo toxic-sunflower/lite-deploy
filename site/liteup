@@ -263,13 +263,12 @@ do_uninstall() {
 do_everything() {
   need_root
   [ "$pm" = apt ] || die "removing everything automatically works on Debian and Ubuntu only; use: liteup uninstall --purge and remove the packages by hand"
-  host=$(hostname)
-  say "This deletes ALL projects, their data and databases, and the programs lite installed (Caddy, PostgreSQL, podman, Redis, fail2ban) on '$host'."
+  say "This deletes ALL projects, their data and databases, and the programs lite installed (Caddy, PostgreSQL, podman, Redis, fail2ban) on this server."
   if [ "$assume_yes" != 1 ]; then
     if [ -r /dev/tty ] && [ -t 1 ] 2>/dev/null; then
-      printf "Type the name of this server (%s) to continue: " "$host" >/dev/tty
-      read -r ans </dev/tty || ans=""
-      [ "$ans" = "$host" ] || die "canceled, nothing was changed"
+      printf 'Continue? [y/N] ' >/dev/tty
+      read -r ans </dev/tty || ans=n
+      case $ans in y|Y|yes|YES) ;; *) die "canceled, nothing was changed" ;; esac
     else
       die "no terminal to ask on: run again with --yes"
     fi
