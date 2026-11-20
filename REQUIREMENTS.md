@@ -17,7 +17,7 @@ This file records what the product must do, what is in the first working version
 
 ## 2. State on 2026-11-20
 
-Latest release `v0.6.1`. The site and the installer work. **Nothing has been run on a production server yet.** Besides unit tests with doubles, `lite` was run on 2026-11-19 in an Ubuntu 24.04 container with systemd (rootless podman 4.9) and on a test WSL (Ubuntu 26.04, podman 5.7, PostgreSQL 18, Caddy): `lite init` (user, SSH by key only, security, caddy, podman, pg, redis), the agent, commands without sudo, encrypted backups and restore, `project create` (a container project and `kind: unit`, a repeat gives `unchanged`), a `unit` deploy with a minisign signature check, the Caddy switch, a rollback, and `liteup` update, reinstall and uninstall. That run found and fixed 12 errors the tests had not seen. **Not checked yet:** ufw, a real SSH login, starting a Quadlet container (there was no image), Backblaze, S3, SFTP, the form in a browser.
+The latest release is on the Releases page (v0.8.0 is the first release candidate). The site and the installer work. **Nothing has been run on a production server yet.** Besides unit tests with doubles, `lite` was run on 2026-11-19 in an Ubuntu 24.04 container with systemd (rootless podman 4.9) and on a test WSL (Ubuntu 26.04, podman 5.7, PostgreSQL 18, Caddy): `lite init` (user, SSH by key only, security, caddy, podman, pg, redis), the agent, commands without sudo, encrypted backups and restore, `project create` (a container project and `kind: unit`, a repeat gives `unchanged`), a `unit` deploy with a minisign signature check, the Caddy switch, a rollback, and `liteup` update, reinstall and uninstall. That run found and fixed 12 errors the tests had not seen. **Not checked yet:** ufw, a real SSH login, starting a Quadlet container (there was no image), Backblaze, S3, SFTP, the form in a browser.
 
 | Part | Code | Checked on a server |
 |---|---|---|
@@ -45,6 +45,11 @@ Latest release `v0.6.1`. The site and the installer work. **Nothing has been run
 | Creating a project from the interface (R-17): a form, a plan preview, creation; secrets are encrypted on the owner's computer with the executor public key | done (the form was tested with a DOM double only) | no |
 | `compose` (R-27) | through `kind: unit` with `exec` and `stop` (`podman compose up/down`) and a release directory with `compose.yml`; there is no separate kind | no |
 | Persistent component directories `data` (R-13, inside one project) | done | yes |
+| Interface `lite-ui` (Vue 3, separate program): Overview, Projects with the new project form, Ingress (domains, publish switch, Cloudflare Tunnel), Protection, Server (plugins that are installed and that can be added; updating lite); several servers chosen in the browser | done; checked in a browser against a stand-in for the server | no, not on a real server |
+| Updating `lite` (`lite update`, the Update button): the new release is checked, installed by `liteup update` as a separate unit, the previous version is restored if the new one does not start | done | no |
+| `cloudflare` plugin: cloudflared as its own user, the token in a 600 file | done | no |
+| `lite ssh-key list|add|remove` (change your own key without losing access) | done | no |
+| `lite init` protects the server, waits for a real key login, saves the original SSH and firewall state; `liteup uninstall --everything` restores it | done | no |
 | Docker (R-11) | forbidden by the owner's decision | |
 | Shared directories and sockets between projects (R-13) | postponed by the owner (2026-11-19); needs rootless id checks on a server | |
 
