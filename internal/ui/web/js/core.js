@@ -58,17 +58,19 @@
   LU.applyUiUpdate = function () {
     var u = LU.state.uiUpdate;
     if (!u || LU.state.busy) return;
-    if (!confirm('Update Lite Deploy on this workstation from ' + u.current + ' to ' + u.latest + '? The page reloads in a few seconds.')) return;
-    var tries = 0;
+    if (!confirm('Update Lite Deploy UI on this workstation from ' + u.current + ' to ' + u.latest + '? The page reloads in a few seconds.')) return;
+    var from = u.current, tries = 0;
     LU.state.busy = true; LU.say('ok', 'Updating…');
     LU.api('/api/ui-update/apply', {}).then(function (r) {
       if (!r.ok) { LU.state.busy = false; LU.say('err', LU.errText(r)); return; }
+      // The program restarts itself; wait until the one that answers is a different version (not until "no update is
+      // left": a still newer release may have come out meanwhile), then reload.
       (function poll() {
         tries++;
         setTimeout(function () {
           LU.api('/api/ui-update').then(function (c) {
-            if (c.ok && !c.data.available) { location.reload(); return; }
-            if (tries > 30) { LU.state.busy = false; LU.say('err', 'Updated, but the page did not come back. Start lite-ui again.'); return; }
+            if (c.ok && c.data && c.data.current && c.data.current !== from) { location.reload(); return; }
+            if (tries > 60) { LU.state.busy = false; LU.say('err', 'Updated, but the page did not come back. Start lite-ui again.'); return; }
             poll();
           });
         }, 1500);
