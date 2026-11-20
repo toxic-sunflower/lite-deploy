@@ -131,6 +131,19 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 
 - **T11 (done 2026-11-20). One connection per server.** `lite-ui` keeps one ssh connection to a server and sends every request through it (`lite-deploy call-stream` on the server), on every system including Windows. An older server without the command is served with one ssh per request. After a failed login `lite-ui` stops trying for a minute.
 
+### Open (added 2026-11-20)
+
+- **T12. A table "Where things connect" at the top of "Use an AI assistant".** Claude Desktop needs the `.mcpb` file; every other client needs only a command or a config; web and remote-only clients cannot be connected. Today the page has the details but not the one-glance table.
+- **T13. Check the `mcp add` commands of other clients and document them.** Codex CLI (`codex mcp add`), Gemini CLI (`gemini mcp add`), VS Code (`code --add-mcp`), Hermes (`hermes mcp`). The page lists config files today; the commands were not checked against their documentation. Add the ones that are confirmed.
+- **T14. Hermes Agent.** Check the exact `hermes mcp` and `config.yaml` syntax in its documentation; check that our `skill/lite-deploy/SKILL.md` (agentskills.io format) installs as it is; a plugin for its marketplace (the MCP server together with the skill) only if the owner wants to be in the catalog.
+- **T15. Editor extensions.** VS Code (TypeScript): register the MCP server in one click, a command that opens the page, a status bar item with the result of `verify`, deploy and roll back from the command palette. Zed (Rust, WebAssembly): only installs the MCP server, so a line in `settings.json` is enough until the store matters.
+- **T16. Claude Desktop extension without `lite-ui`.** It answers in the chat with how to install it. Decide whether it should install `lite-ui` itself (download, SHA256 and signature check) or open the page; the owner has not chosen yet.
+- **T17. Smaller things in the MCP tools.** `run_plugin` should list the valid commands of the plugin when the command is unknown; a test that every tool of the server is also in the extension manifest (today only the other direction is checked).
+- **T18. SSH keys in the interface.** A block on **Protection**: the keys with fingerprints, "Add a key" (paste a line), "Remove" (`lite ssh-key` already exists in the terminal; the interface and an MCP tool do not).
+- **T19. The page remembers the last chosen server** across restarts of `lite-ui`, and opens on it, not on the first server of the list.
+- **T20. The live check.** `TESTING.md` sections 0 to 6d have not been run on a real server; the test server is still on `lite` v0.12.0 and must be updated first (the Update button on **Overview**).
+- **Postponed on purpose:** the local `lite` for developers on a Mac (a small production-like setup on the workstation); forms generated from JSON Schema; a check of the Cloudflare DNS record by an API token.
+
 ## Status
 
 | Session | Status |
