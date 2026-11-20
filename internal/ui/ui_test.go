@@ -12,8 +12,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
+	"github.com/toxic-sunflower/lite-deploy/internal/uiupdate"
 )
 
 const tok = "0123456789abcdef0123456789abcdef"
@@ -42,7 +44,7 @@ func do(h http.Handler, method, path, body, token string) *httptest.ResponseReco
 func TestPageAndToken(t *testing.T) {
 	s, r := newServer("")
 	h := s.Handler()
-	if w := do(h, "GET", "/", "", ""); w.Code != 200 || !strings.Contains(w.Body.String(), "lite-deploy") {
+	if w := do(h, "GET", "/", "", ""); w.Code != 200 || !strings.Contains(w.Body.String(), "Lite Deploy") {
 		t.Fatalf("page: %d", w.Code)
 	}
 	if w := do(h, "GET", "/api/status", "", ""); w.Code != 401 {
@@ -616,11 +618,11 @@ func TestExtensionManifestMatchesTheTools(t *testing.T) {
 	if err := json.Unmarshal([]byte(text), &m); err != nil {
 		t.Fatalf("the manifest is not valid JSON: %v", err)
 	}
-	if m.ManifestVersion == "" || m.Name != "lite-deploy" || m.Version != "1.2.3" || m.Server.EntryPoint != "server/lite-ui.exe" || !strings.HasSuffix(m.Server.MCP.Command, "server/lite-ui.exe") {
+	if m.ManifestVersion == "" || m.Name != "lite-deploy" || m.Version != "1.2.3" || m.Server.Type != "node" || m.Server.EntryPoint != "server/index.js" || m.Server.MCP.Command != "node" {
 		t.Fatalf("the manifest is incomplete: %+v", m)
 	}
-	if len(m.Server.MCP.Args) < 3 || m.Server.MCP.Args[0] != "mcp" || m.Server.MCP.Args[2] != "${user_config.server}" || !m.UserConfig["server"].Required {
-		t.Errorf("the extension must start `lite-ui mcp --server` with the address the person typed: %+v", m.Server.MCP)
+	if len(m.Server.MCP.Args) != 2 || !strings.HasSuffix(m.Server.MCP.Args[0], "server/index.js") || m.Server.MCP.Args[1] != "${user_config.server}" || !m.UserConfig["server"].Required {
+		t.Errorf("the launcher must get the address the person typed: %+v", m.Server.MCP)
 	}
 	have := map[string]bool{}
 	for _, tl := range (&Server{}).MCPTools() {
@@ -665,5 +667,39 @@ func TestSecretValueIsEncryptedBeforeItLeavesThisComputer(t *testing.T) {
 	}
 	if w := do(h, "GET", "/api/secrets?project=Shop%20x", "", tok); w.Code != 400 {
 		t.Errorf("a bad project name must be refused: %d", w.Code)
+	}
+}
+
+type fakeUIUpdater struct{ applied bool }
+
+func (f *fakeUIUpdater) Check(context.Context) (uiupdate.Info, error) {
+	return uiupdate.Info{Current: "v0.1.0", Latest: "v0.2.0", Available: true}, nil
+}
+func (f *fakeUIUpdater) Apply(context.Context) (string, error) {
+	f.applied = true
+	return "v0.2.0", nil
+}
+
+func TestUIUpdateEndpoints(t *testing.T) {
+	s, _ := newServer("")
+	f := &fakeUIUpdater{}
+	done := make(chan struct{})
+	s.Updater, s.OnUpdated = f, func() { close(done) }
+	h := s.Handler()
+	if w := do(h, "GET", "/api/ui-update", "", ""); w.Code != 401 {
+		t.Fatalf("a token is required: %d", w.Code)
+	}
+	w := do(h, "GET", "/api/ui-update", "", s.Token)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"available":true`) {
+		t.Fatalf("check: %d %s", w.Code, w.Body)
+	}
+	w = do(h, "POST", "/api/ui-update/apply", "{}", s.Token)
+	if w.Code != 200 || !f.applied {
+		t.Fatalf("apply: %d %s", w.Code, w.Body)
+	}
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the program was not asked to restart")
 	}
 }

@@ -16,8 +16,12 @@
       <div class="metric"><div class="l">Checks passed</div><div class="v">{{ verify.ok }} of {{ verify.ok + verify.warnings + verify.failures }}</div></div>\
       <div class="metric"><div class="l">Protection</div><div class="v">{{ protectionOn ? "On" : "Needs work" }}</div></div>\
     </div>\
+    <div v-if="$root.state.uiUpdate" class="notice warn">\
+      <icon name="refresh"></icon><div class="t">A new version of Lite Deploy (this page) is available: {{ $root.state.uiUpdate.latest }} (you have {{ $root.state.uiUpdate.current }}).</div>\
+      <button class="primary" @click="$root.applyUiUpdate" :disabled="$root.state.busy">Update</button>\
+    </div>\
     <div v-if="$root.state.update && $root.state.update.available" class="notice warn">\
-      <icon name="refresh"></icon><div class="t">A new version of lite is available: {{ $root.state.update.latest }} (you have {{ $root.state.update.current }}).</div>\
+      <icon name="refresh"></icon><div class="t">A new version of lite on the server is available: {{ $root.state.update.latest }} (you have {{ $root.state.update.current }}).</div>\
       <button class="primary" @click="$root.applyUpdate" :disabled="$root.state.busy">Update</button>\
     </div>\
     <h3>Needs your attention</h3>\
@@ -93,6 +97,6 @@
         LU.run('Fixing…', '/api/fix', {}, function (d) { return d.applied.length ? 'Done: ' + d.applied.join('; ') : 'Nothing to fix automatically.'; }).then(function () { self.load(); });
       }
     },
-    mounted: function () { this.load(); LU.checkUpdate(); }
+    mounted: function () { this.load(); LU.checkUpdate(); LU.checkUiUpdate(); }
   };
 })();

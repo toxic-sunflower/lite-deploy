@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -20,6 +21,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/mcp"
 	"github.com/toxic-sunflower/lite-deploy/internal/ui"
+	"github.com/toxic-sunflower/lite-deploy/internal/uiupdate"
 )
 
 // Version is set by a release build: -ldflags "-X main.Version=v1.2.3".
@@ -57,13 +59,20 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 			return 2
 		}
 	}
-	raw := make([]byte, 16)
-	if _, err := io.ReadFull(rand.Reader, raw); err != nil {
-		_, _ = fmt.Fprintln(errw, "ERROR:", err)
-		return 1
+	token := os.Getenv("LITE_UI_TOKEN") // handed over by the previous run after an update, so an open page keeps working
+	if token == "" {
+		raw := make([]byte, 16)
+		if _, err := io.ReadFull(rand.Reader, raw); err != nil {
+			_, _ = fmt.Fprintln(errw, "ERROR:", err)
+			return 1
+		}
+		token = hex.EncodeToString(raw)
 	}
 	runner := host.ExecRunner{}
-	srv := &ui.Server{Runner: runner, Servers: list, Token: hex.EncodeToString(raw), SSHOptions: sshSharing(), Streamer: runner, OwnerKeyPath: ownerKeyPath()}
+	srv := &ui.Server{Runner: runner, Servers: list, Token: token, SSHOptions: sshSharing(), Streamer: runner, OwnerKeyPath: ownerKeyPath()}
+	upd := uiupdate.New(Version)
+	upd.Cleanup()
+	srv.Updater = upd
 	if err := srv.Validate(); err != nil {
 		_, _ = fmt.Fprintln(errw, "ERROR:", err)
 		return 2
@@ -77,6 +86,10 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 	_, _ = fmt.Fprintf(out, "The interface is running.\n\n  %s\n\nIt opens in your browser; choose or add your server there. Close this window or press Ctrl+C to stop.\n", url)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+	updated := false
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	srv.OnUpdated = func() { updated = true; cancel() }
 	if !*noOpen {
 		go openBrowser(ctx, runner, url)
 	}
@@ -84,7 +97,37 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 		_, _ = fmt.Fprintln(errw, "ERROR:", err)
 		return 1
 	}
+	if updated {
+		return restart(upd.Exe, args, token, out, errw)
+	}
 	return 0
+}
+
+// restart starts the new program in place of the old one with the same arguments and the same token, so the open page
+// reconnects by itself. Under a service manager (it sets LITE_UI_SERVICE) the manager starts the new program instead.
+func restart(exe string, args []string, token string, out, errw io.Writer) int {
+	if os.Getenv("LITE_UI_SERVICE") != "" {
+		return 0
+	}
+	args = append([]string{"--no-open"}, withoutNoOpen(args)...)
+	cmd := exec.Command(exe, args...) //nolint:gosec // our own program, replaced a moment ago
+	cmd.Env = append(os.Environ(), "LITE_UI_TOKEN="+token)
+	cmd.Stdout, cmd.Stderr = out, errw
+	if err := cmd.Start(); err != nil {
+		_, _ = fmt.Fprintln(errw, "Updated. Start lite-ui again to use the new version:", err)
+		return 1
+	}
+	return 0
+}
+
+func withoutNoOpen(args []string) []string {
+	var r []string
+	for _, a := range args {
+		if a != "--no-open" && a != "-no-open" {
+			r = append(r, a)
+		}
+	}
+	return r
 }
 
 func savedListPath() string {

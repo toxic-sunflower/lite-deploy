@@ -24,6 +24,7 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/firewall"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
+	"github.com/toxic-sunflower/lite-deploy/internal/uiupdate"
 )
 
 //go:embed web
@@ -56,10 +57,20 @@ type Server struct {
 	Streamer host.Starter
 	// OwnerKeyPath is where the private key that confirms dangerous actions is kept on this computer (empty: not used).
 	OwnerKeyPath string
+	// Updater updates lite-ui itself (nil: the page does not offer it). OnUpdated is called after a successful update, once
+	// the answer is sent: the program is expected to restart.
+	Updater   UIUpdater
+	OnUpdated func()
 
 	mu     sync.Mutex
 	ssh    map[string]*sshState
 	owners map[string]ownerInfo
+}
+
+// UIUpdater is what the page needs to keep lite-ui itself current (see package uiupdate).
+type UIUpdater interface {
+	Check(ctx context.Context) (uiupdate.Info, error)
+	Apply(ctx context.Context) (string, error)
 }
 
 // sshState remembers how connecting to one server is going. Until a connection has worked, requests go one at a time,
@@ -316,6 +327,29 @@ func (s *Server) Handler() http.Handler {
 			static.ServeHTTP(w, r)
 		})
 	}
+	mux.HandleFunc("/api/ui-update", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
+		if s.Updater == nil {
+			return okBody(uiupdate.Info{}), 200
+		}
+		info, err := s.Updater.Check(r.Context())
+		if err != nil {
+			return errBody("update_check_failed", "could not ask for the newest version: "+err.Error()), 502
+		}
+		return okBody(info), 200
+	}))
+	mux.HandleFunc("/api/ui-update/apply", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		if s.Updater == nil {
+			return errBody("not_supported", "this lite-ui cannot update itself"), 400
+		}
+		tag, err := s.Updater.Apply(r.Context())
+		if err != nil {
+			return errBody("update_failed", err.Error()), 500
+		}
+		if s.OnUpdated != nil {
+			go func() { time.Sleep(700 * time.Millisecond); s.OnUpdated() }()
+		}
+		return okBody(map[string]string{"version": tag}), 200
+	}))
 	mux.HandleFunc("/api/info", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		b, _ := json.Marshal(map[string]string{"host": s.Host})
 		return b, 200
@@ -493,6 +527,11 @@ func fwRule(r *http.Request) (fwIn, int) {
 		return in, 400
 	}
 	return in, 0
+}
+
+func okBody(data any) []byte {
+	b, _ := json.Marshal(map[string]any{"ok": true, "api_version": "v1", "command": "ui", "data": data})
+	return b
 }
 
 func errBody(code, msg string) []byte {

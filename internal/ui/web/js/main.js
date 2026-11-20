@@ -84,6 +84,7 @@
   app.config.globalProperties.state = S;
   app.config.globalProperties.applyUpdate = LU.applyUpdate;
   app.config.globalProperties.checkUpdate = LU.checkUpdate;
+  app.config.globalProperties.applyUiUpdate = LU.applyUiUpdate;
   app.config.globalProperties.loadPlugins = LU.loadPlugins;
   app.mount('#app');
 })();

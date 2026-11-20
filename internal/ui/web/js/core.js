@@ -19,7 +19,7 @@
   LU.state = Vue.reactive({
     theme: theme,
     server: saved, servers: [], editable: false, serversLoaded: false,
-    plugins: [], pluginsLoaded: false, update: null, busy: false, msg: { kind: '', text: '' }, page: (location.hash || '#overview').slice(1).split('/')[0] || 'overview'
+    plugins: [], pluginsLoaded: false, update: null, uiUpdate: null, busy: false, msg: { kind: '', text: '' }, page: (location.hash || '#overview').slice(1).split('/')[0] || 'overview'
   });
 
   LU.api = function (path, body) {
@@ -48,6 +48,32 @@
 
   LU.checkUpdate = function () {
     return LU.api('/api/update').then(function (r) { LU.state.update = r.ok ? r.data : null; });
+  };
+
+  // The page itself (lite-ui on this workstation) can be newer too: checkUiUpdate asks, applyUiUpdate replaces the
+  // program; it restarts with the same address, so the page waits until it answers with the new version and reloads.
+  LU.checkUiUpdate = function () {
+    return LU.api('/api/ui-update').then(function (r) { LU.state.uiUpdate = r.ok && r.data.available ? r.data : null; });
+  };
+  LU.applyUiUpdate = function () {
+    var u = LU.state.uiUpdate;
+    if (!u || LU.state.busy) return;
+    if (!confirm('Update Lite Deploy on this workstation from ' + u.current + ' to ' + u.latest + '? The page reloads in a few seconds.')) return;
+    var tries = 0;
+    LU.state.busy = true; LU.say('ok', 'Updating…');
+    LU.api('/api/ui-update/apply', {}).then(function (r) {
+      if (!r.ok) { LU.state.busy = false; LU.say('err', LU.errText(r)); return; }
+      (function poll() {
+        tries++;
+        setTimeout(function () {
+          LU.api('/api/ui-update').then(function (c) {
+            if (c.ok && !c.data.available) { location.reload(); return; }
+            if (tries > 30) { LU.state.busy = false; LU.say('err', 'Updated, but the page did not come back. Start lite-ui again.'); return; }
+            poll();
+          });
+        }, 1500);
+      })();
+    });
   };
 
   // applyUpdate installs the new version on the server. The server restarts its agent, so the page waits until the
