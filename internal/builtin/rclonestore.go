@@ -141,12 +141,19 @@ func (s *RcloneStore) setup(t tools, args []string) (plugin.Output, error) {
 }
 
 // Upload sends the backups: copy, not sync, so that rotating local backups does not erase them at the storage.
-func (s *RcloneStore) Upload(t tools) (plugin.Output, error) {
+func (s *RcloneStore) Upload(t tools) (plugin.Output, error) { return s.uploadWith(t, nil) }
+
+// uploadWith copies the backups; with includes only the files that match them (relative to the backup directory).
+func (s *RcloneStore) uploadWith(t tools, includes []string) (plugin.Output, error) {
 	cfg, err := s.load(t)
 	if err != nil {
 		return plugin.Output{}, err
 	}
-	res, err := s.rclone(t, "copy", backupRoot, s.remote(cfg), "--exclude", "lost+found/**")
+	args := []string{"copy", backupRoot, s.remote(cfg), "--exclude", "lost+found/**"}
+	for _, inc := range includes {
+		args = append(args, "--include", inc)
+	}
+	res, err := s.rclone(t, args...)
 	if err != nil || res.ExitCode != 0 {
 		return plugin.Output{}, plugin.Errorf("step_failed", "upload to %s failed: %s", s.Title, failText(res, err))
 	}

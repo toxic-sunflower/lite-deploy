@@ -27,7 +27,9 @@ const (
 	backupTimerPth = "/etc/systemd/system/lite-backup.timer"
 )
 
-var configFileRe = regexp.MustCompile(`^config-(\d{8}T\d{6}Z)\.tar\.gz\.age$`)
+// A settings backup is config-… (the whole server, before backups could be set per target), server-… (the server itself:
+// Caddy and lite) or project-NAME-… (one project: settings, secrets, files).
+var configFileRe = regexp.MustCompile(`^(config|server|project-[a-z][a-z0-9-]{1,30})-(\d{8}T\d{6}Z)\.tar\.gz\.age$`)
 
 // Backup is the `backup` plugin: backups of project settings, secrets and databases; upload to storage locations (backblaze).
 // Secrets enter the backup only encrypted with the owner key: the server keeps only the public part.
@@ -43,7 +45,8 @@ func (Backup) Commands() []plugin.Command {
 	return []plugin.Command{
 		{Name: "status", Help: "are backups set up, scheduled, and when the last one was taken"},
 		{Name: "setup", Confirm: true, Args: "AGE_PUBLIC_KEY [--encrypt-dumps]", Help: "set the backup encryption key (age1…); the private part stays with you; --encrypt-dumps also encrypts database dumps"},
-		{Name: "run", Root: true, Help: "take backups: settings and secrets (encrypted), pg databases; upload to storage locations"},
+		{Name: "run", Root: true, Args: "[--server | --project NAME]", Help: "take backups: settings and secrets (encrypted), pg databases; upload to storage locations. With targets set, the server and every project are backed up as set"},
+		{Name: "set-target", Confirm: true, Args: "TARGET [--on|--off] [--items a,b] [--stores x,y|--all-stores] [--at HH:MM|--no-time]", Help: "what is backed up for the server (server) or for one project, where it is copied and when"},
 		{Name: "list", Root: true, Help: "settings and secrets backups"},
 		{Name: "restore", Confirm: true, Args: "FILE --identity-stdin", Help: "restore a settings and secrets backup into / (on a new server); the age private key on stdin"},
 		{Name: "schedule", Confirm: true, Args: "on|off", Help: "daily backup with a systemd timer (around 03:00)"},
@@ -53,6 +56,10 @@ func (Backup) Commands() []plugin.Command {
 type backupConfig struct {
 	Recipient    string `json:"recipient"`
 	EncryptDumps bool   `json:"encrypt_dumps,omitempty"`
+	// Server and Projects set what is backed up for the server itself and for each project, where it is copied, and when.
+	// Without both, one backup of everything is taken, as before.
+	Server   *backupTarget           `json:"server,omitempty"`
+	Projects map[string]backupTarget `json:"projects,omitempty"`
 }
 
 func (t tools) backupConfig() (backupConfig, error) {
@@ -120,7 +127,7 @@ func (t tools) configFiles() []configFile {
 	var out []configFile
 	for _, n := range names {
 		if m := configFileRe.FindStringSubmatch(n); m != nil {
-			if at, err := time.Parse(stampLayout, m[1]); err == nil {
+			if at, err := time.Parse(stampLayout, m[2]); err == nil {
 				out = append(out, configFile{n, at})
 			}
 		}
@@ -129,10 +136,13 @@ func (t tools) configFiles() []configFile {
 	return out
 }
 
-func (t tools) backupRun() (plugin.Output, error) {
+func (t tools) backupRun(args []string) (plugin.Output, error) {
 	cfg, err := t.backupConfig()
 	if err != nil {
 		return plugin.Output{}, err
+	}
+	if cfg.targeted() || len(args) > 0 {
+		return t.runTargets(cfg, args)
 	}
 	plain, err := t.configArchive()
 	if err != nil {
@@ -149,11 +159,7 @@ func (t tools) backupRun() (plugin.Output, error) {
 	if err := t.env.FS.WriteFile(configDir+"/"+name, enc, 0o600); err != nil {
 		return plugin.Output{}, plugin.Errorf("step_failed", "%s: %v", name, err)
 	}
-	for i, f := range t.configFiles() {
-		if i >= configKeep {
-			_ = t.env.FS.Remove(configDir + "/" + f.Name)
-		}
-	}
+	t.prune("config")
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Settings and secrets: %s (encrypted)\n", name)
 	data := map[string]any{"config": name}
@@ -233,30 +239,64 @@ func (t tools) backupSchedule(args []string) (plugin.Output, error) {
 	if len(args) != 1 || (args[0] != "on" && args[0] != "off") {
 		return plugin.Output{}, plugin.Errorf("usage", "usage: lite backup schedule on|off")
 	}
+	// remove the units of the common schedule and of every target, then write what is needed
+	var old []string
+	if names, err := t.env.FS.ReadDir("/etc/systemd/system"); err == nil {
+		for _, n := range names {
+			if (n == "lite-backup.timer") || (strings.HasPrefix(n, "lite-backup-") && strings.HasSuffix(n, ".timer")) {
+				old = append(old, n)
+			}
+		}
+	}
+	for _, n := range old {
+		_, _ = t.run("systemctl", "disable", "--now", n)
+	}
+	for _, n := range old {
+		_ = t.env.FS.Remove("/etc/systemd/system/" + n)
+		_ = t.env.FS.Remove("/etc/systemd/system/" + strings.TrimSuffix(n, ".timer") + ".service")
+	}
 	if args[0] == "off" {
-		_ = t.must("systemctl", "disable", "--now", "lite-backup.timer")
-		_ = t.env.FS.Remove(backupTimerPth)
-		_ = t.env.FS.Remove(backupSvc)
 		_ = t.must("systemctl", "daemon-reload")
 		return textOut("The daily backup is off.\n"), nil
 	}
-	if _, err := t.backupConfig(); err != nil {
+	cfg, err := t.backupConfig()
+	if err != nil {
 		return plugin.Output{}, err
 	}
-	svc := "[Unit]\nDescription=lite-deploy: backups\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/lite-deploy backup run\n"
-	tm := "[Unit]\nDescription=lite-deploy: daily backups\n\n[Timer]\nOnCalendar=*-*-* 03:00:00\nRandomizedDelaySec=15min\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n"
-	for p, c := range map[string]string{backupSvc: svc, backupTimerPth: tm} {
-		if err := t.env.FS.WriteFile(p, []byte(c), 0o644); err != nil {
-			return plugin.Output{}, plugin.Errorf("step_failed", "%s: %v", p, err)
+	type unit struct{ name, run, at string }
+	units := []unit{{"lite-backup", "backup run", commonAt}}
+	if cfg.targeted() {
+		units[0].run = "backup run --scheduled"
+		for _, name := range append([]string{serverTarget}, t.projectNames()...) {
+			tg := cfg.targetOf(name)
+			if !tg.on() || tg.At == "" {
+				continue
+			}
+			run := "backup run --server"
+			if name != serverTarget {
+				run = "backup run --project " + name
+			}
+			units = append(units, unit{"lite-backup-" + name, run, tg.At})
 		}
+	}
+	var timers []string
+	for _, u := range units {
+		svc := "[Unit]\nDescription=lite-deploy: backups (" + u.name + ")\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/lite-deploy " + u.run + "\n"
+		tm := "[Unit]\nDescription=lite-deploy: daily backups (" + u.name + ")\n\n[Timer]\nOnCalendar=*-*-* " + u.at + ":00\nRandomizedDelaySec=15min\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n"
+		for p, c := range map[string]string{"/etc/systemd/system/" + u.name + ".service": svc, "/etc/systemd/system/" + u.name + ".timer": tm} {
+			if err := t.env.FS.WriteFile(p, []byte(c), 0o644); err != nil {
+				return plugin.Output{}, plugin.Errorf("step_failed", "%s: %v", p, err)
+			}
+		}
+		timers = append(timers, u.name+".timer")
 	}
 	if err := t.must("systemctl", "daemon-reload"); err != nil {
 		return plugin.Output{}, err
 	}
-	if err := t.must("systemctl", "enable", "--now", "lite-backup.timer"); err != nil {
+	if err := t.must("systemctl", append([]string{"enable", "--now"}, timers...)...); err != nil {
 		return plugin.Output{}, err
 	}
-	return textOut("Backups (settings, secrets, databases, upload) will run daily around 03:00.\nNext: lite backup run tries one now; lite backup list shows what exists.\n"), nil
+	return textOut("Backups (settings, secrets, databases, upload) will run daily around 03:00 (targets with their own time at that time).\nNext: lite backup run tries one now; lite backup list shows what exists.\n"), nil
 }
 
 func (Backup) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (plugin.Output, error) {
@@ -282,7 +322,9 @@ func (Backup) Run(ctx context.Context, env plugin.Env, cmd string, args []string
 		if _, err := age.ParseX25519Recipient(rest[0]); err != nil {
 			return plugin.Output{}, plugin.Errorf("usage", "that is not an age public key (age1…): %v", err)
 		}
-		b, _ := json.Marshal(backupConfig{Recipient: rest[0], EncryptDumps: encDumps})
+		keep, _ := t.backupConfig() // a new key keeps what was set for the targets
+		keep.Recipient, keep.EncryptDumps = rest[0], encDumps
+		b, _ := json.Marshal(keep)
 		if err := env.FS.MkdirAll("/etc/lite-deploy", 0o755); err != nil {
 			return plugin.Output{}, plugin.Errorf("step_failed", "%v", err)
 		}
@@ -296,12 +338,16 @@ func (Backup) Run(ctx context.Context, env plugin.Env, cmd string, args []string
 		msg += "Next: lite backup schedule on (daily backups), then lite backup run to try one.\n"
 		return textOut(msg), nil
 	}
+	switch cmd {
+	case "run":
+		return t.backupRun(args)
+	case "set-target":
+		return t.setTarget(args)
+	}
 	if err := noArgs(args, cmd, "backup"); err != nil {
 		return plugin.Output{}, err
 	}
 	switch cmd {
-	case "run":
-		return t.backupRun()
 	case "status":
 		cfg, cerr := t.backupConfig()
 		files := t.configFiles()
@@ -314,7 +360,21 @@ func (Backup) Run(ctx context.Context, env plugin.Env, cmd string, args []string
 		if cerr == nil {
 			text = fmt.Sprintf("Backups are set up; daily schedule %s; %d settings backups.\n", map[bool]string{true: "on", false: "off"}[scheduled], len(files))
 		}
-		return plugin.Output{Text: text, Data: map[string]any{"configured": cerr == nil, "encrypt_dumps": cfg.EncryptDumps, "scheduled": scheduled, "count": len(files), "last": last}}, nil
+		var stores []string
+		for _, st := range Stores {
+			if st.Configured(t.env) {
+				stores = append(stores, st.PluginName)
+			}
+		}
+		if stores == nil {
+			stores = []string{}
+		}
+		data := map[string]any{"configured": cerr == nil, "encrypt_dumps": cfg.EncryptDumps, "scheduled": scheduled, "count": len(files), "last": last,
+			"stores": stores, "server_items": serverItems, "project_items": projectItems}
+		if cerr == nil {
+			data["targets"] = t.targetStatus(cfg)
+		}
+		return plugin.Output{Text: text, Data: data}, nil
 	case "list":
 		var sb strings.Builder
 		list := []string{}

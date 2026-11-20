@@ -4,6 +4,28 @@
 
 Set this up while you have no data yet. It takes a few minutes.
 
+## Backups for the server and for each project
+
+Not everything needs the same copy. In the interface, **Backups**, **What is backed up**, you choose for the server itself and for **each project** separately:
+
+- **What:** for the server, the web server (Caddy) and the settings of lite; for a project, its settings, its secrets, its database and its files (the data volumes).
+- **Where:** which places outside the server get the copy (none ticked means every connected place).
+- **When:** every day at a time you choose, or with the common backup around 03:00.
+
+A project you do not want to copy is switched off. Until you set anything, one backup of everything is taken, as before.
+
+The same on the command line:
+
+```sh
+lite backup set-target shop --items settings,secrets,database,data --stores backblaze --at 02:30
+lite backup set-target blog --off
+lite backup set-target server --items caddy,lite
+lite backup run --project shop        # only this one, now
+lite backup run --server
+```
+
+A copy of one project is a file `project-NAME-DATE.tar.gz.age`, of the server `server-DATE.tar.gz.age`; both open with the same private key and are restored the same way (`lite backup restore FILE --identity-stdin`). The database of a project is copied as before and restored with `lite pg restore`.
+
 ## 1. Make a backup key
 
 ## The short way: in the interface

@@ -45,7 +45,7 @@
   };
 
   LU.components.Backups = {
-    data: function () { return { st: null, list: [], error: '', encrypt: true, stores: ['backblaze', 's3', 'sftp'], open: '' }; },
+    data: function () { return { st: null, list: [], error: '', encrypt: true, stores: ['backblaze', 's3', 'sftp'], open: '', edit: {} }; },
     template: '\
 <div>\
   <h1>Backups</h1>\
@@ -62,6 +62,23 @@
     <div class="card row spread"><div><b>Backups are set up</b><div class="help">Daily backup: {{ st.scheduled ? "on, around 03:00" : "off" }}. {{ st.count }} settings backup(s){{ st.last ? ", the last one " + when(st.last) : "" }}.</div></div>\
       <div class="row"><button @click="toggle" :disabled="$root.state.busy">{{ st.scheduled ? "Turn daily backup off" : "Turn daily backup on" }}</button>\
         <button class="primary" @click="runNow" :disabled="$root.state.busy">Back up now</button></div></div>\
+    <h3>What is backed up</h3>\
+    <p class="help">Choose for the server itself and for each project what is copied, where, and when. The server means the web server (Caddy) and the settings of lite. A project means its settings, secrets, database and files.</p>\
+    <template v-for="tg in (st.targets || [])" :key="tg.name"><div class="card" v-if="edit[tg.name]">\
+      <div class="row spread"><h2><icon :name="tg.kind === \'server\' ? \'server\' : \'apps\'"></icon> {{ tg.kind === "server" ? "The server" : tg.name }}</h2>\
+        <label class="check" style="margin:0"><input type="checkbox" v-model="edit[tg.name].enabled"> back it up</label></div>\
+      <div class="help">{{ tg.last ? "Last backup: " + when(tg.last) : "No backup yet." }}</div>\
+      <label>What</label>\
+      <div class="row"><label v-for="it in itemsFor(tg)" :key="it" class="check" style="margin:0"><input type="checkbox" :value="it" v-model="edit[tg.name].items"> {{ itemName(it) }}</label></div>\
+      <label>Where to copy (outside this server)</label>\
+      <div class="row" v-if="st.stores.length"><label v-for="s in st.stores" :key="s" class="check" style="margin:0"><input type="checkbox" :value="s" v-model="edit[tg.name].stores"> {{ title(s) }}</label>\
+        <span class="help">{{ edit[tg.name].stores.length ? "" : "none ticked: every connected place" }}</span></div>\
+      <div v-else class="help">No place outside this server is connected yet (below).</div>\
+      <label>When (every day, HH:MM; empty: with the common backup around 03:00)</label>\
+      <input type="text" v-model="edit[tg.name].at" placeholder="02:30" style="max-width:140px">\
+      <div class="row" style="margin-top:10px"><button class="primary" @click="saveTarget(tg)" :disabled="$root.state.busy">Save</button>\
+        <button @click="runTarget(tg)" :disabled="$root.state.busy">Back up this now</button></div>\
+    </div></template>\
     <h3>Settings and secrets backups</h3>\
     <p v-if="!list.length" class="empty">No backups yet. Press “Back up now”.</p>\
     <table v-else><tr><th>File</th></tr><tr v-for="f in list" :key="f"><td><code>{{ f }}</code></td></tr></table>\
@@ -79,9 +96,32 @@
       title: function (n) { return STORES[n].title; },
       configured: function (n) { return LU.present(n); },
       call: function (command, args) { return LU.api('/api/plugin', { plugin: 'backup', command: command, args: args }); },
+      itemsFor: function (tg) { return tg.kind === 'server' ? this.st.server_items : this.st.project_items; },
+      itemName: function (it) { return { caddy: 'web server (Caddy)', lite: 'settings of lite', settings: 'settings', secrets: 'secrets', database: 'database', data: 'files (data volumes)' }[it] || it; },
+      saveTarget: function (tg) {
+        var self = this, e = this.edit[tg.name], args = [tg.name, e.enabled ? '--on' : '--off'];
+        if (!e.items.length) { LU.say('err', 'Tick at least one thing to back up, or switch “back it up” off.'); return; }
+        args.push('--items', e.items.join(','));
+        if (e.stores.length) args.push('--stores', e.stores.join(',')); else args.push('--all-stores');
+        var at = (e.at || '').trim();
+        if (at && !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(at)) { LU.say('err', 'The time is HH:MM, for example 02:30.'); return; }
+        if (at) args.push('--at', at); else args.push('--no-time');
+        LU.run('Saving…', '/api/plugin', { plugin: 'backup', command: 'set-target', args: args }, function () { return 'Saved the backup setting of ' + (tg.kind === 'server' ? 'the server' : tg.name) + '.'; }).then(function () { self.load(); });
+      },
+      runTarget: function (tg) {
+        var self = this, args = tg.kind === 'server' ? ['--server'] : ['--project', tg.name];
+        LU.run('Taking a backup…', '/api/plugin', { plugin: 'backup', command: 'run', args: args }, function () { return 'A backup was taken.'; }).then(function () { self.load(); });
+      },
+      fillEdit: function () {
+        var self = this, e = {};
+        ((this.st && this.st.targets) || []).forEach(function (tg) {
+          e[tg.name] = { enabled: tg.enabled, items: (tg.items || []).slice(), stores: (tg.stores || []).slice(), at: tg.at || '' };
+        });
+        this.edit = e;
+      },
       load: function () {
         var self = this; self.error = '';
-        self.call('status', []).then(function (r) { if (r.ok) self.st = r.data; else self.error = r.error ? r.error.message : 'Could not read the state.'; });
+        self.call('status', []).then(function (r) { if (r.ok) { self.st = r.data; self.fillEdit(); } else self.error = r.error ? r.error.message : 'Could not read the state.'; });
         self.call('list', []).then(function (r) { self.list = r.ok ? (r.data.config || []) : []; });
       },
       setup: function () {

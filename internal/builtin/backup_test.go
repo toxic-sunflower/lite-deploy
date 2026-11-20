@@ -209,3 +209,80 @@ func TestParseIdentitySkipsAgeKeygenComments(t *testing.T) {
 		}
 	}
 }
+
+func TestBackupPerTargetTakesOnlyWhatIsSetAndKeepsTheSetupKey(t *testing.T) {
+	id, _ := age.GenerateX25519Identity()
+	env, mem, cmds := backupEnv(t, "")
+	_ = mem.MkdirAll("/etc/lite-deploy/projects", 0o755)
+	_ = mem.WriteFile("/etc/lite-deploy/projects/shop.json", []byte("{}"), 0o644)
+	_ = mem.WriteFile("/etc/lite-deploy/projects/blog.json", []byte("{}"), 0o644)
+	_ = mem.MkdirAll("/etc/caddy", 0o755)
+	_ = mem.MkdirAll("/etc/lite-deploy", 0o755)
+	_ = mem.MkdirAll("/var/lib/lite-deploy/state/projects", 0o755)
+	_ = mem.WriteFile("/var/lib/lite-deploy/state/projects/shop.json", []byte("{}"), 0o644)
+	_ = mem.MkdirAll("/var/lib/lite-deploy/secrets/shop", 0o700)
+	_ = mem.MkdirAll("/home/shop/.local/share/lite-deploy/data", 0o755)
+	ctx := context.Background()
+	if _, err := (Backup{}).Run(ctx, env, "setup", []string{id.Recipient().String()}); err != nil {
+		t.Fatal(err)
+	}
+	// the blog is not backed up; the shop is, with its files (data) and not its secrets
+	if _, err := (Backup{}).Run(ctx, env, "set-target", []string{"blog", "--off"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Backup{}).Run(ctx, env, "set-target", []string{"shop", "--items", "settings,data", "--at", "02:30"}); err != nil {
+		t.Fatal(err)
+	}
+	// a new setup key keeps what was set for the targets
+	if _, err := (Backup{}).Run(ctx, env, "setup", []string{id.Recipient().String()}); err != nil {
+		t.Fatal(err)
+	}
+	if b := string(mem.Files[backupConf]); !strings.Contains(b, `"blog"`) || !strings.Contains(b, "02:30") {
+		t.Fatalf("setup must keep the targets: %s", b)
+	}
+	*cmds = nil
+	out, err := (Backup{}).Run(ctx, env, "run", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for n := range mem.Files {
+		if strings.HasPrefix(n, configDir+"/") {
+			names = append(names, strings.TrimPrefix(n, configDir+"/"))
+		}
+	}
+	joined := strings.Join(names, " ")
+	if !strings.Contains(joined, "server-") || !strings.Contains(joined, "project-shop-") || strings.Contains(joined, "project-blog-") {
+		t.Fatalf("the server and shop are backed up, blog is not: %s\n%s", joined, out.Text)
+	}
+	var shopTar string
+	for _, c := range *cmds {
+		if c.Name == "tar" && strings.Contains(strings.Join(c.Args, " "), "projects/shop.json") {
+			shopTar = strings.Join(c.Args, " ")
+		}
+	}
+	if !strings.Contains(shopTar, "home/shop/.local/share/lite-deploy/data") || strings.Contains(shopTar, "secrets/shop") {
+		t.Errorf("the shop archive holds its data and not its secrets (they were not chosen): %s", shopTar)
+	}
+	// the project that has its own time is left to its own timer when the common one runs
+	*cmds = nil
+	for n := range mem.Files {
+		if strings.HasPrefix(n, configDir+"/") {
+			delete(mem.Files, n)
+		}
+	}
+	if _, err := (Backup{}).Run(ctx, env, "run", []string{"--scheduled"}); err != nil {
+		t.Fatal(err)
+	}
+	for n := range mem.Files {
+		if strings.Contains(n, "project-shop-") {
+			t.Errorf("shop has its own time, the common run must skip it: %s", n)
+		}
+	}
+	if _, err := (Backup{}).Run(ctx, env, "set-target", []string{"shop", "--items", "everything"}); err == nil {
+		t.Error("an unknown item must be refused")
+	}
+	if _, err := (Backup{}).Run(ctx, env, "set-target", []string{"nothere", "--off"}); err == nil {
+		t.Error("an unknown project must be refused")
+	}
+}

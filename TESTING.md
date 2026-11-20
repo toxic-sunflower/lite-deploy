@@ -47,6 +47,12 @@ Repeat the creation once more with the same form and **Create project**: every s
 3. **Export (no secrets)**. Expected: a file `NAME.lite-project.json` is downloaded; open it: it holds no password, token or key, only names like `secret://api_key`.
 4. **New project**, “Start from an exported project file”, pick that file. Expected: the form is filled in; secret values and the registry token are empty and the page asks for them. (Do not create a second copy of your live project: close the form.)
 
+## 1c. Shared secrets and the server file
+
+1. **Projects**, **Shared secrets**: add `registry_token`. In **New project** write `shared:registry_token` in the “Read-only token” box and create the project. Expected: it works without a copy of the token in the project; **Secrets** of the project shows `shared/registry_token` as “set (shared)”.
+2. **Server**, **Save configuration**. Expected: a file `server.lite-config.json` with your users and their public keys, firewall mode, programs and backup key, and no secret.
+3. Do not run `lite init --config` on this server; keep the file for the next one.
+
 ## 2. Publishing (Ingress)
 
 Do this on a domain you can afford to touch for a few minutes.
@@ -67,6 +73,13 @@ Expected: a backup file is listed; the file ends with `.age`.
 4. Restore into a throw-away database, never over the live one: `lite pg restore LIVE_DB FILE.dump --as LIVE_DB_test` (the target database must exist). Expected: “Database … restored”; then drop the test database.
 
 4. In **Databases**: your database is listed, “Back up now” makes a copy that appears under Backups. Do not press Restore on the live database during a test.
+
+## 3a. Backups per project
+
+1. **Backups**, **What is backed up**. Expected: the server and each of your projects, each with its own boxes.
+2. For your project tick only “settings” and “database”, set the time to a few minutes from now, **Save**, then wait. Expected: a `project-NAME-…age` file appears under Backups after that time, and no backup of the other projects.
+3. **Back up this now** on the server entry. Expected: a `server-…age` file.
+4. Switch a project off, **Save**, press the main **Back up now**. Expected: nothing is made for that project.
 
 ## 3b. Confirm changes with your key (optional, try it last)
 
