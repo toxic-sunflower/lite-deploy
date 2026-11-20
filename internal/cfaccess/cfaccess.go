@@ -82,7 +82,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (json.Ra
 	}
 	var env envelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		return nil, fmt.Errorf("Cloudflare answered %d with something unexpected", resp.StatusCode)
+		return nil, fmt.Errorf("the answer of Cloudflare (%d) is not what was expected", resp.StatusCode)
 	}
 	if !env.Success {
 		if len(env.Errors) > 0 {
@@ -90,9 +90,9 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (json.Ra
 			for _, e := range env.Errors {
 				msgs = append(msgs, e.Message)
 			}
-			return nil, errors.New("Cloudflare: " + strings.Join(msgs, "; "))
+			return nil, errors.New("Cloudflare says: " + strings.Join(msgs, "; "))
 		}
-		return nil, fmt.Errorf("Cloudflare answered %d", resp.StatusCode)
+		return nil, fmt.Errorf("the answer of Cloudflare was %d", resp.StatusCode)
 	}
 	return env.Result, nil
 }
