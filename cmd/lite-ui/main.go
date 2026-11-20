@@ -33,6 +33,9 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 	if len(args) > 0 && args[0] == "mcp" {
 		return runMCP(args[1:], in, out, errw)
 	}
+	if len(args) > 0 && args[0] == "update" {
+		return runUpdate(args[1:], out, errw)
+	}
 	if len(args) > 0 && args[0] == "service" {
 		return runService(args[1:], out, errw)
 	}
@@ -244,4 +247,41 @@ func cfTokenPath() string {
 		return ""
 	}
 	return filepath.Join(dir, "lite-ui", "cloudflare.json")
+}
+
+// runUpdate is `lite-ui update [--check]`: look for a newer release and install it (the same as the button on the page).
+func runUpdate(args []string, out, errw io.Writer) int {
+	check := len(args) == 1 && args[0] == "--check"
+	if len(args) > 1 || (len(args) == 1 && !check) {
+		_, _ = fmt.Fprintln(errw, "usage: lite-ui update [--check]")
+		return 2
+	}
+	upd := uiupdate.New(Version)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	info, err := upd.Check(ctx)
+	if err != nil {
+		_, _ = fmt.Fprintln(errw, "ERROR: could not ask for the newest version:", err)
+		return 1
+	}
+	if !info.Available {
+		if _, ok := uiupdate.Parse(Version); !ok {
+			_, _ = fmt.Fprintf(out, "This is a development build (%s); the newest release is %s.\n", Version, info.Latest)
+			return 0
+		}
+		_, _ = fmt.Fprintf(out, "lite-ui %s is up to date.\n", Version)
+		return 0
+	}
+	_, _ = fmt.Fprintf(out, "A newer lite-ui exists: %s (you have %s).\n", info.Latest, Version)
+	if check {
+		_, _ = fmt.Fprintln(out, "Install it with: lite-ui update")
+		return 0
+	}
+	tag, err := upd.Apply(ctx)
+	if err != nil {
+		_, _ = fmt.Fprintln(errw, "ERROR:", err)
+		return 1
+	}
+	_, _ = fmt.Fprintf(out, "Updated to %s. If lite-ui runs in the background, restart it:\n  Linux/WSL: systemctl --user restart lite-ui\n  macOS: launchctl kickstart -k gui/$(id -u)/%s\n  Windows: lite-ui service install\n", tag, launchdLabel)
+	return 0
 }

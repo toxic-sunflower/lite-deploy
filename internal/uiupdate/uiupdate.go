@@ -70,6 +70,9 @@ func New(current string) *Updater {
 
 var verRe = regexp.MustCompile(`\Av?(\d+)\.(\d+)\.(\d+)\z`)
 
+// Parse reads a release version such as v0.12.1 (a development build does not parse).
+func Parse(v string) ([3]int, bool) { return parse(v) }
+
 func parse(v string) ([3]int, bool) {
 	m := verRe.FindStringSubmatch(strings.TrimSpace(v))
 	if m == nil {
