@@ -19,6 +19,8 @@ lite publish shop main tunnel     # back to 127.0.0.1 only
 
 `lite publish` changes the project description kept on the server and applies it like `lite project create`, with a preview. Secrets and data are untouched.
 
+![The Ingress page.](img/ingress.png)
+
 ## Direct: Caddy makes the certificate
 
 1. Point the DNS record of the name (`A`, and `AAAA` if the server has IPv6) at the server. If the name is on Cloudflare, either turn the proxy off (grey cloud) or keep it on with SSL mode "Full (strict)".

@@ -1,0 +1,51 @@
+#!/bin/sh
+# A stand-in for ssh that answers like a server running lite-deploy, with sample data. It is only used to take the pictures
+# of the interface for the documentation (see make.sh). The last argument is the request path.
+path=$(eval echo \${$#})
+case "$path" in
+  /v1/update) echo '{"ok":true,"api_version":"v1","command":"update","data":{"current":"v0.12.0","latest":"v0.12.1","available":true}}' ;;
+  /v1/verify) echo '{"ok":true,"api_version":"v1","command":"verify","data":{"ok":19,"warnings":3,"failures":0,"findings":[
+    {"plugin":"security","check":"ssh-allow","level":"warn","message":"the SSH user list is not restricted","fix":"lite security allow-users NAME"},
+    {"plugin":"security","check":"pending-updates","level":"warn","message":"security updates waiting to be installed: 2","fix":"sudo apt-get upgrade"},
+    {"plugin":"security","check":"admins","level":"warn","message":"administrators (sudo): alice, bob, ubuntu; without an SSH key: ubuntu"},
+    {"plugin":"firewall","check":"status","level":"ok","message":"the firewall is on, SSH port 22"},
+    {"plugin":"security","check":"fail2ban","level":"ok","message":"fail2ban protects SSH"},
+    {"plugin":"security","check":"ssh-password","level":"ok","message":"SSH password login is disabled"},
+    {"plugin":"caddy","check":"service","level":"ok","message":"the Caddy service is running"},
+    {"plugin":"pg","check":"service","level":"ok","message":"the PostgreSQL service is running"}]}}' ;;
+  /v1/status*) echo '{"ok":true,"api_version":"v1","command":"status","data":{"projects":[
+    {"project":"shop","active":"blue","slots":{"blue":{"api":{"port":18081,"up":true,"version":"3f2c0d1e9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d"},"admin":{"port":18091,"up":true,"version":"3f2c0d1e9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d"}},"green":{"api":{"port":18082,"up":false,"version":""},"admin":{"port":18092,"up":false,"version":""}}},
+     "history":[{"time":"2026-11-20 10:42","event":"deploy","version":"3f2c0d1e9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d","slot":"blue"},{"time":"2026-11-18 16:05","event":"deploy","version":"9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3f2c0d1e","slot":"green"},{"time":"2026-11-15 09:12","event":"deploy","version":"1d2c3b4a59687766554433221100ffeeddccbbaa","slot":"blue"}]},
+    {"project":"blog","active":"green","slots":{"blue":{},"green":{"web":{"port":18101,"up":true,"version":"b7a6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8"}}},"history":[{"time":"2026-11-12 11:30","event":"deploy","version":"b7a6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8","slot":"green"}]}]}}' ;;
+  /v1/ingress) echo '{"ok":true,"api_version":"v1","command":"ingress","data":{"caddy":{"installed":true,"running":true},"web_ports_open":true,"sites":[
+    {"project":"shop","site":"main","host":"shop.example.com","service":"api","publish":"direct"},
+    {"project":"shop","site":"admin","host":"admin.shop.example.com","service":"admin","publish":"tunnel"},
+    {"project":"blog","site":"main","host":"blog.example.com","service":"web","publish":"direct"}]}}' ;;
+  /v1/owner) echo '{"ok":true,"api_version":"v1","command":"owner.list","data":{"keys":[],"required":false}}' ;;
+  /v1/project/key) echo '{"ok":true,"api_version":"v1","command":"project.key","data":{"public_key":"age1server"}}' ;;
+  /v1/firewall) echo '{"ok":true,"api_version":"v1","command":"firewall.status","data":{"active":true,"ssh_port":22,"rules":[{"port":22,"proto":"tcp","action":"allow","from":"any","raw":"22/tcp","protected":true},{"port":80,"proto":"tcp","action":"allow","from":"any","raw":"80/tcp","protected":true},{"port":443,"proto":"tcp","action":"allow","from":"any","raw":"443/tcp","protected":true}]}}' ;;
+  /v1/plugins) echo '{"ok":true,"api_version":"v1","command":"info","data":{"version":"x","load_errors":[],"plugins":[
+    {"name":"caddy","kind":"builtin","description":"Caddy web server: the sites of your projects","requires":[],"installed":true,"commands":[]},
+    {"name":"podman","kind":"builtin","description":"podman: containers without root","requires":[],"installed":true,"commands":[]},
+    {"name":"pg","kind":"builtin","description":"PostgreSQL: databases of your projects","requires":[],"installed":true,"commands":[]},
+    {"name":"cloudflare","kind":"builtin","description":"Cloudflare Tunnel: reach your sites without open ports","requires":[],"installed":true,"commands":[]},
+    {"name":"backup","kind":"builtin","description":"backups","requires":[],"commands":[]},
+    {"name":"backblaze","kind":"builtin","description":"Backblaze B2: copies outside the server","requires":[],"installed":true,"commands":[]},
+    {"name":"redis","kind":"builtin","description":"Redis on the host","requires":[],"installed":false,"commands":[{"name":"install","help":"install Redis"}]}]}}' ;;
+  /v1/plugin)
+    body=$(cat)
+    case "$body" in
+      *'"plugin":"pg"'*'"command":"status"'*) echo '{"ok":true,"data":{"version":"psql (PostgreSQL) 16.4","active":true,"scheduled":true}}' ;;
+      *'"command":"databases"'*) echo '{"ok":true,"data":{"databases":["blog","postgres","shop"]}}' ;;
+      *'"command":"backups"'*) echo '{"ok":true,"data":{"backups":[{"database":"shop","file":"shop-20261120T030000Z.dump.age","at":"2026-11-20T03:00:00Z"},{"database":"blog","file":"blog-20261120T030000Z.dump.age","at":"2026-11-20T03:00:00Z"}]}}' ;;
+      *'"plugin":"cloudflare"'*) echo '{"ok":true,"data":{"installed":true,"running":true,"token":true}}' ;;
+      *'"plugin":"backup"'*'"command":"status"'*) echo '{"ok":true,"data":{"configured":true,"scheduled":true,"count":14,"last":"2026-11-20T03:05:00Z","stores":["backblaze"],"server_items":["caddy","lite"],"project_items":["settings","secrets","database","data"],"targets":[
+        {"name":"server","kind":"server","enabled":true,"items":["caddy","lite"],"stores":[],"at":"","last":"2026-11-20T03:05:00Z"},
+        {"name":"shop","kind":"project","enabled":true,"items":["settings","secrets","database","data"],"stores":["backblaze"],"at":"02:30","last":"2026-11-20T02:35:00Z"},
+        {"name":"blog","kind":"project","enabled":true,"items":["settings","database"],"stores":[],"at":"","last":"2026-11-20T03:05:00Z"}]}}' ;;
+      *'"plugin":"backup"'*'"command":"list"'*) echo '{"ok":true,"data":{"config":["server-20261120T030500Z.tar.gz.age","project-shop-20261120T023500Z.tar.gz.age","project-blog-20261120T030500Z.tar.gz.age"]}}' ;;
+      *) echo '{"ok":true,"data":{}}' ;;
+    esac ;;
+  /v1/secrets*) echo '{"ok":true,"api_version":"v1","command":"secret.list","data":{"secrets":[{"name":"auth_session_secret","updated_at":"2026-11-12T10:00:00Z"},{"name":"webhook_secret","updated_at":"2026-11-12T10:00:00Z"}],"needed":["auth_session_secret","shared/registry_token","webhook_secret"],"shared":["registry_token"]}}' ;;
+  *) echo '{"ok":false,"api_version":"v1","command":"x","error":{"code":"internal","message":"not in the sample"}}' ;;
+esac

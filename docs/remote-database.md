@@ -9,6 +9,8 @@ Both have `lite` installed (see the [Quickstart](quickstart.md)). `db1` needs th
 
 Use a private network between the servers. The database port is opened only for the one address you name, but it should not cross the public internet.
 
+![The Databases page.](img/databases.png)
+
 ## 1. Register the database server on `app1`
 
 ```sh

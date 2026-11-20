@@ -68,6 +68,8 @@ printf '%s' 'a-long-random-string'  | lite secret encrypt shop session_secret > 
 
 Each command prints an encrypted block. The files can be shown to anyone: only the server can decrypt them, and each is bound to the project and the name.
 
+![The New project form.](img/new-project.png)
+
 ## 3. Preview and create
 
 ```sh

@@ -1,5 +1,7 @@
 (function () {
   var LU = window.LU = { components: {} };
+  // an address may carry ?theme=light|dark (used to take the pictures of the documentation); read before the address is cleaned
+  var asked = new URLSearchParams(location.search).get('theme');
   var token = new URLSearchParams(location.search).get('t') || sessionStorage.getItem('t') || '';
   if (token) { sessionStorage.setItem('t', token); history.replaceState(null, '', location.pathname + location.hash); }
   var saved = '';
@@ -8,6 +10,7 @@
   // theme: light, dark, or the one the system uses (auto); chosen once, kept in the browser
   var theme = 'auto';
   try { theme = localStorage.getItem('lite-ui-theme') || 'auto'; } catch (e) {}
+  if (asked === 'light' || asked === 'dark') theme = asked;
   function applyTheme(t) {
     if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
   }

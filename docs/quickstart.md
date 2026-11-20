@@ -40,6 +40,8 @@ sudo lite init --user alice --ufw max --plugins caddy,podman,pg
 
 After the user is created, `init` asks you to log in once with your key: open a new terminal on your workstation and run `ssh alice@YOUR_SERVER`. `init` waits for that login (up to 5 minutes) and only then closes password login and finishes the protection, so you cannot lock yourself out. From now on you work as `alice`, and you do not need `sudo` for `lite` commands.
 
+![The Overview page after the first start.](img/overview.png)
+
 ## 3. Check the server
 
 ```sh

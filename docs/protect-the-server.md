@@ -19,6 +19,8 @@ lite fix                # do it
 
 `fix` runs only a short list of safe, repeatable fixes: SSH hardening, automatic updates, kernel parameters, fail2ban, backup timers and installing the plugins your projects need. Everything else (the firewall, users, keys, package changes, anything that needs a value from you) is listed under "Manual" and you do it yourself.
 
+![The Protection page.](img/protection.png)
+
 ## What the `security` plugin does
 
 If you skipped it in `init`, or want to repeat it, turn it all on with one command (SSH goes last, so a mistake cannot lock you out early):

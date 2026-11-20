@@ -26,6 +26,8 @@ lite backup run --server
 
 A copy of one project is a file `project-NAME-DATE.tar.gz.age`, of the server `server-DATE.tar.gz.age`; both open with the same private key and are restored the same way (`lite backup restore FILE --identity-stdin`). The database of a project is copied as before and restored with `lite pg restore`.
 
+![The Backups page.](img/backups.png)
+
 ## 1. Make a backup key
 
 ## The short way: in the interface
