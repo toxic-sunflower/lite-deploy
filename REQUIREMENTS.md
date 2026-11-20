@@ -59,7 +59,7 @@ These are the implementer's decisions, not the owner's. Each needs to be confirm
 ## 4. Requirements (in the owner's words)
 
 **Installation**
-- R-1. Installed with one command from the site. The installer installs the minimum: the binary, `minisign`, the agent. There are no separate agent install commands for a person. The installer is `liteup`: `install`, `update`, `reinstall`, `uninstall`, `status` (decided 2026-11-20; the old `install.sh` stays as a wrapper). The agent is restarted automatically on install and update.
+- R-1. Installed with one command from the site. The installer installs the minimum: the binary, `minisign`, the agent. There are no separate agent install commands for a person. The installer is `liteup`: `install`, `update`, `reinstall`, `uninstall`, `status` (decided 2026-11-20). The one-liner is the bootstrap `install.sh`, which downloads `liteup` and runs `liteup install`. The agent is restarted automatically on install and update.
 - R-2. Works on more than Debian and Ubuntu.
 - R-3. The command is called `lite`.
 

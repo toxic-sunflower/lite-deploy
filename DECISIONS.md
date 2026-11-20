@@ -174,7 +174,7 @@ Clarifications of `SPEC-v0.md` that were needed in the implementation; accepted 
 
 **D-68. Backups and secrets.** Project secrets enter a backup only encrypted with the owner's age key (the server keeps only the public part); database dumps are encrypted optionally; storage locations (Backblaze B2, S3, SFTP through rclone) are pluggable and upload with `copy`. The secret store is local; pluggable backends (an encrypted git, Vault) are postponed. Status: accepted by the owner (2026-11-19).
 
-**D-69. `liteup`.** The installer and manager is `liteup` (install, update, reinstall, uninstall, status), as `rustup` is for Rust; it is part of every signed release, and the agent restarts automatically on install and update. `install.sh` stays as a wrapper. Status: accepted by the owner (2026-11-20).
+**D-69. `liteup`.** The installer and manager is `liteup` (install, update, reinstall, uninstall, status), as `rustup` is for Rust; it is part of every signed release, and the agent restarts automatically on install and update. `install.sh` is the bootstrap, like `sh.rustup.rs`: it downloads `liteup` from the latest release into `/usr/local/bin` and runs `liteup install`; the documentation points the one-liner at `install.sh`, not at `liteup` (owner, 2026-11-20). `liteup uninstall --everything` takes the server back to bare and keeps `liteup`. Status: accepted by the owner (2026-11-20).
 
 **D-70. English everywhere.** All user-visible text, code comments and documentation are in English. Status: accepted by the owner (2026-11-20).
 

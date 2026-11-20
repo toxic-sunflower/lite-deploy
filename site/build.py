@@ -81,7 +81,7 @@ def nav(cur: str) -> str:
     parts.append("<h4>Links</h4>")
     parts.append(f'<a href="{REPO}">Source code</a>')
     parts.append(f'<a href="{REPO}/releases">Releases</a>')
-    parts.append('<a href="liteup">liteup (server)</a>')
+    parts.append('<a href="install.sh">install.sh (server)</a>')
     parts.append('<a href="lite-ui">lite-ui (your computer)</a>')
     return "\n".join(parts)
 
