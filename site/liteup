@@ -246,7 +246,9 @@ do_uninstall() {
     say "[1/3] No agent to remove"
   fi
   say "[2/3] Removing the binaries"
-  rm -f "$prefix/lite-deploy" "$prefix/lite" "$prefix/liteup"
+  rm -f "$prefix/lite-deploy" "$prefix/lite"
+  # liteup itself stays after --everything: it is what installs lite again
+  if [ "$everything" != 1 ]; then rm -f "$prefix/liteup"; fi
   if [ "$purge" = 1 ]; then
     say "[3/3] Deleting settings, secrets and backups (--purge)"
     rm -rf /etc/lite-deploy /var/lib/lite-deploy /var/backups/lite-deploy
