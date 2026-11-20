@@ -71,6 +71,7 @@
   app.component('ingress', C.Ingress);
   app.component('databases', C.Databases);
   app.component('backups', C.Backups);
+  app.component('store-form', C.StoreForm);
   app.component('security', C.Security);
   app.component('server', C.Server);
   app.component('project-card', C.ProjectCard);
@@ -79,5 +80,6 @@
   app.config.globalProperties.state = S;
   app.config.globalProperties.applyUpdate = LU.applyUpdate;
   app.config.globalProperties.checkUpdate = LU.checkUpdate;
+  app.config.globalProperties.loadPlugins = LU.loadPlugins;
   app.mount('#app');
 })();

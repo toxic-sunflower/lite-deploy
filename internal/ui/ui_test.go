@@ -550,3 +550,40 @@ func TestBackupKeyIsMadeForThePageAndNeverKept(t *testing.T) {
 		t.Error("every call must make a new key")
 	}
 }
+
+func TestMCPToolsReadAndDeployButNeverSign(t *testing.T) {
+	dir := t.TempDir()
+	var calls [][]string
+	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		calls = append(calls, c.Args)
+		return host.Result{Stdout: []byte(`{"ok":true,"data":{"projects":[]}}`)}, nil
+	}}
+	s := &Server{Runner: r, Servers: &ServerList{Path: dir + "/servers"}, Token: tok, OwnerKeyPath: dir + "/owner.key"}
+	_ = s.Servers.Add("anna@203.0.113.7")
+	if _, err := s.createOwnerKey(); err != nil {
+		t.Fatal(err)
+	}
+	var byName = map[string]func(context.Context, map[string]any) (string, error){}
+	for _, tl := range s.MCPTools() {
+		byName[tl.Name] = tl.Run
+	}
+	if out, err := byName["project_status"](context.Background(), map[string]any{}); err != nil || !strings.Contains(out, "projects") {
+		t.Fatalf("%v %s", err, out)
+	}
+	if _, err := byName["deploy"](context.Background(), map[string]any{"project": "shop", "sha": "short"}); err == nil {
+		t.Error("a deploy needs the full 40-character hash")
+	}
+	if _, err := byName["deploy"](context.Background(), map[string]any{"project": "shop", "sha": sha}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range calls {
+		for _, a := range c {
+			if a == "--sig" {
+				t.Fatalf("a tool of an assistant must never sign with the owner's key: %v", c)
+			}
+		}
+	}
+	if _, err := byName["verify"](context.Background(), map[string]any{"server": "evil@198.51.100.9"}); err == nil {
+		t.Error("a server that is not in the list must be refused")
+	}
+}

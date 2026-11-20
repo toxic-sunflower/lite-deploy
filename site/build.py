@@ -29,6 +29,7 @@ GROUPS = [
         ("docs/remote-database.md", "remote-database", "A database on another server", "Connect a project to PostgreSQL on a second server."),
         ("docs/backups.md", "backups", "Backups and restore", "Encrypted backups, storage outside the server and restoring a lost server."),
         ("docs/protect-the-server.md", "protect-the-server", "Protect the server", "SSH, fail2ban, updates, the firewall and `lite verify`."),
+        ("docs/ai-assistants.md", "ai-assistants", "Use an AI assistant", "Let an AI assistant read your servers and deploy, with your approval."),
         ("docs/maintenance.md", "maintenance", "Update and troubleshoot", "Updating, uninstalling and what to do when something fails."),
     ]),
 ]

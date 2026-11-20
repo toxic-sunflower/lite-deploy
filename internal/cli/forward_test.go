@@ -279,3 +279,26 @@ func TestCallStreamAnswersManyRequestsOnOneStream(t *testing.T) {
 		}
 	}
 }
+
+func TestMigrationsRunOnceInOrder(t *testing.T) {
+	old := migrations
+	defer func() { migrations = old }()
+	var ran []string
+	migrations = []migration{
+		{1, "first", func(Env) error { ran = append(ran, "first"); return nil }},
+		{2, "second", func(Env) error { ran = append(ran, "second"); return nil }},
+	}
+	env, out, _ := testEnv(t)
+	if c := run(t, env, "migrate"); c != 0 {
+		t.Fatalf("%d %s", c, out.String())
+	}
+	if c := run(t, env, "migrate"); c != 0 {
+		t.Fatal(c)
+	}
+	if strings.Join(ran, ",") != "first,second" {
+		t.Fatalf("each step must run once, in order: %v", ran)
+	}
+	if b, _ := env.FS.ReadFile(migrationState); strings.TrimSpace(string(b)) != "2" {
+		t.Errorf("the last number must be kept: %q", b)
+	}
+}

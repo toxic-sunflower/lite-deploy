@@ -4,7 +4,7 @@ Project: **lite-deploy** (a working name). Every session is short and solves one
 
 ## Status on 2026-11-20
 
-The code of S1–S6 and S9 is done, the plugin mechanism and the plugins `package`, `security`, `firewall`, `caddy`, `podman`, `pg`, `redis`, `server`, `backup`, `backblaze`, `s3`, `sftp` are done, and so are `liteup`, `lite fix`, `kind: unit` components and creating a project from the interface (see `REQUIREMENTS.md`, section 2, for the exact state and what is checked on a server). Release `v0.6.1` is published. What remains is running it all on a real server, the MCP server (S10) and the skill (S11). The queue below is the original plan and is kept for the history of decisions.
+All the parts of v1 are written: the core (S1–S6), the Cloudflare plugin (S7), backups and secrets (S8), the interface `lite-ui` (S9) with its MCP mode (S10) and the skill for AI agents (S11), installing and updating with `liteup`, protection by default, publishing (tunnel or direct), confirming dangerous changes with the owner's key. The latest release is on the Releases page. What remains is **running it all on a real server**: the steps are in `TESTING.md`. Two hardening items are postponed on purpose (see S6). The queue below is the original plan and is kept for the history of decisions.
 
 ## The map of documents
 
@@ -68,7 +68,7 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 
 ### S4. Applying a plan (mode A), the `project create` command
 - Done (2026-11-04): the package `internal/executor` with handlers of all 14 actions, `apply` and `apply --dry-run` (`would_change`/`unchanged`/`would_fail`), `project create`, the journal, `adopt`, rolling back the Caddy files on a failed check; 5 scenarios on doubles (from scratch, a repeat without changes, stopping on an error, adopt, secret leaks). Decisions D-53…D-56. Run on a container and a test WSL on 2026-11-19: from scratch and a repeat `unchanged` confirmed.
-- Not done: the warning about `pg_hba` rules with `all` above the general one (4.3, `provision_postgres`), the `apply_per_hour` quota.
+- Done later (2026-11-20): `lite verify` warns about `pg_hba` rules with `all` or without a password; the agent enforces the `apply_per_hour` quota.
 
 ### S5. `deploy`, `rollback`, `status` and the gatekeeper (done 2026-11-13)
 - Done: `internal/deploy` (blue-green, health check, rollback, flock), the commands `deploy`, `rollback`, `status`, `gate`, the `deploy_failed` code; 8 scenarios on doubles. Checked on 2026-11-19 in a container for `kind unit`.
@@ -76,27 +76,27 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 
 ### S6. The agent daemon and the on-request executor (mode B; the first version done 2026-11-13)
 - Done: the agent (`lite-deploy agent serve`, HTTP/JSON `/v1` over a unix socket, access by the system administrators group (`sudo` or `wheel`), `SO_PEERCRED`, a request journal), the on-request executor (`lite-deploy exec`, socket activation, a fixed list of actions, the systemd journal), the client `lite-deploy call`, installing the agent is part of the installer. The UI goes through the agent, and neither `sudo` nor `sudoers` is needed for it. Decision D-63. Since v0.6 the CLI also hands privileged commands to the agent (no sudo).
-- Not done: confirming dangerous actions with a key signature, quotas, OpenAPI, moving the Caddy switch on a deploy to the executor socket and removing the `sudoers` rule (D-46), hardening the executor unit.
+- Done later (2026-11-20): confirming dangerous changes with the owner's key (D-78, opt-in), the quota, the OpenAPI description of the agent API (`schemas/agent.openapi.json`, checked against the routes by a test).
+- Postponed on purpose: moving the Caddy switch on a deploy to the executor socket and removing the `sudoers` rule (D-46), and hardening the executor unit. Both are hardening with a small gain, and they change how deploys and the executor run, which cannot be checked without a test machine; doing them blind could break deploys on a live server. To be done after the real-server check.
 
-### S7. The Cloudflare tunnel
-- Goal: a plugin `tunnel-cloudflare` following the rules of `DEPLOY-PATTERN.md` (a separate user, a 600 token, checking old DNS records, a fallback plan for a failure).
+### S7. The Cloudflare tunnel (done 2026-11-20)
+- Done: the plugin `cloudflare` (cloudflared as its own user, the token in a 600 file and never on a command line), a card in the Ingress page, and a switch to direct publishing as the fallback plan. Checking old DNS records is not done (it needs the Cloudflare API).
 
 ### S8. Secrets and backup
 - Done: `age` encryption, the store, `secret encrypt|set|list|pubkey`, `init`; the `backup` plugin (settings and secrets encrypted with the owner key, dumps optionally, storage locations); restoring a server (README). Not done: `secret://` references in the daemon API, a journal of secret reads as root.
 
 ### S9. The UI (the first version done 2026-11-13)
-- Done: `lite-ui [--host user@server]` (a separate program): a local page on `127.0.0.1` with a token in the address, the state of projects, "Deploy" (by commit hash) and "Roll back", the firewall section, the plugins and `verify`, and a "New project" form with a plan preview. Not done: forms generated from JSON Schema, checking the page in a real browser.
+- Done: `lite-ui [--host user@server]` (a separate program): a local page on `127.0.0.1` with a token in the address, the state of projects, "Deploy" (by commit hash) and "Roll back", the firewall section, the plugins and `verify`, and a "New project" form with a plan preview. Since then: Overview, Projects, Ingress, Databases, Backups, Protection and Server pages in Vue 3, several servers, one ssh connection. Checked in a real browser against a stand-in for the server; not yet against a real one. Not done: forms generated from JSON Schema.
 
 ### The firewall plugin (done 2026-11-13)
 - Done: the package `internal/firewall` (`ufw status`, `allow`, `remove`, `enable`, modes), the `lite firewall …` commands, the "Firewall" section in the UI. The SSH (read from `sshd -T`), 80 and 443 ports are protected. Changes need `--yes` in the CLI and a confirmation in the browser. Decision D-62.
 - Not done: checking on a live `ufw` (the format of `ufw status` in different versions).
 
-### S10. The MCP server
-- Goal: a thin MCP server over the API; tools from the schemas; dry-run by default; dangerous actions are not executed without the owner's confirmation.
+### S10. The MCP server (done 2026-11-20)
+- Done: `lite-ui mcp` speaks the Model Context Protocol on standard input and output with the same list of servers and the same ssh connection as the page. Tools: `list_servers`, `verify`, `project_status`, `ingress`, `plugins`, `update_check`, `deploy`, `rollback`. It never signs with the owner's key, so dangerous changes stay in the interface. See `docs/ai-assistants.md`.
 
-### S11. Installing from scratch, instructions and a skill
-- Goal: installing on an empty Ubuntu with one checkable command; instructions "what is installed and why" and a skill for an AI agent.
-- Outcome: v1.
+### S11. Installing from scratch, instructions and a skill (done 2026-11-20)
+- Done: installing is two commands (`install.sh`, `liteup install`); the tutorials on the site; the skill `skill/lite-deploy/SKILL.md`. Outcome: v1 is complete in code; it becomes v1 when `TESTING.md` has been walked through on a real server.
 
 ### Later
 - User deploy hooks and deploys on a schedule or on a new image (see "Wishes" in `DECISIONS.md`).
@@ -121,11 +121,11 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 - **T4 (done 2026-11-20). Protection fully on by default.** `lite init` does everything itself: fail2ban, automatic updates, kernel parameters, and SSH by key only for everyone (root by key only), so `lite verify` has no security errors right after `init`. `--no-security` skips it. `init` already requires a key for the new user, so the lock-out risk is the same as today; it still tells the person to check a second login. `allow-users` stays optional. Caddy, podman, PostgreSQL and Redis stay opt-in.
 - **T5 (done 2026-11-20). Hints must not say `sudo`.** The `fix:` lines of `lite verify` print `sudo lite security …`, but daily commands run without sudo (R-16). Print the command as it is run: `lite security …`.
 
-- **T6. Built for non-professionals, UI first.** The users do not know SSH or fail2ban and barely use a terminal. Every goal is one button in the UI or one command, in plain words: "Make the server safe", "Publish my site", "Back up". The UI covers the whole path (server setup, protection, project, deploy, publishing, backups) without a terminal after the first install. No jargon in messages (explain what a thing does, not what it is called), and every screen says what to do next.
+- **T6 (done in the interface, 2026-11-20). Built for non-professionals, UI first.** The whole path is in the interface in plain words: protection, projects, publishing, databases, backups with a key made on the person's computer, off-site copies, updates, MCP. Terminal commands stay for those who like them. What is left is the live check (`TESTING.md`).
 
 - **T7 (done 2026-11-20). No wrappers over system tools.** The commands `lite security fail2ban|updates|sysctl` were removed: those protections are always on while the `security` plugin is installed (`init` installs it). `lite security ssh` stays, as do `enable`, `allow-users`, `banned`, `unban` and `logins`.
 - **T8 (done 2026-11-20). The whole path is: install `lite` on the server, `lite init`, hand over the key, then only the UI, with a separate small UI client.** After `init` the server is already protected (T4) and nothing else is needed in a terminal. On the person's computer there is no full `lite`: a separate, small UI-only program (one file per system, for example `lite-ui`, built from the same code without the agent and executor) is downloaded from the releases and started with a double click; no `liteup`, no PATH, no terminal. It reaches the server over SSH with the person's key and opens the page in the browser. The server opens nothing to the internet for it. The full `lite` stays on the server and for people who prefer a terminal.
-- **T9 (the steps are written in `RELEASING.md`; the first run is still to be done). A clean-VM check before every release.** Install the release candidate on a fresh virtual machine (real systemd, sshd, ufw), run `lite init`, the UI, a project, update and rollback of `lite` itself. Write the steps down in `RELEASING.md`.
+- **T9 (replaced by `TESTING.md`, 2026-11-20). Checking a release.** There is no spare machine, so the release candidate is walked through on the owner's real server and project by the scenarios in `TESTING.md` (and the clean-VM steps in `RELEASING.md` stay for anyone who has a spare machine).
 
 - **T10 (done 2026-11-20). `init` checks the key login itself.** The person should never have to "keep a second session open". Before `init` closes password login, it waits until the person has really logged in with the new key (it watches the SSH login journal for a successful key login of that user) and only then applies the SSH protection; until then password login stays on. If the login does not appear within a few minutes, `init` leaves password login on and says so.
 
@@ -141,7 +141,7 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 | S3 | done (2026-11-03) |
 | S4 | done in code and tests (2026-11-04); checked in a container and on a test WSL (2026-11-19) |
 | S5, S6, S9 | done in code; partly checked (2026-11-19) |
-| S7, S10, S11 | not started |
-| S8 | the backup and secret parts done; the daemon API parts not done |
+| S7, S10, S11 | done in code (2026-11-20); to be checked on a real server |
+| S8 | the backup and secret parts done (the page has a guided setup); `secret://` references in the daemon API and the journal of secret reads not done |
 | C1 | partly (Coolify, Dokploy, Kamal: the main parts) |
 | C4 | not done |

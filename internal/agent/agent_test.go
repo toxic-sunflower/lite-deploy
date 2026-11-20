@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -391,5 +393,45 @@ func TestOwnerKeyProtectsDangerousActions(t *testing.T) {
 	h.ServeHTTP(w2, r2.WithContext(WithUID(r2.Context(), 1000)))
 	if w2.Code != 403 {
 		t.Fatalf("a replayed signature must be refused: %d %s", w2.Code, w2.Body.String())
+	}
+}
+
+// The OpenAPI description must list every route of the agent, and nothing else.
+func TestOpenAPIDescribesEveryRoute(t *testing.T) {
+	src, err := os.ReadFile("agent.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := os.ReadFile("../../schemas/agent.openapi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Paths map[string]map[string]any `json:"paths"`
+	}
+	if err := json.Unmarshal(spec, &doc); err != nil {
+		t.Fatal(err)
+	}
+	re := regexp.MustCompile(`route\(http\.Method(Get|Post), "(/v1/[a-z/]*)"|HandleFunc\("(/v1/info)"`)
+	found := map[string]string{}
+	for _, m := range re.FindAllStringSubmatch(string(src), -1) {
+		switch {
+		case m[3] != "":
+			found[m[3]] = "get"
+		default:
+			found[m[2]] = strings.ToLower(m[1])
+		}
+	}
+	found["/v1/project/preview"], found["/v1/project/create"] = "post", "post" // registered in a loop
+	delete(found, "/v1/project/")
+	for p, method := range found {
+		if _, ok := doc.Paths[p][method]; !ok {
+			t.Errorf("%s %s is a route of the agent but is missing in schemas/agent.openapi.json", method, p)
+		}
+	}
+	for p := range doc.Paths {
+		if _, ok := found[p]; !ok {
+			t.Errorf("%s is in schemas/agent.openapi.json but is not a route of the agent", p)
+		}
 	}
 }

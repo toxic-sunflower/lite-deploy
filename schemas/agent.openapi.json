@@ -1,0 +1,816 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "lite-deploy agent API",
+    "version": "v1",
+    "description": "The API of the agent on the server. It listens on the unix socket /run/lite-deploy/api.sock (nothing is opened to the network); the caller is identified by the kernel (SO_PEERCRED) and must be a system administrator (group sudo or wheel). lite-ui reaches it through ssh with `lite-deploy call-stream`. Requests that change the server carry an X-Lite-Sig header once an owner key is registered. More than the configured number of changing requests per hour is refused (quota_exceeded)."
+  },
+  "servers": [
+    {
+      "url": "http://agent",
+      "description": "over the unix socket /run/lite-deploy/api.sock"
+    }
+  ],
+  "paths": {
+    "/v1/status": {
+      "get": {
+        "summary": "State of the projects (slots, ports, versions, history).",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": "Without the query parameter, all projects.",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/deploy": {
+      "post": {
+        "summary": "Deploy a version (blue-green, no downtime).",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": "The caller deploys by the full 40-character commit hash.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string"
+                  },
+                  "sha": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "project",
+                  "sha"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/rollback": {
+      "post": {
+        "summary": "Switch traffic back to the previous version.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "project"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/project/key": {
+      "get": {
+        "summary": "The public key of the executor (secrets are encrypted with it; it also identifies the server).",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        }
+      }
+    },
+    "/v1/project/preview": {
+      "post": {
+        "summary": "Build the plan for a project description without changing anything.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": "The body is a bundle: the project description, the ciphertexts of its secrets, and the options.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/project/create": {
+      "post": {
+        "summary": "Create or update a project from a bundle (the plan of the preview is applied).",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": " Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
+    },
+    "/v1/plugins": {
+      "get": {
+        "summary": "The plugins, their commands, and whether each is installed.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        }
+      }
+    },
+    "/v1/fix": {
+      "post": {
+        "summary": "Apply the safe fixes that verify suggests.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": " Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
+    },
+    "/v1/verify": {
+      "get": {
+        "summary": "Check the server (read only): a list of findings with levels ok, warn, fail.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        }
+      }
+    },
+    "/v1/plugin": {
+      "post": {
+        "summary": "Run a command of a plugin.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": "Commands that change the system are the dangerous ones. Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "plugin": {
+                    "type": "string"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "stdin": {
+                    "type": "string",
+                    "description": "Standard input of the command, for tokens and keys that must not be arguments."
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "plugin",
+                  "command"
+                ]
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
+    },
+    "/v1/firewall": {
+      "get": {
+        "summary": "The firewall state and rules.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        }
+      }
+    },
+    "/v1/firewall/enable": {
+      "post": {
+        "summary": "Turn the firewall on.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": " Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
+    },
+    "/v1/firewall/allow": {
+      "post": {
+        "summary": "Open a port.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": " Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "port": {
+                    "type": "integer"
+                  },
+                  "proto": {
+                    "enum": [
+                      "tcp",
+                      "udp"
+                    ]
+                  },
+                  "from": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "port",
+                  "proto"
+                ]
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
+    },
+    "/v1/firewall/remove": {
+      "post": {
+        "summary": "Close a port.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": " Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "port": {
+                    "type": "integer"
+                  },
+                  "proto": {
+                    "enum": [
+                      "tcp",
+                      "udp"
+                    ]
+                  },
+                  "from": {
+                    "type": "string"
+                  },
+                  "action": {
+                    "enum": [
+                      "allow",
+                      "limit",
+                      "deny"
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "port",
+                  "proto",
+                  "action"
+                ]
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
+    },
+    "/v1/update": {
+      "get": {
+        "summary": "Is a newer release of lite available.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        }
+      }
+    },
+    "/v1/update/apply": {
+      "post": {
+        "summary": "Install the newer release (started as a separate service; the agent restarts).",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": " Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
+    },
+    "/v1/ingress": {
+      "get": {
+        "summary": "Caddy, the web ports, and every domain with the way it is published.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        }
+      }
+    },
+    "/v1/publish": {
+      "post": {
+        "summary": "Switch a site between a Cloudflare Tunnel and direct publishing.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": " Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string"
+                  },
+                  "site": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "enum": [
+                      "tunnel",
+                      "direct"
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "project",
+                  "site",
+                  "mode"
+                ]
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
+    },
+    "/v1/owner": {
+      "get": {
+        "summary": "The owner keys registered on the server and whether confirmation is required.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        }
+      }
+    },
+    "/v1/owner/add": {
+      "post": {
+        "summary": "Register an owner public key (ed25519, base64).",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": " Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pub": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "pub",
+                  "label"
+                ]
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
+    },
+    "/v1/owner/remove": {
+      "post": {
+        "summary": "Remove an owner key.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": " Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "id"
+                ]
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
+    },
+    "/v1/info": {
+      "get": {
+        "summary": "The version of the agent.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Envelope": {
+        "type": "object",
+        "required": [
+          "ok",
+          "api_version",
+          "command"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "api_version": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "data": {},
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "hint": {
+                "type": "string"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "ownerSignature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Lite-Sig",
+        "description": "v1.KEYID.TIMESTAMP.NONCE.SIGNATURE (ed25519 over the method, path, body hash, server id, time and a one-time number)."
+      }
+    }
+  }
+}

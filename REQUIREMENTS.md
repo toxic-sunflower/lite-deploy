@@ -17,7 +17,7 @@ This file records what the product must do, what is in the first working version
 
 ## 2. State on 2026-11-20
 
-The latest release is on the Releases page (v0.8.0 is the first release candidate). The site and the installer work. **Nothing has been run on a production server yet.** Besides unit tests with doubles, `lite` was run on 2026-11-19 in an Ubuntu 24.04 container with systemd (rootless podman 4.9) and on a test WSL (Ubuntu 26.04, podman 5.7, PostgreSQL 18, Caddy): `lite init` (user, SSH by key only, security, caddy, podman, pg, redis), the agent, commands without sudo, encrypted backups and restore, `project create` (a container project and `kind: unit`, a repeat gives `unchanged`), a `unit` deploy with a minisign signature check, the Caddy switch, a rollback, and `liteup` update, reinstall and uninstall. That run found and fixed 12 errors the tests had not seen. **Not checked yet:** ufw, a real SSH login, starting a Quadlet container (there was no image), Backblaze, S3, SFTP, the form in a browser.
+The latest release is on the Releases page (v0.9 is the release candidate). The site and the installer work. **Nothing has been run on a production server yet.** Besides unit tests with doubles, `lite` was run on 2026-11-19 in an Ubuntu 24.04 container with systemd (rootless podman 4.9) and on a test WSL (Ubuntu 26.04, podman 5.7, PostgreSQL 18, Caddy): `lite init` (user, SSH by key only, security, caddy, podman, pg, redis), the agent, commands without sudo, encrypted backups and restore, `project create` (a container project and `kind: unit`, a repeat gives `unchanged`), a `unit` deploy with a minisign signature check, the Caddy switch, a rollback, and `liteup` update, reinstall and uninstall. That run found and fixed 12 errors the tests had not seen. **Not checked yet:** ufw, a real SSH login, starting a Quadlet container (there was no image), Backblaze, S3, SFTP, the form in a browser.
 
 | Part | Code | Checked on a server |
 |---|---|---|
@@ -50,6 +50,9 @@ The latest release is on the Releases page (v0.8.0 is the first release candidat
 | `cloudflare` plugin: cloudflared as its own user, the token in a 600 file | done | no |
 | `lite ssh-key list|add|remove` (change your own key without losing access) | done | no |
 | `lite init` protects the server, waits for a real key login, saves the original SSH and firewall state; `liteup uninstall --everything` restores it | done | no |
+| MCP mode of `lite-ui` and the skill for AI agents (S10, S11) | done | no |
+| The OpenAPI description of the agent API (`schemas/agent.openapi.json`) | done, checked against the routes by a test | |
+| Confirming dangerous changes with the owner's key (D-78); the quota `apply_per_hour`; the `pg_hba` warning | done | no |
 | Docker (R-11) | forbidden by the owner's decision | |
 | Shared directories and sockets between projects (R-13) | postponed by the owner (2026-11-19); needs rootless id checks on a server | |
 

@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
+	"github.com/toxic-sunflower/lite-deploy/internal/mcp"
 	"github.com/toxic-sunflower/lite-deploy/internal/ui"
 )
 
@@ -27,6 +28,9 @@ var Version = "0.0.0-dev"
 func main() { os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)) }
 
 func run(args []string, in io.Reader, out, errw io.Writer) int {
+	if len(args) > 0 && args[0] == "mcp" {
+		return runMCP(in, out, errw)
+	}
 	fs := flag.NewFlagSet("lite-ui", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	hostFlag := fs.String("host", "", "add a server as USER@ADDRESS to your list")
@@ -132,4 +136,21 @@ func ownerKeyPath() string {
 		return ""
 	}
 	return filepath.Join(dir, "lite-ui", "owner.key")
+}
+
+// runMCP serves the Model Context Protocol on standard input and output: an AI assistant can read the state of your servers
+// and deploy or roll back, through the same list of servers and the same ssh connection as the page. It never signs
+// dangerous changes with your key; those stay in the interface.
+func runMCP(in io.Reader, out, errw io.Writer) int {
+	list := &ui.ServerList{Path: savedListPath()}
+	runner := host.ExecRunner{}
+	srv := &ui.Server{Runner: runner, Servers: list, Token: "mcp-mode-has-no-web-page", SSHOptions: sshSharing(), Streamer: runner}
+	m := &mcp.Server{Name: "lite-deploy", Version: Version, Tools: srv.MCPTools()}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	if err := m.Serve(ctx, in, out); err != nil {
+		_, _ = fmt.Fprintln(errw, "ERROR:", err)
+		return 1
+	}
+	return 0
 }
