@@ -410,3 +410,21 @@ func TestUnreadableSSHLogKeepsOldBehaviour(t *testing.T) {
 		t.Error("when the log cannot be read nothing can be verified: the old behavior stays")
 	}
 }
+
+func TestInitSavesTheOriginalStateOnce(t *testing.T) {
+	w := newWorld()
+	w.fs.Files["/etc/ufw/user.rules"] = []byte("original rules\n")
+	if err := w.env(key+"\n").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Yes: true}); err != nil {
+		t.Fatal(err)
+	}
+	if string(w.fs.Files[OriginalDir+"/ufw/user.rules"]) != "original rules\n" {
+		t.Error("the original firewall rules must be saved")
+	}
+	w.fs.Files["/etc/ufw/user.rules"] = []byte("changed by lite\n")
+	if err := w.env("").Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Yes: true}); err != nil {
+		t.Fatal(err)
+	}
+	if string(w.fs.Files[OriginalDir+"/ufw/user.rules"]) != "original rules\n" {
+		t.Error("a second init must not overwrite the original state")
+	}
+}

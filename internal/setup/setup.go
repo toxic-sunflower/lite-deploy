@@ -228,6 +228,7 @@ func (e Env) Apply(ctx context.Context, o Options) error {
 			return fmt.Errorf("canceled, nothing was changed")
 		}
 	}
+	e.snapshot(ctx)
 	group, err := agent.AdminGroup(ctx, e.Runner)
 	if err != nil {
 		return err
@@ -516,4 +517,39 @@ func (e Env) waitKeyLogin(ctx context.Context, users []string, o Options) bool {
 		}
 		sleep(3 * time.Second)
 	}
+}
+
+// OriginalDir holds the state of the server as it was before the first init; liteup uninstall --everything puts it back.
+const OriginalDir = "/var/lib/lite-deploy/original"
+
+// snapshot saves the original SSH login settings and the firewall rules, once: a later init sees a server that
+// lite has already changed, which is not the original. A failure is not fatal: the uninstall then falls back to defaults.
+func (e Env) snapshot(ctx context.Context) {
+	if _, err := e.FS.Stat(OriginalDir + "/saved"); err == nil {
+		return
+	}
+	if err := e.FS.MkdirAll(OriginalDir+"/ufw", fs.FileMode(0o700)); err != nil {
+		return
+	}
+	if res, err := e.Runner.Run(ctx, host.Cmd{Name: "sshd", Args: []string{"-T"}, Timeout: 20 * time.Second}); err == nil && res.ExitCode == 0 {
+		root, pass := "", ""
+		for _, l := range strings.Split(string(res.Stdout), "\n") {
+			f := strings.Fields(l)
+			if len(f) == 2 && f[0] == "permitrootlogin" {
+				root = f[1]
+			}
+			if len(f) == 2 && f[0] == "passwordauthentication" {
+				pass = f[1]
+			}
+		}
+		if root != "" && pass != "" {
+			_ = e.FS.WriteFile(OriginalDir+"/ssh", []byte("PermitRootLogin "+root+"\nPasswordAuthentication "+pass+"\n"), fs.FileMode(0o600))
+		}
+	}
+	for _, f := range []string{"ufw.conf", "user.rules", "user6.rules"} {
+		if b, err := e.FS.ReadFile("/etc/ufw/" + f); err == nil {
+			_ = e.FS.WriteFile(OriginalDir+"/ufw/"+f, b, fs.FileMode(0o600))
+		}
+	}
+	_ = e.FS.WriteFile(OriginalDir+"/saved", []byte("1\n"), fs.FileMode(0o600))
 }

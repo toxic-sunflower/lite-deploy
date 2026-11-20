@@ -273,6 +273,10 @@ do_everything() {
       die "no terminal to ask on: run again with --yes"
     fi
   fi
+  orig=""
+  if [ -f /var/lib/lite-deploy/original/saved ]; then
+    orig=$(mktemp -d); cp -a /var/lib/lite-deploy/original/. "$orig"/
+  fi
   say "[1/5] Removing projects and their users"
   for f in /etc/lite-deploy/projects/*.json; do
     [ -e "$f" ] || continue
@@ -299,24 +303,37 @@ do_everything() {
     /etc/systemd/system/lite-pg-backup.service /etc/systemd/system/lite-pg-backup.timer
   systemctl daemon-reload >/dev/null 2>&1 || true
   sysctl --system >/dev/null 2>&1 || true
-  # A bare server lets root in over SSH with a password: make sure of it, whatever the system defaults are.
+  # SSH: put back the original login settings (the saved ones; without a snapshot: root may log in with a password, as on a bare server).
   if command -v sshd >/dev/null 2>&1 && [ -d /etc/ssh/sshd_config.d ]; then
-    eff=$(sshd -T 2>/dev/null | awk '$1=="permitrootlogin"{a=$2} $1=="passwordauthentication"{b=$2} END{print a" "b}')
-    if [ "$eff" != "yes yes" ]; then
-      printf 'PermitRootLogin yes\nPasswordAuthentication yes\n' > /etc/ssh/sshd_config.d/00-bare-server.conf
+    if [ -n "$orig" ] && [ -f "$orig/ssh" ]; then want_ssh=$(cat "$orig/ssh"); else want_ssh=$(printf 'PermitRootLogin yes\nPasswordAuthentication yes'); fi
+    eff=$(sshd -T 2>/dev/null | awk '$1=="permitrootlogin"{a=$2} $1=="passwordauthentication"{b=$2} END{print "PermitRootLogin "a"\nPasswordAuthentication "b}')
+    if [ "$eff" != "$want_ssh" ]; then
+      printf '%s\n' "$want_ssh" > /etc/ssh/sshd_config.d/00-bare-server.conf
       sshd -t >/dev/null 2>&1 || rm -f /etc/ssh/sshd_config.d/00-bare-server.conf
     fi
   fi
   if command -v sshd >/dev/null 2>&1 && sshd -t >/dev/null 2>&1; then
     systemctl reload ssh >/dev/null 2>&1 || systemctl reload sshd >/dev/null 2>&1 || true
   fi
-  say "[5/5] Firewall: only SSH stays open"
+  say "[5/5] Firewall: back to the original state (SSH always stays open)"
   if command -v ufw >/dev/null 2>&1; then
     sshport=$(sshd -T 2>/dev/null | awk '$1=="port"{print $2; exit}')
-    ufw --force reset >/dev/null 2>&1 || true
-    ufw allow "${sshport:-22}/tcp" >/dev/null 2>&1 || true
-    ufw --force enable >/dev/null 2>&1 || true
+    ufw --force disable >/dev/null 2>&1 || true
+    if [ -n "$orig" ] && [ -f "$orig/ufw/ufw.conf" ] && [ -f "$orig/ufw/user.rules" ]; then
+      cp -f "$orig/ufw/ufw.conf" /etc/ufw/ufw.conf
+      cp -f "$orig/ufw/user.rules" /etc/ufw/user.rules
+      [ -f "$orig/ufw/user6.rules" ] && cp -f "$orig/ufw/user6.rules" /etc/ufw/user6.rules
+      if grep -q '^ENABLED=yes' /etc/ufw/ufw.conf; then
+        ufw --force enable >/dev/null 2>&1 || true
+        ufw allow "${sshport:-22}/tcp" >/dev/null 2>&1 || true
+      fi
+    else
+      ufw --force reset >/dev/null 2>&1 || true
+      ufw allow "${sshport:-22}/tcp" >/dev/null 2>&1 || true
+      ufw --force enable >/dev/null 2>&1 || true
+    fi
   fi
+  [ -z "$orig" ] || rm -rf "$orig"
   if [ ! -x "$prefix/liteup" ] && [ -f "$0" ]; then install -m 755 "$0" "$prefix/liteup" 2>/dev/null || true; fi
   say "Done. The server is bare again. Your login user and SSH key were kept. Install again with: liteup install"
 }

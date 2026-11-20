@@ -62,7 +62,7 @@ To take the server back to bare and begin again, run one command as your adminis
 sudo liteup uninstall --everything
 ```
 
-It asks for confirmation (`y`), then removes all projects and their users, the databases, `lite` with its settings, secrets and backups, the programs `lite` installed (Caddy, PostgreSQL, podman, Redis, fail2ban), and every setting `lite` made for SSH, the kernel, fail2ban and updates. The firewall is reset to SSH only. **This deletes your data.** Afterwards root can log in over SSH with a password again, as on a bare server, and your login user and SSH key stay, so you can log in and install again from the [Quickstart](quickstart.md). It works on Debian and Ubuntu. On your computer, remove `lite-ui` (`~/.local/bin/lite-ui` or `%LOCALAPPDATA%\lite-ui`) if you want.
+It asks for confirmation (`y`), then removes all projects and their users, the databases, `lite` with its settings, secrets and backups, the programs `lite` installed (Caddy, PostgreSQL, podman, Redis, fail2ban), and every setting `lite` made for SSH, the kernel, fail2ban and updates. The firewall is reset to SSH only. **This deletes your data.** Afterwards the SSH login settings and the firewall are put back as they were before `lite init` (`init` saves them on its first run; on a server without that record, root can log in over SSH with a password, as on a bare server), and your login user and SSH key stay, so you can log in and install again from the [Quickstart](quickstart.md). It works on Debian and Ubuntu. On your computer, remove `lite-ui` (`~/.local/bin/lite-ui` or `%LOCALAPPDATA%\lite-ui`) if you want.
 
 ## Getting help
 
