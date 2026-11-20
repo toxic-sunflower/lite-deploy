@@ -93,6 +93,10 @@ This needs a release newer than the one on the server. Tell me and I publish a t
 
 **PowerShell**: `irm https://lite-deploy.prozorov.me/install-ui.ps1 | iex`, open a new window, `lite-ui`. **macOS**: `curl -fsSL https://lite-deploy.prozorov.me/install-ui.sh | sh`, `lite-ui`. Expected: the same pages as above, no errors about `ssh`.
 
+## 6b. Claude Desktop (optional)
+
+Install `lite-deploy-windows-amd64.mcpb` from the Releases page (Settings, Extensions, Install Extension), type `user@address`. Ask “Is my server fine?”. Expected: Claude calls `verify` and answers in plain words. If it says it cannot connect, run `ssh user@address` in PowerShell: it must log in with no password question.
+
 ## 7. Clean-up (only if you want to start over)
 
 **server**: `sudo liteup uninstall --everything`. Expected: the server is bare, `ssh` login still works, and `curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh` followed by `sudo liteup install` works again.

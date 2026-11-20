@@ -29,7 +29,7 @@ func main() { os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)) }
 
 func run(args []string, in io.Reader, out, errw io.Writer) int {
 	if len(args) > 0 && args[0] == "mcp" {
-		return runMCP(in, out, errw)
+		return runMCP(args[1:], in, out, errw)
 	}
 	fs := flag.NewFlagSet("lite-ui", flag.ContinueOnError)
 	fs.SetOutput(errw)
@@ -119,14 +119,17 @@ func openBrowser(ctx context.Context, r host.Runner, url string) {
 // sshSharing makes all requests to a server share one ssh connection where the system allows it (not on Windows),
 // so the page does not open a new login for every request.
 func sshSharing() []string {
+	// A server seen for the first time is accepted (and remembered), a server whose key CHANGED is refused. Without this a
+	// non-interactive ssh stops at the first question "do you trust this host".
+	opts := []string{"-o", "StrictHostKeyChecking=accept-new"}
 	if runtime.GOOS == "windows" {
-		return nil
+		return opts
 	}
 	dir := filepath.Join(os.TempDir(), fmt.Sprintf("lite-ui-%d", os.Getuid()))
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil
+		return opts
 	}
-	return []string{"-o", "ControlMaster=auto", "-o", "ControlPath=" + filepath.Join(dir, "%C"), "-o", "ControlPersist=120"}
+	return append(opts, "-o", "ControlMaster=auto", "-o", "ControlPath="+filepath.Join(dir, "%C"), "-o", "ControlPersist=120")
 }
 
 // ownerKeyPath is where the key that confirms dangerous actions is kept (next to the list of servers).
@@ -141,8 +144,20 @@ func ownerKeyPath() string {
 // runMCP serves the Model Context Protocol on standard input and output: an AI assistant can read the state of your servers
 // and deploy or roll back, through the same list of servers and the same ssh connection as the page. It never signs
 // dangerous changes with your key; those stay in the interface.
-func runMCP(in io.Reader, out, errw io.Writer) int {
+func runMCP(args []string, in io.Reader, out, errw io.Writer) int {
+	fs := flag.NewFlagSet("lite-ui mcp", flag.ContinueOnError)
+	fs.SetOutput(errw)
+	server := fs.String("server", "", "a server as USER@ADDRESS to add to your list (the Claude Desktop extension passes the one you typed)")
+	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
+		return 2
+	}
 	list := &ui.ServerList{Path: savedListPath()}
+	if s := strings.TrimSpace(*server); s != "" {
+		if err := list.Add(s); err != nil {
+			_, _ = fmt.Fprintln(errw, "ERROR:", err)
+			return 2
+		}
+	}
 	runner := host.ExecRunner{}
 	srv := &ui.Server{Runner: runner, Servers: list, Token: "mcp-mode-has-no-web-page", SSHOptions: sshSharing(), Streamer: runner}
 	m := &mcp.Server{Name: "lite-deploy", Version: Version, Tools: srv.MCPTools()}

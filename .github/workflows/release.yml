@@ -36,6 +36,7 @@ jobs:
               -ldflags "-s -w -X main.Version=${GITHUB_REF_NAME}" \
               -o dist/lite-ui-$os-$arch$ext ./cmd/lite-ui
           done
+          packaging/mcpb/build.sh "${GITHUB_REF_NAME}"
           cp site/liteup dist/liteup
           cp site/install-ui.sh dist/install-ui.sh
           cp site/install-ui.ps1 dist/install-ui.ps1

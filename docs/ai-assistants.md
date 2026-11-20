@@ -4,7 +4,13 @@
 
 It uses your list of servers and your SSH key, over the same single connection as the page. It does **not** have a tool for changes that can lock you out or open the server (ports, SSH, backups, publishing, installing programs). Those stay in the page, where you can confirm them with your key ([Protect the server](protect-the-server.md)).
 
-## Connect it
+## Claude Desktop: install the extension (no files to edit)
+
+Every release has a ready extension for your system: `lite-deploy-windows-amd64.mcpb` (Windows), `lite-deploy-darwin-arm64.mcpb` or `lite-deploy-darwin-amd64.mcpb` (Mac), `lite-deploy-linux-amd64.mcpb` and `lite-deploy-linux-arm64.mcpb`. Download the one you need from the [Releases page](https://github.com/toxic-sunflower/lite-deploy/releases/latest), then in Claude Desktop open **Settings, Extensions, Install Extension…** (or double-click the file). It asks for your server as `user@address`.
+
+The extension runs on your computer, so that computer needs: the OpenSSH client (it is in Windows 10 and later and on Macs), and a **key login to the server that works without a password** (`ssh user@address` in a terminal). On Windows the key must be in `%USERPROFILE%\.ssh`; a key that lives only inside WSL is not visible to it. If your `lite-ui` and key are in WSL, use the configuration below instead.
+
+## Connect it by hand
 
 **Claude Code**
 

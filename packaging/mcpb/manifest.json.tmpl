@@ -1,0 +1,41 @@
+{
+  "manifest_version": "0.2",
+  "name": "lite-deploy",
+  "display_name": "lite-deploy",
+  "version": "@VERSION@",
+  "description": "Look at your servers and deploy to them from Claude: read the state, run checks, deploy and roll back.",
+  "long_description": "Connects Claude to servers managed by lite-deploy over SSH, with your SSH key. Claude can read the state of your projects, run the server check, see domains and plugins, and deploy or roll back a project. It never changes ports, SSH, backups or publishing: those stay in the lite-ui page, where you can confirm them with your key. You need a key login to the server (ssh USER@ADDRESS must work without a password) and the OpenSSH client.",
+  "author": { "name": "toxic-sunflower", "url": "https://github.com/toxic-sunflower" },
+  "repository": { "type": "git", "url": "https://github.com/toxic-sunflower/lite-deploy" },
+  "homepage": "https://lite-deploy.prozorov.me",
+  "documentation": "https://lite-deploy.prozorov.me/ai-assistants.html",
+  "license": "MIT",
+  "keywords": ["deploy", "server", "devops"],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/@BINARY@",
+    "mcp_config": {
+      "command": "${__dirname}/server/@BINARY@",
+      "args": ["mcp", "--server", "${user_config.server}"]
+    }
+  },
+  "tools": [
+    { "name": "list_servers", "description": "The servers you can manage." },
+    { "name": "verify", "description": "Check a server (read only)." },
+    { "name": "project_status", "description": "Projects, the active slot, versions and history." },
+    { "name": "ingress", "description": "Domains and how each is published." },
+    { "name": "plugins", "description": "What is installed on the server and what can be added." },
+    { "name": "update_check", "description": "Whether a newer lite exists." },
+    { "name": "deploy", "description": "Deploy a version (full commit hash)." },
+    { "name": "rollback", "description": "Switch a project back to the previous version." }
+  ],
+  "user_config": {
+    "server": {
+      "type": "string",
+      "title": "Your server",
+      "description": "The server as user@address, for example serafim@203.0.113.7. A login with your SSH key must already work.",
+      "required": true
+    }
+  },
+  "compatibility": { "platforms": ["@PLATFORM@"] }
+}

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -585,5 +586,53 @@ func TestMCPToolsReadAndDeployButNeverSign(t *testing.T) {
 	}
 	if _, err := byName["verify"](context.Background(), map[string]any{"server": "evil@198.51.100.9"}); err == nil {
 		t.Error("a server that is not in the list must be refused")
+	}
+}
+
+// The Claude Desktop extension lists the tools: it must list the ones lite-ui really has.
+func TestExtensionManifestMatchesTheTools(t *testing.T) {
+	raw, err := os.ReadFile("../../packaging/mcpb/manifest.json.tmpl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.NewReplacer("@VERSION@", "1.2.3", "@BINARY@", "lite-ui.exe", "@PLATFORM@", "win32").Replace(string(raw))
+	var m struct {
+		ManifestVersion string `json:"manifest_version"`
+		Name            string `json:"name"`
+		Version         string `json:"version"`
+		Server          struct {
+			Type       string `json:"type"`
+			EntryPoint string `json:"entry_point"`
+			MCP        struct {
+				Command string   `json:"command"`
+				Args    []string `json:"args"`
+			} `json:"mcp_config"`
+		} `json:"server"`
+		Tools      []struct{ Name string } `json:"tools"`
+		UserConfig map[string]struct {
+			Required bool `json:"required"`
+		} `json:"user_config"`
+	}
+	if err := json.Unmarshal([]byte(text), &m); err != nil {
+		t.Fatalf("the manifest is not valid JSON: %v", err)
+	}
+	if m.ManifestVersion == "" || m.Name != "lite-deploy" || m.Version != "1.2.3" || m.Server.EntryPoint != "server/lite-ui.exe" || !strings.HasSuffix(m.Server.MCP.Command, "server/lite-ui.exe") {
+		t.Fatalf("the manifest is incomplete: %+v", m)
+	}
+	if len(m.Server.MCP.Args) < 3 || m.Server.MCP.Args[0] != "mcp" || m.Server.MCP.Args[2] != "${user_config.server}" || !m.UserConfig["server"].Required {
+		t.Errorf("the extension must start `lite-ui mcp --server` with the address the person typed: %+v", m.Server.MCP)
+	}
+	have := map[string]bool{}
+	for _, tl := range (&Server{}).MCPTools() {
+		have[tl.Name] = true
+	}
+	for _, tl := range m.Tools {
+		if !have[tl.Name] {
+			t.Errorf("the manifest lists a tool that lite-ui does not have: %s", tl.Name)
+		}
+		delete(have, tl.Name)
+	}
+	for name := range have {
+		t.Errorf("lite-ui has a tool the manifest does not list: %s", name)
 	}
 }
