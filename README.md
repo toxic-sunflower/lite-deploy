@@ -6,13 +6,21 @@
 
 ## Install
 
-You need Linux with systemd (amd64 or arm64). One command, as root:
+You need Linux with systemd (amd64 or arm64). On the server, as an administrator with `sudo` (or as root), two steps.
+
+1. Download `liteup`, the tool that installs and manages `lite-deploy` (the way `rustup` does for Rust). This installs only `liteup`, nothing else:
 
 ```sh
 curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh
 ```
 
-This installs `liteup`, the tool that installs and manages `lite-deploy` (the way `rustup` does for Rust), and with it:
+2. Install `lite-deploy` with it:
+
+```sh
+sudo liteup install
+```
+
+This puts on the server:
 
 - `lite-deploy` in `/usr/local/bin` with the short name `lite` (the binary comes from GitHub Releases; the signature and the checksum are verified);
 - `minisign` to verify the signature;

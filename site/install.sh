@@ -1,11 +1,10 @@
 #!/bin/sh
-# The lite-deploy bootstrap (the way sh.rustup.rs is for rustup). It downloads `liteup` from the latest release into
-# /usr/local/bin and runs `liteup install`, which installs lite-deploy, minisign and the agent.
+# The liteup bootstrap (the way sh.rustup.rs is for rustup). It installs ONLY `liteup`: it downloads it from the latest
+# release into /usr/local/bin and stops. Then you use liteup itself:
 #
 #   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh
-#   curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh -s -- --version v0.7.1
-#
-# Afterwards use liteup itself: liteup status | update | reinstall | uninstall [--purge|--everything].
+#   sudo liteup install          # installs lite-deploy, minisign and the agent
+#   liteup status | sudo liteup update | reinstall | uninstall [--purge|--everything]
 # Options (environment variables): LITEUP_PREFIX (default /usr/local/bin), LITE_DEPLOY_BASE_URL (for testing).
 set -eu
 
@@ -31,5 +30,5 @@ got=$(sha256sum "$tmp/liteup" | awk '{print $1}')
 
 mkdir -p "$prefix"
 install -m 755 "$tmp/liteup" "$prefix/liteup"
-echo "[2/2] Installed $prefix/liteup. Now: liteup install"
-exec "$prefix/liteup" install "$@"
+echo "[2/2] Installed $prefix/liteup."
+echo "Next: sudo liteup install"

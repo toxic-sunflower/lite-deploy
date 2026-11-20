@@ -10,13 +10,19 @@ You need:
 
 ## 1. Install
 
-On the server, as root:
+On the server, as root or with `sudo`. First download `liteup`, which installs only itself:
 
 ```sh
 curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh
 ```
 
-This installs `liteup`, `lite` (the same as `lite-deploy`), `minisign` and the agent. Nothing else on the server changes. Check it:
+Then install `lite` with it:
+
+```sh
+sudo liteup install
+```
+
+This installs `lite` (the same as `lite-deploy`), `minisign` and the agent. Nothing else on the server changes. Check it:
 
 ```sh
 lite version
