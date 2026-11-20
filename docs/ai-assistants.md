@@ -8,23 +8,32 @@ It uses your list of servers and your SSH key, over the same single connection a
 
 Every release has one ready extension for all systems: [`lite-deploy.mcpb`](https://github.com/toxic-sunflower/lite-deploy/releases/latest/download/lite-deploy.mcpb). It does not carry a program of its own: it starts the `lite-ui` installed on your workstation, so it always matches the page you open and follows its updates; you install the extension once. On Windows the extension also finds a `lite-ui` installed only inside WSL and runs it through `wsl.exe` (it then uses the SSH keys of WSL). If `lite-ui` is not installed yet, install it first (see the [Quickstart](quickstart.html)). Download the file, then in Claude Desktop open **Settings, Extensions, Install Extension…** (or double-click the file). The server field is optional: leave it empty to use the servers of `lite-ui`, or just ask Claude to “add the server user@address”. Several servers work side by side; say which one you mean.
 
-The extension runs on your workstation, so that workstation needs: the OpenSSH client (it is in Windows 10 and later and on Macs), and a **key login to the server that works without a password** (`ssh user@address` in a terminal). On Windows the key must be in `%USERPROFILE%\.ssh`; a key that lives only inside WSL is not visible to it. If your `lite-ui` and key are in WSL, use the configuration below instead.
+The extension runs on your workstation, so that workstation needs: the OpenSSH client (it is in Windows 10 and later and on Macs), and a **key login to the server that works without a password** (`ssh user@address` in a terminal). On Windows the key must be in `%USERPROFILE%\.ssh`. If `lite-ui` is installed only inside WSL, the extension runs it through WSL and it uses the keys of WSL; the list of servers then lives in WSL too.
 
-## Connect it by hand
+## Other assistants and editors
 
-**Claude Code**
+Any program that can start a **local MCP server over standard input and output** can use Lite Deploy: it starts `lite-ui mcp`. The setting is always the same (the command `lite-ui`, the argument `mcp`); only the place where you write it differs. The formats below are as the programs document them at the time of writing and have not been tried on every installation: if a program says the format is different, follow its own documentation.
 
-```sh
-claude mcp add lite-deploy -- lite-ui mcp
-```
+First add your servers once in the page (`lite-ui`, “Add”), or ask the assistant to add one. Then ask, for example: “Is my server fine?”, “What version of shop is live?”, “Deploy 3f2c… to shop”.
 
-**Claude Desktop** (and other assistants that read a JSON configuration):
+| Program | Where | What to write |
+| --- | --- | --- |
+| **Claude Code** | a command | `claude mcp add lite-deploy -- lite-ui mcp` |
+| **VS Code** (agent mode of Copilot) | `.vscode/mcp.json` in the project, or the user settings | `{ "servers": { "lite-deploy": { "type": "stdio", "command": "lite-ui", "args": ["mcp"] } } }` |
+| **Cursor** | `~/.cursor/mcp.json` | `{ "mcpServers": { "lite-deploy": { "command": "lite-ui", "args": ["mcp"] } } }` |
+| **Zed** (Agent) | `settings.json` | `{ "context_servers": { "lite-deploy": { "source": "custom", "command": "lite-ui", "args": ["mcp"] } } }` (older versions of Zed write `"command": { "path": "lite-ui", "args": ["mcp"] }`) |
+| **Codex CLI** | `~/.codex/config.toml` | `[mcp_servers.lite-deploy]` then `command = "lite-ui"` and `args = ["mcp"]` |
+| **Gemini CLI** | `~/.gemini/settings.json` | `{ "mcpServers": { "lite-deploy": { "command": "lite-ui", "args": ["mcp"] } } }` |
+| **Windsurf, Cline, Continue, Goose, LM Studio, Cherry Studio and the like** | their MCP settings | the same command and argument |
 
-```json
-{ "mcpServers": { "lite-deploy": { "command": "lite-ui", "args": ["mcp"] } } }
-```
+Two cases need a small change:
 
-Add your servers once in the page (`lite-ui`, “Add”). Then ask, for example: “Is my server fine?”, “What version of shop is live?”, “Deploy 3f2c… to shop”.
+- **The program is on Windows, `lite-ui` is in WSL:** the command is `wsl.exe` and the arguments are `-e lite-ui mcp` (in Claude Code: `claude mcp add lite-deploy -- wsl.exe -e lite-ui mcp`). WSL then uses its own SSH keys.
+- **A program that does not see your `PATH`** (a desktop program started from the Dock or the Start menu): write the full path of the program instead of `lite-ui`, for example `/Users/you/.local/bin/lite-ui` on a Mac or `C:\Users\you\AppData\Local\lite-ui\lite-ui.exe` on Windows.
+
+**Turn on the approval of tool calls in the program.** Lite Deploy marks the tools that only read and the ones that change things, and Claude Desktop asks you before each change. Not every program honors that, and many can be set to approve everything automatically. Keep the approval on for the tools that change things. The protection that does not depend on the program is “Confirm with my key” ([Protect the server](protect-the-server.md)): the server then refuses dangerous changes from any assistant, because only the page holds the key.
+
+**Programs that only talk to remote MCP servers** (they connect to an address on the internet, not to a program on your workstation) cannot use Lite Deploy, and that is deliberate: `lite-ui` listens on `127.0.0.1` only, so that nothing that manages your servers is reachable from the internet. For the same reason there is no web version of this.
 
 ## What it can do
 
