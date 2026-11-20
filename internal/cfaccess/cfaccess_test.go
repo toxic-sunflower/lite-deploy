@@ -6,8 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -85,26 +83,6 @@ func TestInputIsChecked(t *testing.T) {
 	c, _ := fake(t)
 	if _, err := c.Apps(context.Background(), "../etc"); err == nil {
 		t.Error("a bad account id must be refused")
-	}
-}
-
-func TestStoreIsPrivate(t *testing.T) {
-	s := &Store{Path: filepath.Join(t.TempDir(), "x", "cf.json")}
-	if err := s.Put("acme", Saved{Token: "tok", Account: acc}); err != nil {
-		t.Fatal(err)
-	}
-	if st, _ := os.Stat(s.Path); st.Mode().Perm() != 0o600 {
-		t.Errorf("the file must be private: %v", st.Mode())
-	}
-	if l := s.Labels(); len(l) != 1 || l[0] != "acme" {
-		t.Errorf("labels: %v", l)
-	}
-	if v, ok := s.Get("acme"); !ok || v.Token != "tok" {
-		t.Errorf("get: %+v", v)
-	}
-	_ = s.Delete("acme")
-	if _, ok := s.Get("acme"); ok {
-		t.Error("deleted")
 	}
 }
 

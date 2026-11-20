@@ -46,8 +46,8 @@ Two cases need a small change:
 | `deploy`, `rollback` | A version (full commit hash) with traffic switched only when healthy; back to the previous one |
 | `secrets_list`, `secret_set`, `secret_remove` | Names of secrets (never values), setting and deleting one |
 | `ingress`, `publish`, `fallback_password` | Domains, tunnel or direct publishing, the password of direct mode |
-| `cloudflare_tunnel`, `connect_cloudflare_tunnel`, `cloudflare_access` | The whole Cloudflare side of a domain (tunnel, route, DNS); connecting a ready tunnel by its token; closing a domain with Cloudflare Access |
-| `firewall_status`, `plugins`, `run_plugin` | The firewall; the plugins; any command of a plugin (firewall, security, backup, pg, caddy…) |
+| `connect_cloudflare_tunnel` | Connecting a ready tunnel by its token |
+| `firewall_status`, `plugins`, `run_plugin` | The firewall; the plugins; any command of a plugin (firewall, security, backup, pg, caddy, and `cloudflare connect`: the whole Cloudflare side of a domain) |
 | `server_config`, `update_check`, `update_server` | The server as a file; whether a newer lite exists; installing it |
 
 Secrets, passwords and tokens given to Claude pass through the chat: for those prefer typing them in the page. Making the backup key is only in the page (the file is saved on your workstation).

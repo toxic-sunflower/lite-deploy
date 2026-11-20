@@ -2,6 +2,9 @@ package builtin
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -91,5 +94,69 @@ func TestCloudflareSeveralTunnels(t *testing.T) {
 	}
 	if _, err := (Cloudflare{}).Run(context.Background(), plugin.Env{Runner: r, FS: mem}, "remove", []string{"--name", "../x"}); err == nil {
 		t.Error("a bad tunnel name must be refused")
+	}
+}
+
+func TestCloudflareConnectDoesTheWholeJobOnTheServer(t *testing.T) {
+	zone, tid := "fedcba9876543210fedcba9876543210", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		seen = append(seen, r.Method+" "+r.URL.Path+" "+string(b))
+		switch {
+		case r.URL.Path == "/accounts":
+			_, _ = w.Write([]byte(`{"success":true,"result":[{"id":"0123456789abcdef0123456789abcdef","name":"Acme"}]}`))
+		case r.URL.Path == "/zones":
+			_, _ = w.Write([]byte(`{"success":true,"result":[{"id":"` + zone + `","name":"example.com"}]}`))
+		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/cfd_tunnel"):
+			_, _ = w.Write([]byte(`{"success":true,"result":[]}`))
+		case r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/cfd_tunnel"):
+			_, _ = w.Write([]byte(`{"success":true,"result":{"id":"` + tid + `","name":"lite-acme"}}`))
+		case strings.HasSuffix(r.URL.Path, "/token"):
+			_, _ = w.Write([]byte(`{"success":true,"result":"` + cfTestToken + `"}`))
+		case r.Method == "GET":
+			_, _ = w.Write([]byte(`{"success":true,"result":[]}`))
+		default:
+			_, _ = w.Write([]byte(`{"success":true,"result":{}}`))
+		}
+	}))
+	defer srv.Close()
+	old := cfAPIBase
+	cfAPIBase = srv.URL
+	defer func() { cfAPIBase = old }()
+	mem := host.NewMemFS()
+	var calls []string
+	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		calls = append(calls, c.Name+" "+strings.Join(c.Args, " "))
+		return host.Result{}, nil
+	}}
+	const apiToken = "the-cloudflare-api-token-value"
+	env := plugin.Env{Runner: r, FS: mem, Stdin: strings.NewReader(apiToken + "\n")}
+	out, err := Cloudflare{}.Run(context.Background(), env, "connect", []string{"--domain", "app.example.com", "--port", "18080", "--name", "acme", "--token-stdin", "--project", "shop", "--site", "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.Text, "routed to port 18080") || !strings.Contains(out.Text, "connected on this server") {
+		t.Errorf("%s", out.Text)
+	}
+	if got := string(mem.Files[cfDir+"/tunnel-acme.token"]); !strings.HasPrefix(got, cfTestToken) {
+		t.Errorf("the token of the tunnel must be kept for cloudflared: %q", got)
+	}
+	// the API token is used once and never kept: not in a file, not on a command line, not in a unit
+	for name, body := range mem.Files {
+		if strings.Contains(string(body), apiToken) {
+			t.Errorf("the API token was written to %s", name)
+		}
+	}
+	for _, c := range calls {
+		if strings.Contains(c, apiToken) || strings.Contains(c, cfTestToken) {
+			t.Errorf("a token on a command line: %s", c)
+		}
+	}
+	if !strings.Contains(strings.Join(seen, "\n"), `"hostname":"app.example.com","service":"http://127.0.0.1:18080"`) {
+		t.Errorf("the route was not made:\n%s", strings.Join(seen, "\n"))
+	}
+	if _, err := (Cloudflare{}).Run(context.Background(), plugin.Env{Runner: r, FS: mem, Stdin: strings.NewReader(apiToken)}, "connect", []string{"--domain", "app.example.com", "--port", "80", "--token-stdin"}); err == nil {
+		t.Error("the port must be the port of a site")
 	}
 }

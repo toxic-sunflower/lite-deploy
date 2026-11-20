@@ -9,13 +9,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/toxic-sunflower/lite-deploy/internal/cfaccess"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/uiupdate"
 )
@@ -706,55 +704,6 @@ func TestUIUpdateEndpoints(t *testing.T) {
 	}
 }
 
-func TestCloudflareAccessGoesToCloudflareNotToTheServer(t *testing.T) {
-	var got []string
-	cf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		got = append(got, r.Method+" "+r.URL.Path+" "+r.Header.Get("Authorization")+" "+string(b))
-		switch {
-		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/access/apps"):
-			_, _ = w.Write([]byte(`{"success":true,"result":[]}`))
-		case r.URL.Path == "/accounts":
-			_, _ = w.Write([]byte(`{"success":true,"result":[{"id":"0123456789abcdef0123456789abcdef","name":"Acme"}]}`))
-		default:
-			_, _ = w.Write([]byte(`{"success":true,"result":{"id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","name":"n","domain":"shop.example.com/admin*"}}`))
-		}
-	}))
-	defer cf.Close()
-	s, r := newServer("")
-	s.CFBase = cf.URL
-	s.CF = &cfaccess.Store{Path: filepath.Join(t.TempDir(), "cf.json")}
-	h := s.Handler()
-	body := `{"action":"protect","token":"secret-token-value","remember":true,"host":"shop.example.com","path":"/admin*","who":["me@example.com"]}`
-	w := do(h, "POST", "/api/cf-access", body, s.Token)
-	if w.Code != 200 || !strings.Contains(w.Body.String(), `"ok":true`) {
-		t.Fatalf("protect: %d %s", w.Code, w.Body)
-	}
-	if len(got) < 2 || !strings.Contains(got[len(got)-1], "Bearer secret-token-value") || !strings.Contains(got[len(got)-1], "shop.example.com/admin*") {
-		t.Fatalf("Cloudflare did not get the request: %v", got)
-	}
-	if len(r.Calls) != 0 {
-		t.Errorf("the token must never go to the server: %v", r.Calls)
-	}
-	if v, ok := s.CF.Get("default"); !ok || v.Token != "secret-token-value" {
-		t.Errorf("the token was asked to be remembered: %+v", v)
-	}
-	// the saved token is used when the form sends none, and the labels never reveal it
-	w = do(h, "POST", "/api/cf-access", `{"action":"labels"}`, s.Token)
-	if strings.Contains(w.Body.String(), "secret-token-value") || !strings.Contains(w.Body.String(), "default") {
-		t.Errorf("labels: %s", w.Body)
-	}
-	if w := do(h, "POST", "/api/cf-access", `{"action":"list"}`, s.Token); w.Code != 200 {
-		t.Errorf("a saved token must be enough: %d %s", w.Code, w.Body)
-	}
-	if w := do(h, "POST", "/api/cf-access", `{"action":"protect","token":"x","host":"bad host","who":["me@example.com"]}`, s.Token); w.Code != 400 {
-		t.Errorf("a bad domain must be refused: %d", w.Code)
-	}
-	if w := do(h, "POST", "/api/cf-access", `{"action":"list"}`, ""); w.Code != 401 {
-		t.Errorf("a token is required: %d", w.Code)
-	}
-}
-
 // The assistant can do what the page can, but it asks first and never signs.
 func TestMCPToolsMatchThePage(t *testing.T) {
 	dir := t.TempDir()
@@ -777,7 +726,7 @@ func TestMCPToolsMatchThePage(t *testing.T) {
 		}
 	}
 	for _, want := range []string{"firewall_status", "secrets_list", "project_export", "server_config", "update_server", "fix", "run_plugin", "publish",
-		"fallback_password", "project_preview", "project_create", "secret_set", "secret_remove", "connect_cloudflare_tunnel", "cloudflare_tunnel", "cloudflare_access", "add_server", "remove_server"} {
+		"fallback_password", "project_preview", "project_create", "secret_set", "secret_remove", "connect_cloudflare_tunnel", "add_server", "remove_server"} {
 		if _, ok := by[want]; !ok {
 			t.Errorf("the page can do it, the assistant cannot: %s", want)
 		}
@@ -823,61 +772,4 @@ func TestMCPToolsMatchThePage(t *testing.T) {
 type mcpTool struct {
 	run      func(context.Context, map[string]any) (string, error)
 	readOnly bool
-}
-
-func TestCloudflareTunnelFromThePage(t *testing.T) {
-	zone, tid := "fedcba9876543210fedcba9876543210", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-	var cfCalls []string
-	cf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		cfCalls = append(cfCalls, r.Method+" "+r.URL.Path+" "+string(b))
-		switch {
-		case r.URL.Path == "/accounts":
-			_, _ = w.Write([]byte(`{"success":true,"result":[{"id":"0123456789abcdef0123456789abcdef","name":"Acme"}]}`))
-		case r.URL.Path == "/zones":
-			_, _ = w.Write([]byte(`{"success":true,"result":[{"id":"` + zone + `","name":"example.com"}]}`))
-		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/cfd_tunnel"):
-			_, _ = w.Write([]byte(`{"success":true,"result":[]}`))
-		case r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/cfd_tunnel"):
-			_, _ = w.Write([]byte(`{"success":true,"result":{"id":"` + tid + `","name":"lite-acme"}}`))
-		case strings.HasSuffix(r.URL.Path, "/token"):
-			_, _ = w.Write([]byte(`{"success":true,"result":"eyJ-tunnel-token-value"}`))
-		case r.Method == "GET" && (strings.HasSuffix(r.URL.Path, "/configurations") || strings.HasSuffix(r.URL.Path, "/dns_records")):
-			_, _ = w.Write([]byte(`{"success":true,"result":[]}`))
-		default:
-			_, _ = w.Write([]byte(`{"success":true,"result":{}}`))
-		}
-	}))
-	defer cf.Close()
-	var toServer []string
-	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
-		toServer = append(toServer, strings.Join(c.Args, " ")+" | "+string(c.Stdin))
-		return host.Result{Stdout: []byte(`{"ok":true,"data":{"tunnels":[]}}`)}, nil
-	}}
-	s := &Server{Runner: r, Servers: &ServerList{Path: filepath.Join(t.TempDir(), "servers")}, Token: tok}
-	_ = s.Servers.Add("anna@203.0.113.7")
-	s.CFBase = cf.URL
-	s.CF = &cfaccess.Store{Path: filepath.Join(t.TempDir(), "cf.json")}
-	h := s.Handler()
-	body := `{"label":"acme","token":"cf-api-token-value","host":"app.example.com","port":18080,"project":"shop","site":"main"}`
-	w := doServer(h, "POST", "/api/cf-tunnel", body, "anna@203.0.113.7")
-	if w.Code != 200 || !strings.Contains(w.Body.String(), `"ok":true`) || !strings.Contains(w.Body.String(), "routed to port 18080") {
-		t.Fatalf("%d %s", w.Code, w.Body)
-	}
-	all := strings.Join(cfCalls, "\n")
-	for _, want := range []string{"POST /accounts/0123456789abcdef0123456789abcdef/cfd_tunnel", `"hostname":"app.example.com","service":"http://127.0.0.1:18080"`, "cfargotunnel.com"} {
-		if !strings.Contains(all, want) {
-			t.Errorf("Cloudflare did not get %q:\n%s", want, all)
-		}
-	}
-	server := strings.Join(toServer, "\n")
-	if strings.Contains(server, "cf-api-token-value") {
-		t.Error("the Cloudflare API token must never go to the server")
-	}
-	if !strings.Contains(server, "eyJ-tunnel-token-value") {
-		t.Errorf("the token of the tunnel must reach the server:\n%s", server)
-	}
-	if w := do(h, "POST", "/api/cf-tunnel", `{"token":"x","host":"app.example.com","port":80}`, s.Token); w.Code != 400 {
-		t.Errorf("the port must be one of the sites: %d", w.Code)
-	}
 }

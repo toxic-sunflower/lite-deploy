@@ -6,9 +6,11 @@ import (
 	"io"
 	"io/fs"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/toxic-sunflower/lite-deploy/internal/cfaccess"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
 )
@@ -80,6 +82,10 @@ func (Cloudflare) Commands() []plugin.Command {
 	return []plugin.Command{
 		{Name: "install", Confirm: true, Help: "install cloudflared and a user for it"},
 		{Name: "setup", Confirm: true, Args: "--token-stdin [--name NAME]", Help: "connect a tunnel: the token from the Cloudflare dashboard is read from standard input; --name makes another one (a second Cloudflare account)"},
+		{Name: "connect", Confirm: true, Args: "--domain DOMAIN --port PORT --token-stdin [--name NAME] [--account ID] [--project NAME --site NAME]", Help: "make everything for a domain: the tunnel, the route and the DNS record at Cloudflare (with an API token read from standard input, used once and never kept), then connect the tunnel on this server"},
+		{Name: "access-list", Confirm: true, Args: "--token-stdin [--account ID]", Help: "what is closed with Cloudflare Access in the account (API token from standard input, never kept)"},
+		{Name: "access-protect", Confirm: true, Args: "--token-stdin --domain DOMAIN [--path /admin*] --who NAME@EXAMPLE.COM[,@EXAMPLE.COM] [--account ID]", Help: "close a domain or a path with a Cloudflare login page"},
+		{Name: "access-remove", Confirm: true, Args: "--token-stdin --app ID [--account ID]", Help: "open a closed address again"},
 		{Name: "status", Args: "[--name NAME]", Help: "is cloudflared installed, and which tunnels run"},
 		{Name: "remove", Confirm: true, Args: "[--name NAME]", Help: "stop a tunnel and delete its token"},
 	}
@@ -145,6 +151,104 @@ func cfUnitText(name string) string {
 		"Restart=on-failure\nRestartSec=5\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=strict\nProtectHome=true\n\n[Install]\nWantedBy=multi-user.target\n"
 }
 
+// setupTunnel keeps the token of a tunnel in a file only cloudflared can read and runs the tunnel as a service.
+func setupTunnel(t tools, env plugin.Env, name, tok string) error {
+	if err := env.FS.MkdirAll(cfDir, fs.FileMode(0o755)); err != nil {
+		return plugin.Errorf("io_error", "%v", err)
+	}
+	path, svc := cfTokenPath(name), cfServiceName(name)
+	if err := env.FS.WriteFile(path, []byte(tok+"\n"), fs.FileMode(0o600)); err != nil {
+		return plugin.Errorf("io_error", "%v", err)
+	}
+	if err := t.must("chown", cfUser+":"+cfUser, path); err != nil {
+		return err
+	}
+	if err := env.FS.WriteFile(cfUnitPath(name), []byte(cfUnitText(name)), fs.FileMode(0o644)); err != nil {
+		return plugin.Errorf("io_error", "%v", err)
+	}
+	if err := t.must("systemctl", "daemon-reload"); err != nil {
+		return err
+	}
+	if err := t.must("systemctl", "enable", "--now", svc); err != nil {
+		return err
+	}
+	return t.must("systemctl", "restart", svc) // a new token for an existing tunnel takes effect
+}
+
+// cfAPIBase is the Cloudflare API; changed in tests only.
+var cfAPIBase = cfaccess.DefaultBase
+
+// connect makes everything for a domain: the tunnel, the route and the DNS record at Cloudflare (with an API token that is
+// read from standard input, used once and never kept), then the connector on this server.
+func (Cloudflare) connect(ctx context.Context, env plugin.Env, args []string) (plugin.Output, error) {
+	usage := plugin.Errorf("usage", "usage: echo APITOKEN | lite cloudflare connect --domain DOMAIN --port PORT --token-stdin [--name NAME] [--account ID]")
+	var domain, account string
+	name, port, stdin := cfDefault, 0, false
+	for i := 0; i < len(args); i++ {
+		next := func() string {
+			if i+1 >= len(args) {
+				return ""
+			}
+			i++
+			return args[i]
+		}
+		switch args[i] {
+		case "--domain":
+			domain = next()
+		case "--port":
+			port, _ = strconv.Atoi(next())
+		case "--name":
+			name = next()
+		case "--account":
+			account = next()
+		case "--token-stdin":
+			stdin = true
+		case "--project", "--site":
+			next() // used by lite after this command to point the site at the tunnel
+		default:
+			return plugin.Output{}, usage
+		}
+	}
+	if domain == "" || port < 18000 || port > 18999 || !stdin || !cfNameRe.MatchString(name) {
+		return plugin.Output{}, usage
+	}
+	if _, err := cfaccess.Address(domain, ""); err != nil {
+		return plugin.Output{}, plugin.Errorf("usage", "%v", err)
+	}
+	if env.Stdin == nil {
+		return plugin.Output{}, usage
+	}
+	b, err := io.ReadAll(io.LimitReader(env.Stdin, 4096))
+	if err != nil {
+		return plugin.Output{}, plugin.Errorf("step_failed", "read the token: %v", err)
+	}
+	apiToken := strings.TrimSpace(string(b))
+	if len(apiToken) < 20 {
+		return plugin.Output{}, plugin.Errorf("usage", "the Cloudflare API token is read from standard input")
+	}
+	c, account, err := cfClient(ctx, apiToken, account)
+	if err != nil {
+		return plugin.Output{}, err
+	}
+	prov, perr := c.Provision(ctx, account, name, domain, port)
+	if perr != nil {
+		e := plugin.Errorf("step_failed", "%v", perr)
+		if len(prov.Steps) > 0 {
+			e.Hint = "done before this: " + strings.Join(prov.Steps, ", ")
+		}
+		return plugin.Output{}, e
+	}
+	if err := InstallCloudflare(ctx, env, nil); err != nil {
+		return plugin.Output{}, err
+	}
+	if err := setupTunnel(tools{ctx, env}, env, name, prov.Token); err != nil {
+		return plugin.Output{}, err
+	}
+	steps := append(prov.Steps, "tunnel "+name+" connected on this server")
+	text := strings.Join(steps, "\n") + "\nNext: point the site at it: lite publish PROJECT SITE tunnel " + name + "\n"
+	return plugin.Output{Text: text, Data: map[string]any{"steps": steps, "name": name, "domain": domain}}, nil
+}
+
 func readCfToken(in io.Reader) (string, error) {
 	if in == nil {
 		return "", plugin.Errorf("usage", "the token is read from standard input: echo TOKEN | lite cloudflare setup --token-stdin")
@@ -188,29 +292,14 @@ func (Cloudflare) Run(ctx context.Context, env plugin.Env, cmd string, args []st
 		if err != nil {
 			return plugin.Output{}, err
 		}
-		if err := env.FS.MkdirAll(cfDir, fs.FileMode(0o755)); err != nil {
-			return plugin.Output{}, plugin.Errorf("io_error", "%v", err)
-		}
-		path, svc := cfTokenPath(name), cfServiceName(name)
-		if err := env.FS.WriteFile(path, []byte(tok+"\n"), fs.FileMode(0o600)); err != nil {
-			return plugin.Output{}, plugin.Errorf("io_error", "%v", err)
-		}
-		if err := t.must("chown", cfUser+":"+cfUser, path); err != nil {
-			return plugin.Output{}, err
-		}
-		if err := env.FS.WriteFile(cfUnitPath(name), []byte(cfUnitText(name)), fs.FileMode(0o644)); err != nil {
-			return plugin.Output{}, plugin.Errorf("io_error", "%v", err)
-		}
-		if err := t.must("systemctl", "daemon-reload"); err != nil {
-			return plugin.Output{}, err
-		}
-		if err := t.must("systemctl", "enable", "--now", svc); err != nil {
-			return plugin.Output{}, err
-		}
-		if err := t.must("systemctl", "restart", svc); err != nil { // a new token for an existing tunnel takes effect
+		if err := setupTunnel(t, env, name, tok); err != nil {
 			return plugin.Output{}, err
 		}
 		return textOut("The tunnel " + name + " is connected and running.\nNext: in the Cloudflare dashboard of that account route your domain to http://127.0.0.1:PORT (the port of the site), and keep the site set to “through a Cloudflare Tunnel” in Ingress.\n"), nil
+	case "connect":
+		return Cloudflare{}.connect(ctx, env, args)
+	case "access-list", "access-protect", "access-remove":
+		return Cloudflare{}.access(ctx, env, cmd, args)
 	case "status":
 		name, rest, err := cfName(args)
 		if err != nil || len(rest) != 0 {
@@ -289,4 +378,106 @@ func (Cloudflare) Check(ctx context.Context, env plugin.Env) []plugin.Finding {
 		}
 	}
 	return out
+}
+
+// cfClient makes the API client for a token and finds the account (the only one the token sees, or the one given).
+func cfClient(ctx context.Context, apiToken, account string) (*cfaccess.Client, string, error) {
+	c := cfaccess.New(apiToken)
+	c.Base = cfAPIBase
+	if account != "" {
+		return c, account, nil
+	}
+	accs, err := c.Accounts(ctx)
+	if err != nil {
+		return nil, "", plugin.Errorf("step_failed", "%v", err)
+	}
+	if len(accs) != 1 {
+		var l []string
+		for _, a := range accs {
+			l = append(l, a.ID+" ("+a.Name+")")
+		}
+		e := plugin.Errorf("usage", "this token sees %d Cloudflare accounts: choose one with --account ID", len(accs))
+		e.Hint = strings.Join(l, ", ")
+		return nil, "", e
+	}
+	return c, accs[0].ID, nil
+}
+
+// access handles access-list, access-protect and access-remove: a Cloudflare login page in front of a domain (or a path).
+// The API token is read from standard input, used once and never kept.
+func (Cloudflare) access(ctx context.Context, env plugin.Env, cmd string, args []string) (plugin.Output, error) {
+	usage := plugin.Errorf("usage", "usage: echo APITOKEN | lite cloudflare %s --token-stdin [--account ID] %s", cmd,
+		map[string]string{"access-list": "", "access-protect": "--domain DOMAIN [--path /admin*] --who NAME@EXAMPLE.COM[,@EXAMPLE.COM]", "access-remove": "--app ID"}[cmd])
+	var account, domain, path, who, app string
+	stdin := false
+	for i := 0; i < len(args); i++ {
+		next := func() string {
+			if i+1 >= len(args) {
+				return ""
+			}
+			i++
+			return args[i]
+		}
+		switch args[i] {
+		case "--token-stdin":
+			stdin = true
+		case "--account":
+			account = next()
+		case "--domain":
+			domain = next()
+		case "--path":
+			path = next()
+		case "--who":
+			who = next()
+		case "--app":
+			app = next()
+		default:
+			return plugin.Output{}, usage
+		}
+	}
+	if !stdin || env.Stdin == nil {
+		return plugin.Output{}, usage
+	}
+	b, _ := io.ReadAll(io.LimitReader(env.Stdin, 4096))
+	apiToken := strings.TrimSpace(string(b))
+	if len(apiToken) < 20 {
+		return plugin.Output{}, plugin.Errorf("usage", "the Cloudflare API token is read from standard input")
+	}
+	c, acc, err := cfClient(ctx, apiToken, account)
+	if err != nil {
+		return plugin.Output{}, err
+	}
+	switch cmd {
+	case "access-list":
+		apps, err := c.Apps(ctx, acc)
+		if err != nil {
+			return plugin.Output{}, plugin.Errorf("step_failed", "%v", err)
+		}
+		var lines []string
+		for _, a := range apps {
+			lines = append(lines, a.ID+"  "+a.Domain)
+		}
+		if apps == nil {
+			apps = []cfaccess.App{}
+		}
+		return plugin.Output{Text: strings.Join(lines, "\n") + "\n", Data: map[string]any{"apps": apps}}, nil
+	case "access-protect":
+		addr, err := cfaccess.Address(domain, path)
+		if err != nil {
+			return plugin.Output{}, plugin.Errorf("usage", "%v", err)
+		}
+		app, err := c.Protect(ctx, acc, addr, strings.Split(who, ","))
+		if err != nil {
+			return plugin.Output{}, plugin.Errorf("step_failed", "%v", err)
+		}
+		return plugin.Output{Text: addr + " is now closed with Cloudflare Access.\n", Data: map[string]any{"app": app}}, nil
+	default: // access-remove
+		if app == "" {
+			return plugin.Output{}, usage
+		}
+		if err := c.Remove(ctx, acc, app); err != nil {
+			return plugin.Output{}, plugin.Errorf("step_failed", "%v", err)
+		}
+		return plugin.Output{Text: "The application is removed: the address is open again.\n"}, nil
+	}
 }

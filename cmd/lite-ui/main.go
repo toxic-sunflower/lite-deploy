@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -18,7 +17,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/toxic-sunflower/lite-deploy/internal/cfaccess"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/mcp"
 	"github.com/toxic-sunflower/lite-deploy/internal/ui"
@@ -33,9 +31,6 @@ func main() { os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)) }
 func run(args []string, in io.Reader, out, errw io.Writer) int {
 	if len(args) > 0 && args[0] == "mcp" {
 		return runMCP(args[1:], in, out, errw)
-	}
-	if len(args) > 0 && args[0] == "cloudflare" {
-		return runCloudflare(args[1:], in, out, errw)
 	}
 	if len(args) > 0 && args[0] == "update" {
 		return runUpdate(args[1:], out, errw)
@@ -95,7 +90,6 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 	upd := uiupdate.New(Version)
 	upd.Cleanup()
 	srv.Updater = upd
-	srv.CF = &cfaccess.Store{Path: cfTokenPath()}
 	if err := srv.Validate(); err != nil {
 		_, _ = fmt.Fprintln(errw, "ERROR:", err)
 		return 2
@@ -233,7 +227,7 @@ func runMCP(args []string, in io.Reader, out, errw io.Writer) int {
 		}
 	}
 	runner := host.ExecRunner{}
-	srv := &ui.Server{Runner: runner, Servers: list, Token: "mcp-mode-has-no-web-page", SSHOptions: sshSharing(), Streamer: runner, CF: &cfaccess.Store{Path: cfTokenPath()}}
+	srv := &ui.Server{Runner: runner, Servers: list, Token: "mcp-mode-has-no-web-page", SSHOptions: sshSharing(), Streamer: runner}
 	m := &mcp.Server{Name: "lite-deploy", Version: Version, Tools: srv.MCPTools()}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -242,15 +236,6 @@ func runMCP(args []string, in io.Reader, out, errw io.Writer) int {
 		return 1
 	}
 	return 0
-}
-
-// cfTokenPath is where Cloudflare API tokens are kept if the person asks to remember them (next to the list of servers).
-func cfTokenPath() string {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(dir, "lite-ui", "cloudflare.json")
 }
 
 // runUpdate is `lite-ui update [--check]`: look for a newer release and install it (the same as the button on the page).
@@ -287,80 +272,5 @@ func runUpdate(args []string, out, errw io.Writer) int {
 		return 1
 	}
 	_, _ = fmt.Fprintf(out, "Updated to %s. If lite-ui runs in the background, restart it:\n  Linux/WSL: systemctl --user restart lite-ui\n  macOS: launchctl kickstart -k gui/$(id -u)/%s\n  Windows: lite-ui service install\n", tag, launchdLabel)
-	return 0
-}
-
-const cloudflareUsage = `usage: lite-ui cloudflare tunnel --server USER@ADDRESS --domain DOMAIN (--port PORT | --project NAME --site NAME) [--label ACCOUNT] [--remember] [--token-stdin]
-
-Does the whole Cloudflare side for a domain: the tunnel (one per Cloudflare account), the route, the DNS record, the connector
-on the server and the site's settings. The Cloudflare API token comes from the environment variable CLOUDFLARE_API_TOKEN, or
-from standard input with --token-stdin, or it is the one saved earlier for --label; it stays on this workstation.`
-
-// runCloudflare is `lite-ui cloudflare tunnel ...`: the same as the "Cloudflare for this domain" form of the page.
-func runCloudflare(args []string, in io.Reader, out, errw io.Writer) int {
-	if len(args) == 0 || args[0] != "tunnel" {
-		_, _ = fmt.Fprintln(errw, cloudflareUsage)
-		return 2
-	}
-	fs := flag.NewFlagSet("lite-ui cloudflare tunnel", flag.ContinueOnError)
-	fs.SetOutput(errw)
-	server := fs.String("server", "", "the server as USER@ADDRESS")
-	domain := fs.String("domain", "", "the domain")
-	port := fs.Int("port", 0, "the port of the site on the server")
-	project := fs.String("project", "", "the project of the site")
-	site := fs.String("site", "", "the site of the project")
-	label := fs.String("label", "default", "the name of the Cloudflare account")
-	account := fs.String("account", "", "the Cloudflare account id, if the token sees several")
-	remember := fs.Bool("remember", false, "keep the API token on this workstation")
-	stdin := fs.Bool("token-stdin", false, "read the API token from standard input")
-	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 || *server == "" || *domain == "" || (*port == 0 && (*project == "" || *site == "")) {
-		_, _ = fmt.Fprintln(errw, cloudflareUsage)
-		return 2
-	}
-	token := os.Getenv("CLOUDFLARE_API_TOKEN")
-	if *stdin {
-		b, _ := io.ReadAll(io.LimitReader(in, 4096))
-		token = strings.TrimSpace(string(b))
-	}
-	list := &ui.ServerList{Path: savedListPath()}
-	if !list.Has(*server) {
-		if err := list.Add(*server); err != nil {
-			_, _ = fmt.Fprintln(errw, "ERROR:", err)
-			return 2
-		}
-	}
-	runner := host.ExecRunner{}
-	srv := &ui.Server{Runner: runner, Servers: list, Token: "terminal", SSHOptions: sshSharing(), Streamer: runner, OwnerKeyPath: ownerKeyPath(), CF: &cfaccess.Store{Path: cfTokenPath()}}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-	raw := srv.CloudflareTunnel(ctx, *server, *label, token, *remember, *account, *domain, *port, *project, *site)
-	var env struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			Steps       []string `json:"steps"`
-			NeedAccount bool     `json:"need_account"`
-			Accounts    []struct{ ID, Name string }
-		} `json:"data"`
-		Error *struct{ Message string } `json:"error"`
-	}
-	if json.Unmarshal(raw, &env) != nil || !env.OK {
-		msg := "the request failed"
-		if env.Error != nil {
-			msg = env.Error.Message
-		}
-		_, _ = fmt.Fprintln(errw, "ERROR:", msg)
-		return 1
-	}
-	if env.Data.NeedAccount {
-		_, _ = fmt.Fprintln(errw, "ERROR: this token sees several Cloudflare accounts; choose one with --account ID:")
-		for _, a := range env.Data.Accounts {
-			_, _ = fmt.Fprintf(errw, "  %s  %s\n", a.ID, a.Name)
-		}
-		return 1
-	}
-	for _, s := range env.Data.Steps {
-		_, _ = fmt.Fprintln(out, "- "+s)
-	}
-	_, _ = fmt.Fprintln(out, "Done. The domain answers in a minute or two.")
 	return 0
 }

@@ -2,7 +2,7 @@
   // Ingress is how traffic reaches this server: the web server (Caddy), the web ports, and every domain with the way
   // visitors reach it.
   LU.components.Ingress = {
-    data: function () { return { caNew: '', info: null, error: '', pick: {}, cf: null, token: '', tname: '', open: '', fa: { user: '', password: '', paths: '' }, cfOpen: '', pickT: {}, labels: [], ca: { label: 'default', token: '', remember: false, who: '', path: '', account: '' }, caApps: null, caAccounts: null }; },
+    data: function () { return { cfa: { token: '', name: '', account: '', accounts: '' }, acc: { who: '', path: '' }, apps: null, info: null, error: '', pick: {}, cf: null, token: '', tname: '', open: '', fa: { user: '', password: '', paths: '' }, cfOpen: '', pickT: {} }; },
     template: '\
 <div>\
   <h1>Ingress</h1>\
@@ -15,17 +15,21 @@
     </div>\
     <div v-if="needsPorts" class="notice warn"><div class="t">Some domains are reached directly, but the web ports 80 and 443 are closed, so visitors cannot get in and no certificate can be issued.</div>\
       <button class="primary" @click="openPorts" :disabled="$root.state.busy">Open the web ports</button></div>\
-    <div v-if="cfPresent" class="card">\
-      <div><b>Cloudflare Tunnels</b> <span class="muted">{{ cfText }}</span></div>\
-      <table v-if="cf && cf.tunnels.length" style="margin-top:6px">\
-        <tr v-for="x in cf.tunnels" :key="x.name"><td>{{ x.name }}</td><td :class="x.running ? \'up\' : \'down\'">{{ x.running ? "connected and running" : "connected but not running" }}</td>\
+    <div class="card">\
+      <div><b>Cloudflare</b> <span class="muted">{{ cfText }}</span></div>\
+      <div class="help">Connect a domain through Cloudflare with one button: the server creates the tunnel, the route and the DNS record in the Cloudflare account that owns the domain. Paste a Cloudflare API token (the owner of the account creates it in Cloudflare: My Profile, API Tokens, Create Custom Token, with <b>Account: Cloudflare Tunnel: Edit</b>, <b>Zone: DNS: Edit</b>, <b>Zone: Zone: Read</b>). It is used once on the server and is not saved anywhere.</div>\
+      <div class="row"><div class="grow"><label>API token</label><input type="password" v-model="cfa.token" autocomplete="off" spellcheck="false"></div>\
+        <div class="grow"><label>Name of this Cloudflare account (any, e.g. a friend’s name)</label><input type="text" v-model="cfa.name" placeholder="default" autocomplete="off" spellcheck="false"></div></div>\
+      <div v-if="cfa.accounts" class="help warntxt">This token sees several Cloudflare accounts: {{ cfa.accounts }}. Put the id of the right one here and press the button again: <input type="text" v-model="cfa.account" style="width:260px" autocomplete="off"></div>\
+      <table v-if="cf && cf.tunnels.length" style="margin-top:8px">\
+        <tr v-for="x in cf.tunnels" :key="x.name"><td>Tunnel {{ x.name }}</td><td :class="x.running ? \'up\' : \'down\'">{{ x.running ? "connected and running" : "connected but not running" }}</td>\
           <td style="text-align:right"><button @click="cfRemove(x.name)" :disabled="$root.state.busy">Disconnect</button></td></tr>\
       </table>\
-      <form v-if="cf" class="row" style="margin-top:8px" @submit.prevent="cfConnect">\
-        <input v-if="cf.tunnels.length" style="width:140px" type="text" v-model="tname" placeholder="Name, e.g. acme" autocomplete="off" spellcheck="false">\
-        <input class="grow" type="password" v-model="token" :placeholder="cf.tunnels.length ? \'Token of another Cloudflare account or tunnel\' : \'Tunnel token from the Cloudflare dashboard\'" autocomplete="off" spellcheck="false">\
-        <button class="primary" type="submit" :disabled="$root.state.busy">{{ cf.tunnels.length ? "Add tunnel" : "Connect" }}</button></form>\
-      <div class="help">Each Cloudflare account has its own tunnel and its own token. In that account’s dashboard route the domain to <code>http://127.0.0.1:PORT</code> of the site.</div>\
+      <details style="margin-top:8px"><summary class="help">I already have a tunnel token (the owner made the tunnel by hand)</summary>\
+        <form class="row" style="margin-top:8px" @submit.prevent="cfConnect">\
+          <input style="width:140px" type="text" v-model="tname" placeholder="Name, e.g. acme" autocomplete="off" spellcheck="false">\
+          <input class="grow" type="password" v-model="token" placeholder="Tunnel token" autocomplete="off" spellcheck="false">\
+          <button type="submit" :disabled="$root.state.busy">Connect the tunnel</button></form></details>\
     </div>\
     <h3>Domains</h3>\
     <p v-if="!info.sites.length" class="empty">No domains yet. A domain is added when you create a project.</p>\
@@ -42,23 +46,16 @@
         <span v-if="s.protected">When served directly, {{ where(s) }} asks for a password (logins: {{ s.protected.users.join(", ") }}).</span>\
         <span v-else>When served directly, this site has no password.</span>\
         <button class="link" @click="toggle(s)">{{ open === s.project + s.site ? "Hide" : "Set a password…" }}</button> ·\
-        <button class="link" @click="toggleCf(s)">{{ cfOpen === s.project + s.site ? "Hide" : "Cloudflare for this domain…" }}</button>\
+        <button class="primary" @click="cfaConnect(s)" :disabled="$root.state.busy">Connect through Cloudflare</button> ·\
+        <button class="link" @click="toggleCf(s)">{{ cfOpen === s.project + s.site ? "Hide" : "Close with a Cloudflare login…" }}</button>\
         <div v-if="cfOpen === s.project + s.site" class="box">\
-          <div class="help">Lite Deploy can do the Cloudflare side for {{ s.host }} itself: create the tunnel in the Cloudflare account that owns the domain, route the domain to this site, make the DNS record, connect the tunnel on this server and point the site at it. It can also close the domain with a Cloudflare login page (Access). Both use a Cloudflare API token that stays on THIS workstation and is never sent to the server (only the token of the tunnel goes to the server). The owner of the Cloudflare account creates it once (My Profile, API Tokens, Create Custom Token) with these permissions: <b>Account: Cloudflare Tunnel: Edit</b>, <b>Zone: DNS: Edit</b>, <b>Zone: Zone: Read</b>, and for Access also <b>Account: Access: Apps and Policies: Edit</b>.</div>\
-          <div class="row"><div class="grow"><label>Cloudflare account</label>\
-            <select v-model="ca.label"><option v-for="l in labelChoices" :key="l" :value="l">{{ l }}{{ labels.indexOf(l) >= 0 ? " (token saved)" : "" }}</option></select></div>\
-            <div class="grow"><label>Or a new name</label><input type="text" v-model="caNew" placeholder="e.g. acme" autocomplete="off"></div></div>\
-          <div v-if="!hasSaved"><label>API token</label><input type="password" v-model="ca.token" autocomplete="off" spellcheck="false">\
-            <label class="check"><input type="checkbox" v-model="ca.remember"> Remember it on this workstation (otherwise it is forgotten after use)</label></div>\
-          <div v-if="caAccounts"><label>Which Cloudflare account?</label><select v-model="ca.account"><option v-for="a in caAccounts" :key="a.id" :value="a.id">{{ a.name }}</option></select></div>\
-          <label>For Access: who may enter (e-mail addresses, or @example.com for a whole mail domain, separated by spaces)</label><input type="text" v-model="ca.who" placeholder="me@example.com" autocomplete="off">\
-          <label>Path to close (empty: the whole domain)</label><input type="text" v-model="ca.path" placeholder="/admin*" autocomplete="off" spellcheck="false">\
-          <div class="row" style="margin-top:10px"><button class="primary" @click="caTunnel(s)" :disabled="$root.state.busy">Connect this domain through a tunnel</button>\
-            <button @click="caProtect(s)" :disabled="$root.state.busy">Close it with Access</button>\
-            <button @click="caList(s)" :disabled="$root.state.busy">Show what is closed</button>\
-            <button v-if="hasSaved" class="link" @click="caForget">Forget the saved token</button></div>\
-          <table v-if="caApps" style="margin-top:8px"><tr v-for="a in caAppsFor(s)" :key="a.id"><td>{{ a.domain }}</td><td style="text-align:right"><button @click="caRemove(s, a)" :disabled="$root.state.busy">Open it again</button></td></tr></table>\
-          <div v-if="caApps && !caAppsFor(s).length" class="help">Nothing of {{ s.host }} is closed with Cloudflare Access.</div>\
+          <div class="help">A Cloudflare login page in front of {{ s.host }}, with the token above (Access also needs the permission <b>Account: Access: Apps and Policies: Edit</b>).</div>\
+          <label>Who may enter (e-mail addresses, or @example.com for a whole mail domain, separated by spaces)</label><input type="text" v-model="acc.who" placeholder="me@example.com" autocomplete="off">\
+          <label>Path to close (empty: the whole domain)</label><input type="text" v-model="acc.path" placeholder="/admin*" autocomplete="off" spellcheck="false">\
+          <div class="row" style="margin-top:10px"><button class="primary" @click="cfaProtect(s)" :disabled="$root.state.busy">Close it</button>\
+            <button @click="cfaList(s)" :disabled="$root.state.busy">Show what is closed</button></div>\
+          <table v-if="apps" style="margin-top:8px"><tr v-for="a in appsFor(s)" :key="a.id"><td>{{ a.domain }}</td><td style="text-align:right"><button @click="cfaRemove(s, a)" :disabled="$root.state.busy">Open it again</button></td></tr></table>\
+          <div v-if="apps && !appsFor(s).length" class="help">Nothing of {{ s.host }} is closed.</div>\
         </div>\
         <div v-if="open === s.project + s.site" class="box">\
           <div class="help">A fallback for when Cloudflare is not in front of the site: it is asked for only in the “Directly” mode, never in the tunnel mode. Only a hash of the password is kept on the server.</div>\
@@ -78,69 +75,54 @@
     computed: {
       cfPresent: function () { return LU.present('cloudflare'); },
       cfText: function () {
+        if (!this.cfPresent) return 'is installed on the server when you connect the first domain';
         if (!this.cf) return '…';
         if (!this.cf.tunnels.length) return 'is installed; paste the tunnel token to connect it';
         return this.cf.tunnels.length + (this.cf.tunnels.length === 1 ? ' tunnel' : ' tunnels');
       },
-      labelChoices: function () { var l = this.labels.slice(); if (l.indexOf('default') < 0) l.unshift('default'); return l; },
-      hasSaved: function () { return !this.caNew.trim() && this.labels.indexOf(this.ca.label) >= 0; },
       tunnelNames: function () { return this.cf && this.cf.tunnels ? this.cf.tunnels.map(function (x) { return x.name; }) : []; },
       needsPorts: function () { return this.info && this.info.web_ports_open === false && this.info.sites.some(function (s) { return s.publish === 'direct'; }); }
     },
     methods: {
-      caReq: function (extra) {
-        var label = (this.caNew.trim().toLowerCase() || this.ca.label);
-        var body = { label: label, token: this.hasSaved ? '' : this.ca.token.trim(), remember: this.ca.remember, account: this.ca.account };
-        for (var k in extra) body[k] = extra[k];
-        return body;
-      },
-      caAppsFor: function (s) { return (this.caApps || []).filter(function (a) { return a.domain === s.host || a.domain.indexOf(s.host + '/') === 0; }); },
-      caCall: function (wait, body, ok) {
-        var self = this;
-        return LU.run(wait, body.action === 'tunnel' ? '/api/cf-tunnel' : '/api/cf-access', this.caReq(body), ok).then(function (r) {
-          if (r.ok && r.data.need_account) { self.caAccounts = r.data.accounts; self.ca.account = r.data.accounts[0] ? r.data.accounts[0].id : ''; LU.say('ok', 'This token sees several Cloudflare accounts: choose one above and press the button again.'); }
-          else if (r.ok) { self.caAccounts = null; self.loadLabels(); }
+      cfaName: function () { return (this.cfa.name || 'default').trim().toLowerCase(); },
+      cfaCall: function (wait, args, ok) {
+        var self = this, tok = this.cfa.token.trim();
+        if (!tok) { LU.say('err', 'Paste the Cloudflare API token first.'); return Promise.resolve({ ok: false }); }
+        if (this.cfa.account) args = args.concat(['--account', this.cfa.account.trim()]);
+        return LU.run(wait, '/api/plugin', { plugin: 'cloudflare', command: args[0], args: args.slice(1).concat(['--token-stdin']), stdin: tok + '\n' }, ok).then(function (r) {
+          if (!r.ok && r.error && /several Cloudflare accounts/.test(r.error.message || '')) { self.cfa.accounts = r.error.hint || ''; }
           return r;
         });
       },
-      caProtect: function (s) {
-        var self = this, who = this.ca.who.split(/[\s,]+/).filter(Boolean);
-        if (!who.length) { LU.say('err', 'Give at least one e-mail address.'); return; }
-        if (!confirm('Close ' + s.host + (this.ca.path || '') + ' with Cloudflare Access? Only the listed people will get in.')) return;
-        this.caCall('Closing…', { action: 'protect', host: s.host, path: this.ca.path.trim(), who: who }, function () { return s.host + (self.ca.path || '') + ' is now closed with Cloudflare Access.'; })
-          .then(function (r) { if (r.ok && !r.data.need_account) { self.ca.token = ''; self.caList(s); } });
-      },
-      caTunnel: function (s) {
-        var self = this;
+      cfaConnect: function (s) {
+        var self = this, name = this.cfaName();
+        if (!/^[a-z][a-z0-9-]{0,20}$/.test(name)) { LU.say('err', 'The account name is lowercase letters, digits and dashes, starting with a letter.'); return; }
         if (!s.port) { LU.say('err', 'The project is not created on the server yet, so the site has no port. Create the project first.'); return; }
-        if (!confirm('Set up Cloudflare for ' + s.host + '? This creates the tunnel and the DNS record in the Cloudflare account, and points ' + s.project + '/' + s.site + ' at it. If the domain already has a DNS record of this kind it is replaced.')) return;
-        this.caCall('Setting up Cloudflare…', { action: 'tunnel', host: s.host, port: s.port, project: s.project, site: s.site }, function (d) { return (d.steps || []).join('. ') + '.'; })
-          .then(function (r) { if (r.ok && !r.data.need_account) { self.ca.token = ''; self.loadCf(); self.load(); } });
+        if (!confirm('Connect ' + s.host + ' through Cloudflare? The server creates the tunnel and the DNS record in the Cloudflare account and points ' + s.project + '/' + s.site + ' at it. A DNS record of this name is replaced.')) return;
+        var args = ['connect', '--domain', s.host, '--port', String(s.port), '--project', s.project, '--site', s.site];
+        if (name !== 'default') args = args.concat(['--name', name]);
+        this.cfaCall('Setting up Cloudflare…', args, function () { return s.host + ' is connected through Cloudflare.'; })
+          .then(function (r) { if (r.ok) { self.cfa.token = ''; self.cfa.accounts = ''; self.loadCf(); self.load(); } });
       },
-      caList: function (s) {
+      cfaProtect: function (s) {
+        var self = this, who = this.acc.who.split(/[\s,]+/).filter(Boolean);
+        if (!who.length) { LU.say('err', 'Give at least one e-mail address.'); return; }
+        if (!confirm('Close ' + s.host + (this.acc.path || '') + ' with a Cloudflare login? Only the listed people will get in.')) return;
+        var args = ['access-protect', '--domain', s.host, '--who', who.join(',')];
+        if (this.acc.path.trim()) args = args.concat(['--path', this.acc.path.trim()]);
+        this.cfaCall('Closing…', args, function () { return s.host + ' is closed with a Cloudflare login.'; });
+      },
+      cfaList: function (s) {
         var self = this;
-        this.caCall('Asking Cloudflare…', { action: 'list' }, function () { return 'Done.'; }).then(function (r) { if (r.ok && r.data.apps) self.caApps = r.data.apps; });
+        this.cfaCall('Asking Cloudflare…', ['access-list'], function () { return 'Done.'; }).then(function (r) { if (r.ok && r.data && r.data.apps) self.apps = r.data.apps; });
       },
-      caRemove: function (s, a) {
+      cfaRemove: function (s, a) {
         var self = this;
-        if (!confirm('Open ' + a.domain + ' again? It will no longer ask for a Cloudflare login.')) return;
-        this.caCall('Removing…', { action: 'remove', app_id: a.id }, function () { return a.domain + ' is open again.'; }).then(function (r) { if (r.ok) self.caList(s); });
+        if (!confirm('Open ' + a.domain + ' again?')) return;
+        this.cfaCall('Removing…', ['access-remove', '--app', a.id], function () { return a.domain + ' is open again.'; }).then(function (r) { if (r.ok) self.cfaList(s); });
       },
-      caForget: function () {
-        var self = this;
-        LU.api('/api/cf-access', { action: 'forget', label: this.ca.label }).then(function () { self.loadLabels(); LU.say('ok', 'The saved token is forgotten.'); });
-      },
-      loadLabels: function () {
-        var self = this;
-        LU.api('/api/cf-access', { action: 'labels' }).then(function (r) { if (r.ok) { self.labels = r.data.labels; if (self.labels.length && self.labels.indexOf(self.ca.label) < 0) self.ca.label = self.labels[0]; } });
-      },
-      toggleCf: function (s) {
-        var k = s.project + s.site;
-        this.cfOpen = this.cfOpen === k ? '' : k;
-        this.caApps = null; this.caAccounts = null; this.caNew = '';
-        var tn = s.tunnel || 'default';
-        if (this.labels.indexOf(tn) >= 0 || tn === 'default') this.ca.label = tn; else { this.ca.label = 'default'; this.caNew = tn; }
-      },
+      appsFor: function (s) { return (this.apps || []).filter(function (a) { return a.domain === s.host || a.domain.indexOf(s.host + '/') === 0; }); },
+      toggleCf: function (s) { var k = s.project + s.site; this.cfOpen = this.cfOpen === k ? '' : k; this.apps = null; },
       where: function (s) { return s.protected.paths && s.protected.paths.length ? s.protected.paths.join(' ') : 'the whole site'; },
       toggle: function (s) {
         var k = s.project + s.site;
@@ -207,6 +189,6 @@
         LU.run('Installing Caddy…', '/api/plugin', { plugin: 'caddy', command: 'install', args: [] }, function () { return 'Caddy is installed.'; }).then(function () { LU.loadPlugins(); self.load(); });
       }
     },
-    mounted: function () { this.load(); this.loadLabels(); }
+    mounted: function () { this.load(); }
   };
 })();

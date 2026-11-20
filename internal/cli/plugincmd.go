@@ -106,7 +106,38 @@ func cmdPluginRun(name string, args []string, env Env) result {
 	if err != nil {
 		return pluginFail(command, err)
 	}
-	return result{command: command, data: out.Data, text: out.Text}
+	res := result{command: command, data: out.Data, text: out.Text}
+	if name == "cloudflare" && cmd == "connect" {
+		return pointSiteAtTunnel(cargs, res, env)
+	}
+	return res
+}
+
+// pointSiteAtTunnel finishes `lite cloudflare connect ... --project P --site S`: the site goes through the tunnel just made.
+func pointSiteAtTunnel(args []string, res result, env Env) result {
+	flag := func(n string) string {
+		for i := 0; i+1 < len(args); i++ {
+			if args[i] == n {
+				return args[i+1]
+			}
+		}
+		return ""
+	}
+	proj, site, tun := flag("--project"), flag("--site"), flag("--name")
+	if proj == "" || site == "" {
+		return res
+	}
+	pub := []string{proj, site, "tunnel"}
+	if tun != "" && tun != "default" {
+		pub = append(pub, tun)
+	}
+	pr := cmdPublish(append(pub, "--yes"), env)
+	if pr.err != nil {
+		pr.text = res.text + "The tunnel is ready, but pointing the site at it failed.\n"
+		return pr
+	}
+	res.text += "Site " + proj + "/" + site + " now goes through the tunnel.\n"
+	return res
 }
 
 func commandNames(p plugin.Plugin) string {

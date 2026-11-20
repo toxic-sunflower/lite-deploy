@@ -74,9 +74,10 @@ Do this on a domain you can afford to touch for a few minutes.
 
 Use a test subdomain of a domain in a Cloudflare account you control, with a project already created (the site has a port).
 1. Create an API token in Cloudflare with only: Account: Cloudflare Tunnel: Edit, Zone: DNS: Edit, Zone: Zone: Read.
-2. **Ingress**, under the domain: “Cloudflare for this domain…”, a name for the account, the token, **Connect this domain through a tunnel**. Expected: a message listing the steps (tunnel created, domain routed, DNS record, tunnel connected on the server, site goes through the tunnel). In the Cloudflare dashboard: a tunnel `lite-NAME` (Healthy), a public hostname, a proxied CNAME record. After a minute the domain answers.
-3. Do the same for a second domain of the same account: the tunnel is reused (no second tunnel).
-4. This was written against the Cloudflare API description and has not run against a real account: send me the exact error text if a step fails (the message also lists what was done before it).
+2. **Ingress**: the **Cloudflare** card is at the top. Paste the token, a name for the account, then **Connect through Cloudflare** under the domain. Expected: “is connected through Cloudflare”. In the Cloudflare dashboard: a tunnel `lite-NAME` (Healthy), a public hostname, a proxied CNAME record. After a minute the domain answers. The token field is empty again, and nothing about the API token is left on the server (`sudo grep -r THE_TOKEN /etc /var/lib/lite-deploy` finds nothing).
+3. The same for a second domain of the same account: the tunnel is reused (no second tunnel).
+4. On the **server**, the same by command: `echo 'THE_API_TOKEN' | lite cloudflare connect --domain … --port … --name … --token-stdin --project … --site …`.
+5. This was written against the Cloudflare API description and has not run against a real account: send me the exact error text if a step fails (the message also says what was done before it).
 
 ## 3. Backups
 

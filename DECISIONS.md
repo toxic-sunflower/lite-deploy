@@ -219,3 +219,7 @@ Taken from the documentation of the projects themselves, 2026-10-29:
 
 **D-79. A root helper switches traffic (completes D-46).** A project user that deploys (CI over ssh) no longer writes the Caddy upstream file or runs a sudo rule. It asks the helper `lite-deploy-switch` (a socket-activated root service on `/run/lite-deploy/switch.sock`), which identifies the caller by the kernel, serves only users of managed projects and only their own sites, and writes the file from a fixed template with the ports of the project description. The upstream files are root-owned, and the sudo rules of lite-deploy are removed by `migrate` once the helper is installed. A server without the helper keeps working the old way. The executor and the helper run with a small set of systemd limits that cannot get in the way of what they do. Status: accepted by the owner (2026-11-20).
 
+
+## D-80 (2026-11-20). No logic on the client
+
+`lite-ui`, the CLI and MCP are thin: every action is one command of the agent or a plugin (`lite PLUGIN COMMAND`), so the page, the terminal and an AI assistant do exactly the same thing. The Cloudflare side of a domain is `lite cloudflare connect` (and `access-*`), run on the server; the Cloudflare API token is read from standard input, used once and never stored. An earlier version had this logic in `lite-ui` (D-79 era) and it was removed. Client-only things stay client-only: updating `lite-ui`, running it in the background, encrypting a secret with the server key.

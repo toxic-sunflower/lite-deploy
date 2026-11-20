@@ -42,19 +42,19 @@ Caddy asks Let's Encrypt for the certificate as soon as the name points at the s
 
 ## Tunnel: Cloudflare Tunnel
 
-> **The short way: from the interface.** In **Ingress**, press “Cloudflare for this domain…” under the domain, choose the Cloudflare account (a name of your own), paste a Cloudflare API token and press **Connect this domain through a tunnel**. Lite Deploy creates the tunnel in the account that owns the domain (once per account, reused for every domain of it), routes the domain to the port of the site, makes the DNS record, installs `cloudflared` and connects the tunnel on the server, and points the site at it. Nothing is done by hand in the Cloudflare dashboard.
+> **The short way: one button.** In **Ingress**, the **Cloudflare** card is always at the top. Paste a Cloudflare API token, give the Cloudflare account any name (a friend's name, for example) and press **Connect through Cloudflare** under the domain. The server creates the tunnel in the account that owns the domain (once per account, reused for every domain of it), routes the domain to the port of the site, makes the DNS record, installs `cloudflared`, connects the tunnel and points the site at it. Nothing is done by hand in the Cloudflare dashboard.
 >
-> The API token is created by the owner of the Cloudflare account once (My Profile, API Tokens, Create Custom Token) with only: **Account: Cloudflare Tunnel: Edit**, **Zone: DNS: Edit** and **Zone: Zone: Read** (and **Account: Access: Apps and Policies: Edit** for Access). It is used by `lite-ui` on your workstation and goes to Cloudflare only; by default it is forgotten after use. To the server goes only the token of the tunnel, which can run that one tunnel and nothing else. If the domain belongs to a friend, they create the API token for you, or do it themselves in the dashboard as below. 
-> **The same from a terminal on your workstation** (the API token never goes to the server, so this is a `lite-ui` command, not a `lite` one):
+> The API token is created by the owner of the Cloudflare account (My Profile, API Tokens, Create Custom Token) with only: **Account: Cloudflare Tunnel: Edit**, **Zone: DNS: Edit** and **Zone: Zone: Read**. It is used **once on the server and is never saved**: not on disk, not in the journal. Only the token of the tunnel itself stays on the server, because the tunnel needs it to run; it can run that one tunnel and nothing else. If the domain belongs to a friend, they create the API token and send it to you privately.
+>
+> **The same from the terminal on the server** (as your own user, no `sudo`):
 >
 > ```sh
-> export CLOUDFLARE_API_TOKEN='the token'      # or: echo 'the token' | lite-ui cloudflare tunnel … --token-stdin
-> lite-ui cloudflare tunnel --server you@your-server --domain app.example.com --project shop --site main --label acme
+> echo 'THE_API_TOKEN' | lite cloudflare connect --domain app.example.com --port 18080 --name acme --token-stdin --project shop --site main
 > ```
 >
-> `--port 18080` can be given instead of `--project`/`--site`; `--label` names the Cloudflare account (the tunnel is created once per account and reused); `--remember` keeps the token in a private file on the workstation. When the token sees several accounts, the command lists them and you pick one with `--account ID`.
+> `--port` is the port of the site (`lite ingress` shows it), `--name` names the Cloudflare account, `--project` and `--site` point the site at the tunnel. When the token sees several accounts, the command lists them: pick one with `--account ID`.
 >
-> The text below is the same thing done by hand, with the commands `lite` has on the server: `lite cloudflare install`, `echo 'TUNNEL_TOKEN' | lite cloudflare setup --token-stdin --name acme`, then `lite publish shop main tunnel acme`; the route and the DNS record are made in the Cloudflare dashboard.
+> The text below is the same thing done by hand: you make the tunnel, the route and the DNS record in the Cloudflare dashboard, and the server only runs the tunnel (`lite cloudflare setup`).
 
 The `cloudflare` plugin installs `cloudflared` and runs it as its own unprivileged user. The tunnel token is kept in a file that only that user can read, and it never appears on a command line. This mode needs no open inbound port (`lite firewall mode max`).
 
@@ -135,11 +135,11 @@ Caddy asks for the password (HTTP Basic, which is safe because the direct mode a
 
 **Guessing is guarded.** `lite verify` (and the **Overview**) warns when a site has such a password and the guard is not on; the button, or `sudo lite security web-auth`, makes fail2ban watch the site's access log: after 8 wrong passwords in 10 minutes an address is banned for an hour. Only answers that carry Caddy's password challenge count, so the application's own 401 answers never ban anybody. A ban is released in **Protection**, “Banned addresses” (one address, or everyone), or with `lite security unban ADDRESS` / `lite security unban all`.
 
-### Close it with Cloudflare Access from the interface
+### Close it with a Cloudflare login from the interface
 
-In **Ingress**, press “Close with Cloudflare Access…” under the domain: the e-mail addresses (or `@example.com` for a whole mail domain) that may enter, and an optional path. Lite Deploy creates the Access application in your Cloudflare account; “Show what is closed” lists the applications of the domain and “Open it again” removes one.
+In **Ingress**, press “Close with a Cloudflare login…” under the domain: the e-mail addresses (or `@example.com` for a whole mail domain) that may enter, and an optional path. “Show what is closed” lists what is closed in the account and “Open it again” removes one. On the server: `echo 'THE_API_TOKEN' | lite cloudflare access-protect --domain shop.example.com --path '/admin*' --who me@example.com --token-stdin`, also `access-list` and `access-remove --app ID`.
 
-This needs a Cloudflare **API token** with only the permission “Access: Apps and Policies, Edit”. The token is used by `lite-ui` on your workstation and goes to Cloudflare only: it is never sent to the server. By default it is forgotten after use; tick “Remember it on this workstation” to keep it in a file in your settings that only you can read (`Forget the saved token` removes it). With several Cloudflare accounts, give each token its own name.
+It uses the same API token as above, with one more permission for this: **Account: Access: Apps and Policies: Edit**. As before, it is used once on the server and not saved.
 
 ## When Cloudflare is down: switch to direct
 

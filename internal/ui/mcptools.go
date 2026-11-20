@@ -140,8 +140,8 @@ func (s *Server) MCPTools() []mcp.Tool {
 			Run: post("/api/update/apply")},
 		{Name: "fix", Description: "Fix what the server check can fix by itself (safe things only). Ask the person first.", Schema: obj(map[string]any{"server": serverArg}),
 			Run: post("/api/fix")},
-		{Name: "run_plugin", Description: "Run a command of a plugin of the server (see plugins for the list): for example firewall allow/remove/mode, security enable/allow-users/unban/web-auth, backup run/schedule/status, pg commands, caddy install, cloudflare remove. Changes the server: ask the person first.",
-			Schema: obj(map[string]any{"server": serverArg, "plugin": str("The plugin name."), "command": str("The command."), "args": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Arguments of the command."}}, "plugin", "command"),
+		{Name: "run_plugin", Description: "Run a command of a plugin of the server (see plugins for the list): for example firewall allow/remove/mode, security enable/allow-users/unban/web-auth, backup run/schedule/status, pg commands, caddy install, cloudflare connect (the whole Cloudflare side of a domain: --domain D --port P --token-stdin [--name N] [--project X --site Y]), cloudflare access-protect/access-list/access-remove, cloudflare remove. Changes the server: ask the person first.",
+			Schema: obj(map[string]any{"server": serverArg, "plugin": str("The plugin name."), "command": str("The command."), "args": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Arguments of the command."}, "stdin": str("Input for commands that read a token or a password from standard input (for example the Cloudflare API token of cloudflare connect). It is used once on the server and never kept. Prefer that the person types it in the page.")}, "plugin", "command"),
 			Run:    post("/api/plugin")},
 		{Name: "publish", Description: "Choose how a site reaches the internet: tunnel (through a Cloudflare Tunnel; tunnel names the account's tunnel) or direct (Caddy gets its own certificate). Ask the person first.",
 			Schema: obj(map[string]any{"server": serverArg, "project": str("The project."), "site": str("The site name."), "mode": map[string]any{"type": "string", "enum": []string{"tunnel", "direct"}}, "tunnel": str("Optional name of the Cloudflare tunnel, with mode tunnel.")}, "project", "site", "mode"),
@@ -163,19 +163,6 @@ func (s *Server) MCPTools() []mcp.Tool {
 		{Name: "connect_cloudflare_tunnel", Description: "Connect a Cloudflare Tunnel with its token (name: another tunnel for another Cloudflare account). The token passes through this chat: prefer typing it in the page.",
 			Schema: obj(map[string]any{"server": serverArg, "token": str("The tunnel token from the Cloudflare dashboard."), "name": str("Optional tunnel name.")}, "token"),
 			Run:    post("/api/cloudflare/setup")},
-		{Name: "cloudflare_access", Description: "Close a domain (or a path) with Cloudflare Access, list what is closed, or open it again. action: list, protect (host, optional path, who: e-mails or @domain) or remove (app_id). label names the Cloudflare account; the API token is used on this workstation only and goes to Cloudflare only.",
-			Schema: obj(map[string]any{"action": map[string]any{"type": "string", "enum": []string{"labels", "list", "protect", "remove", "forget"}}, "label": str("The account name; default: default."), "token": str("The Cloudflare API token (not needed if saved)."), "remember": map[string]any{"type": "boolean"}, "account": str("Cloudflare account id, if the token sees several."), "host": str("The domain."), "path": str("Optional path, e.g. /admin*."), "who": arr, "app_id": str("The application to remove.")}, "action"),
-			Run: func(ctx context.Context, a map[string]any) (string, error) {
-				b, _ := json.Marshal(a)
-				var in cfAccessRequest
-				if err := json.Unmarshal(b, &in); err != nil {
-					return "", errors.New("invalid arguments")
-				}
-				return renderEnvelope(func() []byte { raw, _ := s.cfAccess(ctx, in); return raw }())
-			}},
-		{Name: "cloudflare_tunnel", Description: "Do the whole Cloudflare side for a domain of a site: create the tunnel in the Cloudflare account that owns the domain (one per account), route the domain to the site port, make the DNS record, connect the tunnel on the server and point the site at it. host is the domain, port is the port of the site (see ingress), label names the Cloudflare account. The Cloudflare API token (permissions: Account Cloudflare Tunnel Edit, Zone DNS Edit, Zone Zone Read) is used on this workstation only and never sent to the server. Ask the person first; prefer that the person types the token in the page.",
-			Schema: obj(map[string]any{"server": serverArg, "label": str("The Cloudflare account name; default: default."), "token": str("The Cloudflare API token (not needed if saved)."), "remember": map[string]any{"type": "boolean"}, "account": str("Cloudflare account id, if the token sees several."), "host": str("The domain."), "port": map[string]any{"type": "integer", "description": "The port of the site on the server (from ingress)."}, "project": str("The project of the site."), "site": str("The site name.")}, "host", "port"),
-			Run:    post("/api/cf-tunnel")},
 		{Name: "add_server", Description: "Add a server (user@address) to the list of lite-ui on this workstation. A login with the SSH key must already work.", Schema: obj(map[string]any{"server": str("The server as user@address.")}, "server"),
 			Run: func(_ context.Context, a map[string]any) (string, error) {
 				v, _ := a["server"].(string)
