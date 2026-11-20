@@ -22,6 +22,7 @@ Everything else runs as a regular administrator, no sudo needed:
   deploy PROJECT HASH          deploy a version (blue-green, no downtime)
   rollback PROJECT             switch traffic back to the previous version
   publish PROJECT SITE [tunnel|direct]  show or switch how a site reaches the internet
+  fallback-auth PROJECT SITE [set|remove-user|off]  a password for the direct mode (when Cloudflare is not in front)
   status [PROJECT]             show projects and slots
   update [--check]             check for a new version of lite and install it
   ssh-key list|add|remove      change your own SSH keys without losing access

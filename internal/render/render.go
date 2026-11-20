@@ -116,8 +116,29 @@ func CaddySite(a actions.InstallCaddySite) string {
 		if a.TrustedProxy == "cloudflare" {
 			pre = "\trequest_header CF-Connecting-IP {remote_host}\n\n"
 		}
+		pre += basicAuth(a)
 		siteBlock(&b, a, a.Host, "", pre)
 	}
+	return b.String()
+}
+
+// basicAuth is the password of the direct block: the fallback when the tunnel (and Cloudflare Access) is not in front of the
+// site. The tunnel block never has it. Caddy compares bcrypt hashes; the password itself is never stored.
+func basicAuth(a actions.InstallCaddySite) string {
+	if len(a.AuthUsers) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	matcher := ""
+	if len(a.AuthPaths) > 0 {
+		fmt.Fprintf(&b, "\t@protected path %s\n", strings.Join(a.AuthPaths, " "))
+		matcher = " @protected"
+	}
+	fmt.Fprintf(&b, "\tbasic_auth%s {\n", matcher)
+	for _, u := range a.AuthUsers {
+		fmt.Fprintf(&b, "\t\t%s %s\n", u.Name, u.PasswordHash)
+	}
+	b.WriteString("\t}\n\n")
 	return b.String()
 }
 

@@ -62,6 +62,12 @@ Do this on a domain you can afford to touch for a few minutes.
 3. Switch the domain to “Directly”, open the web ports when the page offers it, point the DNS record at the server. Expected: within a minute `https://your-domain/` answers with a valid certificate.
 4. Switch it back and restore the DNS record. Expected: the site works the way it did before.
 
+## 2b. Fallback password and several tunnels
+
+1. **Ingress**, under a domain: “Set a password…”, paths `/admin*`, a login and a password of 12+ characters, **Save**. Expected: the line “When served directly, /admin* asks for a password”. In tunnel mode nothing changes: open the site through Cloudflare, no password question.
+2. Switch the domain to “Directly” (the “Cloudflare is down” case) and open `https://your-domain/admin`. Expected: the browser asks for the login and password; a wrong one is refused; the rest of the site is open. Switch back to the tunnel.
+3. If you have a second Cloudflare account: in **Ingress** type a name and its tunnel token, **Add tunnel**. Expected: both tunnels listed as “connected and running”.
+
 ## 3. Backups
 
 1. **workstation**: `age-keygen -o lite-backup.key`. Keep the file off the server. Copy the `age1…` line.

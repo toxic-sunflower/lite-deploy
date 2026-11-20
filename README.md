@@ -106,7 +106,7 @@ lite status
 lite rollback PROJECT
 ```
 
-A site is published through a Cloudflare Tunnel (`"publish": "tunnel"`, the default) or directly, with Caddy getting its own TLS certificate (`"publish": "direct"`). Switch at any time: `lite publish PROJECT SITE tunnel|direct` ([tutorial](docs/publish-a-site.md)).
+A site is published through a Cloudflare Tunnel (`"publish": "tunnel"`, the default) or directly, with Caddy getting its own TLS certificate (`"publish": "direct"`). Switch at any time: `lite publish PROJECT SITE tunnel|direct` ([tutorial](docs/publish-a-site.md)). A fallback password for the day Cloudflare is down: `lite fallback-auth PROJECT SITE set --user NAME --password-stdin --path /admin*` (asked for only in direct mode).
 
 The web interface with the "Deploy" and "Roll back" buttons is `lite-ui` (see above): start `lite-ui` and choose your server at the top of the page. It listens on `127.0.0.1` of your computer only.
 

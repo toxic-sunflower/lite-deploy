@@ -105,6 +105,20 @@ curl -si https://shop.example.com/
 - `502` with Cloudflare's page: the container is in a restart loop (for example because a required setting is empty). Run `lite status shop`: a slot that does not answer is the one to look at, and a failed deploy prints the last log lines of the new version.
 - An empty `200` that says `Server: Caddy` but has none of your headers: Caddy did not pick up the name. Check that the site host in `shop.json` is exactly the hostname you routed.
 
+## Close an admin area, with a way in when Cloudflare is down
+
+Close the admin area of a project with Cloudflare Access (in the Cloudflare dashboard) while the site is reached through the tunnel. For the day Cloudflare is down, give the site a **fallback password**: it is asked for only when the site is served **directly**, never in the tunnel mode, so with Cloudflare working you do not type two passwords.
+
+In **Ingress**, under the domain, press “Set a password…”: the paths to close (for example `/admin*`; empty closes the whole site), a login and a password of at least 12 characters. On the command line:
+
+```sh
+echo 'a long password of your own' | lite fallback-auth shop main set --user admin --password-stdin --path '/admin*'
+lite fallback-auth shop main
+lite fallback-auth shop main off
+```
+
+Caddy asks for the password (HTTP Basic, which is safe because the direct mode always uses HTTPS). Only a bcrypt hash is stored on the server, and an exported project does not carry it. Choose a long password: this is the lock that remains when Cloudflare is not in front.
+
 ## When Cloudflare is down: switch to direct
 
 A tunnel is one more thing that can fail. To be able to move quickly:

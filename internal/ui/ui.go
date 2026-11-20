@@ -35,6 +35,8 @@ var (
 	siteRe       = regexp.MustCompile(`\A[a-z][a-z0-9-]{0,15}\z`)
 	shaRe        = regexp.MustCompile(`\A[0-9a-f]{40}\z`)
 	hostRe       = regexp.MustCompile(`\A[A-Za-z0-9_][A-Za-z0-9._@:-]{0,100}\z`)
+	authUserRe   = regexp.MustCompile(`\A[a-z][a-z0-9._-]{0,30}\z`)
+	authPathRe   = regexp.MustCompile(`\A/[^\s{}]*\z`)
 	tunnelNameRe = regexp.MustCompile(`\A[a-z][a-z0-9-]{0,20}\z`)
 	pluginRe     = regexp.MustCompile(`\A[a-z][a-z0-9-]{0,30}\z`)
 )
@@ -328,6 +330,40 @@ func (s *Server) Handler() http.Handler {
 			static.ServeHTTP(w, r)
 		})
 	}
+	mux.HandleFunc("/api/fallback-auth", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		var in struct {
+			Project, Site, Action, User, Password string
+			Paths                                 []string
+		}
+		if code := readBody(r, &in); code != 0 {
+			return errBody("usage", "invalid request"), code
+		}
+		if !projectRe.MatchString(in.Project) || !siteRe.MatchString(in.Site) || len(in.Paths) > 8 {
+			return errBody("usage", "invalid request"), 400
+		}
+		switch in.Action {
+		case "off":
+		case "remove-user":
+			if !authUserRe.MatchString(in.User) {
+				return errBody("usage", "invalid login"), 400
+			}
+		case "set":
+			if !authUserRe.MatchString(in.User) || len(in.Password) < 12 || len(in.Password) > 72 {
+				return errBody("usage", "a login of lowercase letters, and a password of 12 to 72 characters"), 400
+			}
+		default:
+			return errBody("usage", "invalid request"), 400
+		}
+		for _, p := range in.Paths {
+			if !authPathRe.MatchString(p) || len(p) > 256 {
+				return errBody("usage", "a path starts with / and has no spaces or braces"), 400
+			}
+		}
+		if in.Paths == nil {
+			in.Paths = []string{}
+		}
+		return s.call(r.Context(), "POST", "/v1/fallback-auth", map[string]any{"project": in.Project, "site": in.Site, "action": in.Action, "user": in.User, "password": in.Password, "paths": in.Paths}), 200
+	}))
 	mux.HandleFunc("/api/ui-update", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		if s.Updater == nil {
 			return okBody(uiupdate.Info{}), 200

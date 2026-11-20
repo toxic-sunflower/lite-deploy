@@ -11,12 +11,19 @@ import (
 	"github.com/toxic-sunflower/lite-deploy/internal/project"
 )
 
+type ingressProtected struct {
+	Paths []string `json:"paths"`
+	Users []string `json:"users"`
+}
+
 type ingressSite struct {
 	Project string `json:"project"`
 	Site    string `json:"site"`
 	Host    string `json:"host"`
 	Service string `json:"service"`
 	Publish string `json:"publish"`
+	// Protected: the paths (empty: the whole site) and logins of the password asked for in direct mode; nil: none.
+	Protected *ingressProtected `json:"protected,omitempty"`
 }
 
 // cmdIngress shows how traffic gets to the server: Caddy, the web ports and every domain with the way it is published.
@@ -49,7 +56,14 @@ func cmdIngress(env Env) result {
 			if mode == "" {
 				mode = "tunnel"
 			}
-			sites = append(sites, ingressSite{Project: name, Site: s.Name, Host: s.Host, Service: s.Service, Publish: mode})
+			is := ingressSite{Project: name, Site: s.Name, Host: s.Host, Service: s.Service, Publish: mode}
+			if fa := s.FallbackAuth; fa != nil && len(fa.Users) > 0 {
+				is.Protected = &ingressProtected{Paths: fa.Paths}
+				for _, u := range fa.Users {
+					is.Protected.Users = append(is.Protected.Users, u.Name)
+				}
+			}
+			sites = append(sites, is)
 		}
 	}
 	var sb strings.Builder

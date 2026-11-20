@@ -416,7 +416,7 @@ func TestOpenAPIDescribesEveryRoute(t *testing.T) {
 	if err := json.Unmarshal(spec, &doc); err != nil {
 		t.Fatal(err)
 	}
-	re := regexp.MustCompile(`route\(http\.Method(Get|Post), "(/v1/[a-z/]*)"|HandleFunc\("(/v1/info)"`)
+	re := regexp.MustCompile(`route\(http\.Method(Get|Post), "(/v1/[a-z/-]*)"|HandleFunc\("(/v1/info)"`)
 	found := map[string]string{}
 	for _, m := range re.FindAllStringSubmatch(string(src), -1) {
 		switch {
@@ -436,6 +436,25 @@ func TestOpenAPIDescribesEveryRoute(t *testing.T) {
 	for p := range doc.Paths {
 		if _, ok := found[p]; !ok {
 			t.Errorf("%s is in schemas/agent.openapi.json but is not a route of the agent", p)
+		}
+	}
+}
+
+func TestFallbackAuthArguments(t *testing.T) {
+	got, err := Request{Cmd: "fallback.auth", Args: []string{"shop", "main", "set", "admin", "/admin*"}, Body: "a long enough password"}.CLIArgs()
+	want := "fallback-auth shop main set --user admin --password-stdin --path /admin* --yes"
+	if err != nil || strings.Join(got, " ") != want {
+		t.Fatalf("got %v %v, want %s", got, err, want)
+	}
+	for _, bad := range []Request{
+		{Cmd: "fallback.auth", Args: []string{"shop", "main", "set", "admin"}, Body: "short"},
+		{Cmd: "fallback.auth", Args: []string{"shop", "main", "set", "Admin"}, Body: "a long enough password"},
+		{Cmd: "fallback.auth", Args: []string{"shop", "main", "set", "admin", "/a b"}, Body: "a long enough password"},
+		{Cmd: "fallback.auth", Args: []string{"shop", "main", "off"}, Body: "x"},
+		{Cmd: "fallback.auth", Args: []string{"shop", "main", "boom"}},
+	} {
+		if _, err := bad.CLIArgs(); err == nil {
+			t.Errorf("%+v must be refused", bad)
 		}
 	}
 }

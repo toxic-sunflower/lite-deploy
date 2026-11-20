@@ -628,6 +628,73 @@
         "x-changes-server": true
       }
     },
+    "/v1/fallback-auth": {
+      "post": {
+        "summary": "Set, change or remove the password asked for when a site is served directly.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (not an administrator), or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": " Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string"
+                  },
+                  "site": {
+                    "type": "string"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "set",
+                      "remove-user",
+                      "off"
+                    ]
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "at least 12 characters; only a bcrypt hash is stored"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "paths to protect, for example /admin*; empty: the whole site"
+                  }
+                },
+                "required": [
+                  "project",
+                  "site",
+                  "action"
+                ]
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
+    },
     "/v1/owner": {
       "get": {
         "summary": "The owner keys registered on the server and whether confirmation is required.",

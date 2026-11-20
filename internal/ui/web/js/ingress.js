@@ -2,7 +2,7 @@
   // Ingress is how traffic reaches this server: the web server (Caddy), the web ports, and every domain with the way
   // visitors reach it.
   LU.components.Ingress = {
-    data: function () { return { info: null, error: '', pick: {}, cf: null, token: '', tname: '' }; },
+    data: function () { return { info: null, error: '', pick: {}, cf: null, token: '', tname: '', open: '', fa: { user: '', password: '', paths: '' } }; },
     template: '\
 <div>\
   <h1>Ingress</h1>\
@@ -30,12 +30,25 @@
     <h3>Domains</h3>\
     <p v-if="!info.sites.length" class="empty">No domains yet. A domain is added when you create a project.</p>\
     <table v-else>\
-      <tr><th>Domain</th><th>Application</th><th>How visitors reach it</th><th></th></tr>\
-      <tr v-for="s in info.sites" :key="s.project + s.site">\
+      <template v-for="s in info.sites" :key="s.project + s.site">\
+      <tr>\
         <td>{{ s.host }}</td><td>{{ s.project }} / {{ s.service }}</td>\
         <td><select :value="mode(s)" @change="pick[s.project + s.site] = $event.target.value">\
           <option value="tunnel">Through a Cloudflare Tunnel</option><option value="direct">Directly (certificate from Caddy)</option></select></td>\
         <td><button v-if="mode(s) !== s.publish" @click="apply(s)" :disabled="$root.state.busy">Apply</button></td></tr>\
+      <tr><td colspan="4" class="help">\
+        <span v-if="s.protected">When served directly, {{ where(s) }} asks for a password (logins: {{ s.protected.users.join(", ") }}).</span>\
+        <span v-else>When served directly, this site has no password.</span>\
+        <button class="link" @click="toggle(s)">{{ open === s.project + s.site ? "Close" : "Set a password…" }}</button>\
+        <div v-if="open === s.project + s.site" class="box">\
+          <div class="help">A fallback for when Cloudflare is not in front of the site: it is asked for only in the “Directly” mode, never in the tunnel mode. Only a hash of the password is kept on the server.</div>\
+          <label>Paths to close, separated by spaces (empty: the whole site)</label><input type="text" v-model="fa.paths" placeholder="/admin*" autocomplete="off" spellcheck="false">\
+          <div class="row"><div class="grow"><label>Login</label><input type="text" v-model="fa.user" placeholder="admin" autocomplete="off"></div>\
+            <div class="grow"><label>Password (12 characters or more)</label><input type="password" v-model="fa.password" autocomplete="new-password"></div></div>\
+          <div class="row" style="margin-top:10px"><button class="primary" @click="faSet(s)" :disabled="$root.state.busy">Save</button>\
+            <button v-if="s.protected" @click="faOff(s)" :disabled="$root.state.busy">Remove the password</button></div>\
+        </div></td></tr>\
+      </template>\
     </table>\
     <div class="help">Through a Cloudflare Tunnel: nothing on this server is open to the internet. Directly: the server answers on ports 80 and 443 and gets the certificate itself. If Cloudflare has a problem, switch a domain to “Directly” and point its DNS record at this server.</div>\
   </template>\
@@ -52,6 +65,27 @@
       needsPorts: function () { return this.info && this.info.web_ports_open === false && this.info.sites.some(function (s) { return s.publish === 'direct'; }); }
     },
     methods: {
+      where: function (s) { return s.protected.paths && s.protected.paths.length ? s.protected.paths.join(' ') : 'the whole site'; },
+      toggle: function (s) {
+        var k = s.project + s.site;
+        this.open = this.open === k ? '' : k;
+        this.fa = { user: '', password: '', paths: s.protected && s.protected.paths ? s.protected.paths.join(' ') : '' };
+      },
+      faSet: function (s) {
+        var self = this, paths = this.fa.paths.split(/\s+/).filter(Boolean);
+        if (!/^[a-z][a-z0-9._-]{0,30}$/.test(this.fa.user)) { LU.say('err', 'The login is lowercase letters, digits, dots and dashes, starting with a letter.'); return; }
+        if (this.fa.password.length < 12) { LU.say('err', 'The password must be at least 12 characters.'); return; }
+        if (!confirm('Set the password for ' + s.host + '? It is asked for when the site is served directly.')) return;
+        LU.run('Saving…', '/api/fallback-auth', { project: s.project, site: s.site, action: 'set', user: this.fa.user, password: this.fa.password, paths: paths },
+          function () { return 'Saved. The password is asked for when ' + s.host + ' is served directly.'; })
+          .then(function (r) { if (r.ok) { self.open = ''; self.fa = { user: '', password: '', paths: '' }; } self.load(); });
+      },
+      faOff: function (s) {
+        var self = this;
+        if (!confirm('Remove the password of ' + s.host + '? When served directly it will be open to everyone.')) return;
+        LU.run('Removing…', '/api/fallback-auth', { project: s.project, site: s.site, action: 'off' }, function () { return 'The password is removed.'; })
+          .then(function () { self.open = ''; self.load(); });
+      },
       mode: function (s) { return this.pick[s.project + s.site] || s.publish; },
       loadCf: function () {
         var self = this;

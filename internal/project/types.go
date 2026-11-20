@@ -100,6 +100,21 @@ type Site struct {
 	TrustedProxy string  `json:"trusted_proxy,omitempty" enum:"cloudflare,none"`
 	MaxBody      string  `json:"max_body,omitempty" pattern:"^[1-9][0-9]*(KB|MB)$"`
 	Routes       []Route `json:"routes,omitempty" maxItems:"16"`
+	// FallbackAuth is a password (HTTP Basic) that Caddy asks for when the site is served directly, so that an admin area
+	// stays closed if the Cloudflare Tunnel (and Cloudflare Access) is not in use. It is never applied in tunnel mode.
+	FallbackAuth *FallbackAuth `json:"fallback_auth,omitempty"`
+}
+
+// FallbackAuth says which paths are closed by a password in direct mode, and who may enter.
+type FallbackAuth struct {
+	Paths []string   `json:"paths,omitempty" maxItems:"8" doc:"paths to protect, for example /admin* ; empty: the whole site"`
+	Users []AuthUser `json:"users" minItems:"1" maxItems:"8"`
+}
+
+// AuthUser is one person allowed in. Only a bcrypt hash is kept, never the password.
+type AuthUser struct {
+	Name         string `json:"name" pattern:"^[a-z][a-z0-9._-]{0,30}$"`
+	PasswordHash string `json:"password_hash" pattern:"^\\$2[aby]\\$[0-9]{2}\\$[./A-Za-z0-9]{53}$"`
 }
 
 // Route is a special request body limit for a path.

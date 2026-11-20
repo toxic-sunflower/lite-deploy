@@ -398,3 +398,33 @@ func TestConfigExportIsAValidConfigAndHoldsNoSecrets(t *testing.T) {
 		t.Error("no private key may ever be exported")
 	}
 }
+
+func TestFallbackAuthStoresOnlyAHash(t *testing.T) {
+	env, out, _ := testEnv(t)
+	env.IsRoot = func() bool { return false }
+	proj, err := os.ReadFile(projectFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = env.FS.WriteFile("/etc/lite-deploy/projects/shop.json", proj, 0o644)
+	var createBody string
+	env.AgentCall = func(_ context.Context, _, _, path string, b []byte) ([]byte, error) {
+		if strings.HasSuffix(path, "preview") {
+			return []byte(`{"ok":true,"api_version":"v1","command":"project.bundle","data":{"project_hash":"sha256:abc","steps":[]}}`), nil
+		}
+		createBody = string(b)
+		return []byte(`{"ok":true,"api_version":"v1","command":"project.bundle","data":{"steps":[]}}`), nil
+	}
+	const pw = "correct horse battery"
+	env.Stdin = strings.NewReader(pw + "\n")
+	if c := run(t, env, "fallback-auth", "shop", "main", "set", "--user", "admin", "--password-stdin", "--path", "/admin*", "--yes"); c != 0 {
+		t.Fatalf("%d %s", c, out.String())
+	}
+	if strings.Contains(createBody, pw) || !strings.Contains(createBody, `"fallback_auth"`) || !strings.Contains(createBody, `$2a$12$`) || !strings.Contains(createBody, "/admin*") {
+		t.Fatalf("the description must hold a bcrypt hash and the paths, never the password: %s", createBody)
+	}
+	env.Stdin = strings.NewReader("short\n")
+	if c := run(t, env, "fallback-auth", "shop", "main", "set", "--user", "admin", "--password-stdin", "--yes"); c == 0 {
+		t.Fatal("a short password must be refused")
+	}
+}

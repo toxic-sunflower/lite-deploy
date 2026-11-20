@@ -145,3 +145,34 @@ func TestCaddySiteDirect(t *testing.T) {
 		t.Errorf("a direct site behind cloudflare trust must overwrite a forged CF-Connecting-IP:\n%s", pub)
 	}
 }
+
+const testHash = "$2a$12$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ01234"
+
+// The password is the fallback of direct mode: the tunnel block never has it.
+func TestCaddySiteFallbackAuth(t *testing.T) {
+	a := mainSite()
+	a.AuthPaths = []string{"/admin*", "/stats"}
+	a.AuthUsers = []actions.AuthUser{{Name: "root-admin", PasswordHash: testHash}}
+	if got := CaddySite(a); strings.Contains(got, "basic_auth") {
+		t.Fatalf("a tunnel-only site must not ask for a password:\n%s", got)
+	}
+	a.Direct = true
+	got := CaddySite(a)
+	i := strings.Index(got, "\nshop.example.com {")
+	if i < 0 {
+		t.Fatalf("no public block:\n%s", got)
+	}
+	if strings.Contains(got[:i], "basic_auth") {
+		t.Errorf("the loopback (tunnel) block must not ask for a password:\n%s", got[:i])
+	}
+	pub := got[i:]
+	for _, want := range []string{"@protected path /admin* /stats", "basic_auth @protected {", "root-admin " + testHash} {
+		if !strings.Contains(pub, want) {
+			t.Errorf("public block lacks %q:\n%s", want, pub)
+		}
+	}
+	a.AuthPaths = nil
+	if pub := CaddySite(a); !strings.Contains(pub, "\tbasic_auth {\n") || strings.Contains(pub, "@protected") {
+		t.Errorf("no paths means the whole site:\n%s", pub)
+	}
+}

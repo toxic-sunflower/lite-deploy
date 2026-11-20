@@ -45,6 +45,11 @@ type Request struct {
 	Body string `json:"body,omitempty"`
 }
 
+var (
+	authUserRe = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,30}$`)
+	authPathRe = regexp.MustCompile(`^/[^\s{}]*$`)
+)
+
 func checkSpec(spec, from string) error {
 	m := specRe.FindStringSubmatch(spec)
 	if m == nil {
@@ -61,7 +66,7 @@ func checkSpec(spec, from string) error {
 // Everything not in the list is rejected.
 func (r Request) CLIArgs() ([]string, error) {
 	a := r.Args
-	if r.Body != "" && r.Cmd != "project.preview" && r.Cmd != "project.create" && r.Cmd != "plugin.run" && r.Cmd != "secret.put" {
+	if r.Body != "" && r.Cmd != "project.preview" && r.Cmd != "project.create" && r.Cmd != "plugin.run" && r.Cmd != "secret.put" && r.Cmd != "fallback.auth" {
 		return nil, fmt.Errorf("%s: a request body is not allowed", r.Cmd)
 	}
 	if r.Cmd == "plugin.run" && len(r.Body) > MaxPluginStdin {
@@ -202,6 +207,36 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, errors.New("publish: a project, a site and the mode tunnel or direct are required")
 		}
 		return []string{"publish", a[0], a[1], a[2], "--yes"}, nil
+	case "fallback.auth": // arguments: project, site, set|remove-user|off, then: set: user and paths; remove-user: user. The password is the body.
+		if len(a) < 3 || !projectRe.MatchString(a[0]) || !siteRe.MatchString(a[1]) {
+			return nil, errors.New("fallback.auth: a project, a site and an action are required")
+		}
+		out := []string{"fallback-auth", a[0], a[1], a[2]}
+		switch a[2] {
+		case "off":
+			if len(a) != 3 || r.Body != "" {
+				return nil, errors.New("fallback.auth: off takes no more arguments")
+			}
+		case "remove-user":
+			if len(a) != 4 || !authUserRe.MatchString(a[3]) || r.Body != "" {
+				return nil, errors.New("fallback.auth: remove-user takes one login")
+			}
+			out = append(out, a[3])
+		case "set":
+			if len(a) < 4 || len(a) > 12 || !authUserRe.MatchString(a[3]) || len(r.Body) < 12 || len(r.Body) > 200 {
+				return nil, errors.New("fallback.auth: set takes a login, up to 8 paths and a password of 12 or more characters")
+			}
+			out = append(out, "--user", a[3], "--password-stdin")
+			for _, pth := range a[4:] {
+				if !authPathRe.MatchString(pth) || len(pth) > 256 {
+					return nil, errors.New("fallback.auth: a path starts with / and has no spaces or braces")
+				}
+				out = append(out, "--path", pth)
+			}
+		default:
+			return nil, errors.New("fallback.auth: the action is set, remove-user or off")
+		}
+		return append(out, "--yes"), nil
 	case "info", "verify", "ingress":
 		if err := need(0); err != nil {
 			return nil, err

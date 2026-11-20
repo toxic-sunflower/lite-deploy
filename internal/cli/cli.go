@@ -215,6 +215,8 @@ func dispatch(args []string, env Env) result {
 		return cmdStatus(args[1:], env)
 	case "publish":
 		return cmdPublish(args[1:], env)
+	case "fallback-auth":
+		return cmdFallbackAuth(args[1:], env)
 	case "update":
 		return cmdUpdate(args[1:], env)
 	case "ingress":

@@ -200,6 +200,14 @@ type InstallCaddySite struct {
 	Direct          bool        `json:"direct,omitempty" doc:"also serve the host on 80/443 with an automatic TLS certificate"`
 	MaxBody         string      `json:"max_body" pattern:"^[1-9][0-9]*(KB|MB)$"`
 	Routes          []SiteRoute `json:"routes,omitempty" maxItems:"16"`
+	AuthPaths       []string    `json:"auth_paths,omitempty" maxItems:"8" doc:"direct mode only: paths closed by a password; empty with AuthUsers: the whole site"`
+	AuthUsers       []AuthUser  `json:"auth_users,omitempty" maxItems:"8" doc:"direct mode only: who may enter (HTTP Basic)"`
+}
+
+// AuthUser is a login for the password in direct mode: only a bcrypt hash.
+type AuthUser struct {
+	Name         string `json:"name" pattern:"^[a-z][a-z0-9._-]{0,30}$"`
+	PasswordHash string `json:"password_hash" pattern:"^\\$2[aby]\\$[0-9]{2}\\$[./A-Za-z0-9]{53}$"`
 }
 
 // InstallReloadRule installs the sudoers rule for reloading Caddy.

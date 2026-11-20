@@ -183,6 +183,7 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 		b.add(actions.InstallCaddySiteName, actions.InstallCaddySite{
 			Project: name, Site: s.Name, Host: s.Host, ListenPort: ports.Sites[s.Name], UpstreamInitial: "not_deployed",
 			TrustedProxy: s.TrustedProxy, Direct: s.Publish == "direct", MaxBody: s.MaxBody, Routes: siteRoutes(s),
+			AuthPaths: authPaths(s), AuthUsers: authUsers(s),
 		}, siteDetail(s, ports.Sites[s.Name]))
 	}
 	b.add(actions.ReloadCaddyName, actions.ReloadCaddy{}, "Check the Caddy configuration as user caddy and reload")
@@ -257,6 +258,24 @@ func sortedKeys[V any](m map[string]V) []string {
 		out = append(out, k)
 	}
 	sort.Strings(out)
+	return out
+}
+
+func authPaths(s project.Site) []string {
+	if s.FallbackAuth == nil {
+		return nil
+	}
+	return s.FallbackAuth.Paths
+}
+
+func authUsers(s project.Site) []actions.AuthUser {
+	if s.FallbackAuth == nil {
+		return nil
+	}
+	var out []actions.AuthUser
+	for _, u := range s.FallbackAuth.Users {
+		out = append(out, actions.AuthUser{Name: u.Name, PasswordHash: u.PasswordHash})
+	}
 	return out
 }
 
@@ -457,6 +476,9 @@ func siteDetail(s project.Site, port int) string {
 	d := fmt.Sprintf("Site %s: %s on 127.0.0.1:%d", s.Name, s.Host, port)
 	if s.Publish == "direct" {
 		d += " and publicly on 80/443 with an automatic TLS certificate"
+		if s.FallbackAuth != nil {
+			d += ", closed by a password"
+		}
 	}
 	return d + ", upstream \"not deployed\" until the first deploy"
 }

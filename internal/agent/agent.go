@@ -361,6 +361,24 @@ func (a *Agent) Handler() http.Handler {
 		}
 		return Request{Cmd: "publish", Args: []string{in.Project, in.Site, in.Mode}}, true
 	})
+	route(http.MethodPost, "/v1/fallback-auth", func(r *http.Request) (Request, bool) {
+		var in struct {
+			Project  string   `json:"project"`
+			Site     string   `json:"site"`
+			Action   string   `json:"action"`
+			User     string   `json:"user"`
+			Password string   `json:"password"`
+			Paths    []string `json:"paths"`
+		}
+		if !readJSON(r, &in) {
+			return Request{}, false
+		}
+		args := []string{in.Project, in.Site, in.Action}
+		if in.User != "" {
+			args = append(args, in.User)
+		}
+		return Request{Cmd: "fallback.auth", Args: append(args, in.Paths...), Body: in.Password}, true
+	})
 	route(http.MethodPost, "/v1/owner/add", func(r *http.Request) (Request, bool) {
 		var in struct{ Pub, Label string }
 		if !readJSON(r, &in) {

@@ -199,6 +199,20 @@ func Validate(p *Project) []schema.Issue {
 		if s.MaxBody != "" && !sizeWithin(s.MaxBody) {
 			add(base+"/max_body", "maximum", "size at most 1000MB")
 		}
+		if fa := s.FallbackAuth; fa != nil {
+			for j, pth := range fa.Paths {
+				if !authPathRe.MatchString(pth) || len(pth) > 256 {
+					add(base+"/fallback_auth/paths/"+strconv.Itoa(j), "pattern", "a path starts with / and has no spaces or braces")
+				}
+			}
+			seen := map[string]bool{}
+			for j, u := range fa.Users {
+				if seen[u.Name] {
+					add(base+"/fallback_auth/users/"+strconv.Itoa(j)+"/name", "unique", "each login only once")
+				}
+				seen[u.Name] = true
+			}
+		}
 		for j, r := range s.Routes {
 			if r.MaxBody != "" && !sizeWithin(r.MaxBody) {
 				add(base+"/routes/"+strconv.Itoa(j)+"/max_body", "maximum", "size at most 1000MB")
@@ -207,6 +221,8 @@ func Validate(p *Project) []schema.Issue {
 	}
 	return issues
 }
+
+var authPathRe = regexp.MustCompile(`^/[^\s{}]*$`)
 
 // MemoryMB converts "768m" or "2g" to megabytes.
 func MemoryMB(s string) (int, bool) {
