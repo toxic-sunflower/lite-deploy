@@ -7,9 +7,9 @@
   <p class="sub">{{ $root.state.server }}</p>\
   <p v-if="error" class="down">{{ error }}</p>\
   <template v-if="verify">\
-    <div class="row spread" style="margin-bottom:14px">\
-      <span class="pill" :class="health.cls">{{ health.text }}</span>\
-      <button @click="load" :disabled="$root.state.busy">Refresh</button>\
+    <div class="row spread" style="margin-bottom:16px">\
+      <span class="pill" :class="health.cls"><icon :name="health.cls === \'ok\' ? \'check\' : \'alert\'"></icon>{{ health.text }}</span>\
+      <button @click="load" :disabled="$root.state.busy"><icon name="refresh"></icon>Refresh</button>\
     </div>\
     <div class="metrics">\
       <div class="metric"><div class="l">Projects</div><div class="v">{{ projects ? projects.length : 0 }}</div></div>\
@@ -17,18 +17,21 @@
       <div class="metric"><div class="l">Protection</div><div class="v">{{ protectionOn ? "On" : "Needs work" }}</div></div>\
     </div>\
     <div v-if="$root.state.update && $root.state.update.available" class="notice warn">\
-      <div class="t">A new version of lite is available: {{ $root.state.update.latest }} (you have {{ $root.state.update.current }}).</div>\
+      <icon name="refresh"></icon><div class="t">A new version of lite is available: {{ $root.state.update.latest }} (you have {{ $root.state.update.current }}).</div>\
       <button class="primary" @click="$root.applyUpdate" :disabled="$root.state.busy">Update</button>\
     </div>\
     <h3>Needs your attention</h3>\
-    <div v-for="f in attention" :key="f.plugin + f.check" class="notice" :class="f.level === \'fail\' ? \'bad\' : \'warn\'">\
-      <div class="t">{{ f.message }}<div class="help" v-if="f.fix">{{ f.fix }}</div></div>\
+    <div v-for="f in attention" :key="f.key" class="notice" :class="f.level === \'fail\' ? \'bad\' : \'warn\'">\
+      <icon name="alert"></icon><div class="t">{{ f.text }}</div>\
+      <button v-if="f.action" class="primary" @click="act(f)" :disabled="$root.state.busy">{{ f.action.label }}</button>\
+      <button v-else-if="f.page" @click="$root.go(f.page)">{{ f.pageLabel }}</button>\
     </div>\
     <div v-if="!attention.length && !hints.length" class="empty">Nothing needs your attention.</div>\
     <div v-for="h in hints" :key="h.text" class="notice">\
-      <div class="t">{{ h.text }}</div><button @click="$root.go(h.page)">{{ h.button }}</button>\
+      <icon name="info"></icon><div class="t">{{ h.text }}</div><button @click="$root.go(h.page)">{{ h.button }}</button>\
     </div>\
-    <button v-if="fixable" @click="fix" :disabled="$root.state.busy">Fix what can be fixed automatically</button>\
+    <template v-if="notes.length"><h3>For your information</h3>\
+      <div v-for="f in notes" :key="f.key" class="notice"><icon name="info"></icon><div class="t muted">{{ f.text }}</div></div></template>\
     <h3>Projects</h3>\
     <div v-if="projects && !projects.length" class="empty">No projects yet.</div>\
     <div v-for="p in projects" :key="p.project" class="notice">\
@@ -40,17 +43,18 @@
   <p v-else-if="!error" class="empty">Checking the server…</p>\
 </div>',
     computed: {
-      attention: function () { return this.verify ? this.verify.findings.filter(function (f) { return f.level !== 'ok' && f.plugin !== 'lite'; }) : []; },
+      items: function () { return this.verify ? LU.explain(this.verify.findings) : []; },
+      attention: function () { return this.items.filter(function (f) { return !f.info; }); },
+      notes: function () { return this.items.filter(function (f) { return f.info; }); },
       health: function () {
         if (!this.verify) return { cls: 'warn', text: '…' };
-        if (this.verify.failures) return { cls: 'bad', text: 'Needs attention' };
-        if (this.verify.warnings) return { cls: 'warn', text: 'Mostly fine' };
+        if (this.attention.some(function (f) { return f.level === 'fail'; })) return { cls: 'bad', text: 'Needs attention' };
+        if (this.attention.length) return { cls: 'warn', text: 'Mostly fine' };
         return { cls: 'ok', text: 'All good' };
       },
       protectionOn: function () {
         return this.verify && !this.verify.findings.some(function (f) { return f.plugin === 'security' && f.level === 'fail'; });
       },
-      fixable: function () { return this.attention.some(function (f) { return f.fix; }); },
       hints: function () {
         var h = [];
         if (this.projects && !this.projects.length) {
@@ -77,6 +81,11 @@
           if (r.ok) self.projects = ('projects' in r.data) ? (r.data.projects || []) : [r.data];
           else if (r.error && r.error.code === 'project_not_found') self.projects = [];
         });
+      },
+      act: function (f) {
+        var self = this, a = f.action;
+        if (!confirm(a.confirm)) return;
+        LU.run('Working…', '/api/plugin', { plugin: a.plugin, command: a.command, args: a.args }, function () { return 'Done.'; }).then(function () { self.load(); });
       },
       fix: function () {
         var self = this;

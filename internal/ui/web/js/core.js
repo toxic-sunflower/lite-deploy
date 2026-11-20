@@ -59,6 +59,47 @@
     });
   };
 
+  // explain turns the findings of the server check into plain sentences with a button where there is something to do.
+  // Items with info: true need no action and are shown as a note.
+  LU.explain = function (findings) {
+    var admins = null;
+    findings.forEach(function (f) {
+      var m = f.plugin === 'security' && f.check === 'admins' && /administrators \(sudo\): (.*?)(?:; without an SSH key: (.*))?$/.exec(f.message);
+      if (m) admins = { all: m[1].split(',').map(function (x) { return x.trim(); }), nokey: (m[2] || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean) };
+    });
+    var out = [];
+    findings.forEach(function (f) {
+      if (f.level === 'ok' || f.plugin === 'lite') return;
+      var it = { key: f.plugin + '/' + f.check, level: f.level, text: f.message, info: false };
+      var id = f.plugin + '/' + f.check;
+      if (id === 'security/ssh-allow') {
+        it.text = 'Anyone with an account on this server can try to log in over SSH.';
+        if (admins) {
+          var names = admins.all.filter(function (n) { return admins.nokey.indexOf(n) < 0; });
+          if (names.length) it.action = { label: 'Allow only ' + names.join(', '), plugin: 'security', command: 'allow-users', args: names, confirm: 'Allow SSH only for ' + names.join(', ') + '? Everyone else will no longer be able to log in over SSH.' };
+        }
+      } else if (id === 'security/admins') {
+        it.info = true;
+        it.text = admins && admins.nokey.length ? 'The account ' + admins.nokey.join(', ') + ' has administrator rights but no SSH key, so nobody can log in with it. You can ignore this.' : f.message;
+      } else if (id === 'security/pending-updates') {
+        it.info = true;
+        var n = /(\d+)/.exec(f.message);
+        it.text = (n ? n[1] + ' security update(s) are' : 'Security updates are') + ' waiting. They are installed automatically.';
+      } else if (f.plugin === 'security' && /^(ssh-|fail2ban|auto-updates|sysctl)/.test(f.check)) {
+        it.text = 'The server is not fully protected yet.';
+        it.action = { label: 'Turn on protection', plugin: 'security', command: 'enable', args: [], confirm: 'Turn on protection? Password login over SSH will be closed: make sure you can log in with your key.' };
+      } else if (f.plugin === 'podman' && f.check === 'version') {
+        it.info = true;
+        it.text = 'The container tool (podman) is an older version. Everything needed works; some newer features are unavailable.';
+      } else if (f.plugin === 'backup') {
+        it.text = 'Backups are not set up yet. Without them a lost server means lost data.';
+        it.page = 'backups'; it.pageLabel = 'Set up backups';
+      }
+      out.push(it);
+    });
+    return out;
+  };
+
   LU.setServer = function (v) {
     LU.state.server = v;
     try { localStorage.setItem('lite-ui-server', v); } catch (e) {}

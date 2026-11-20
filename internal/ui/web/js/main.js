@@ -1,13 +1,13 @@
 (function () {
   var S = LU.state;
   var ALL = [
-    { id: 'overview', title: 'Overview', comp: 'overview' },
-    { id: 'projects', title: 'Projects', comp: 'projects' },
-    { id: 'ingress', title: 'Ingress', plugin: 'caddy', comp: 'ingress' },
-    { id: 'databases', title: 'Databases', plugin: 'pg' },
-    { id: 'backups', title: 'Backups', plugin: 'backup' },
-    { id: 'security', title: 'Protection', comp: 'security' },
-    { id: 'server', title: 'Server', comp: 'server' }
+    { id: 'overview', title: 'Overview', icon: 'home', comp: 'overview' },
+    { id: 'projects', title: 'Projects', icon: 'apps', comp: 'projects' },
+    { id: 'ingress', title: 'Ingress', icon: 'world', plugin: 'caddy', comp: 'ingress' },
+    { id: 'databases', title: 'Databases', icon: 'database', plugin: 'pg' },
+    { id: 'backups', title: 'Backups', icon: 'backup', plugin: 'backup' },
+    { id: 'security', title: 'Protection', icon: 'shield', comp: 'security' },
+    { id: 'server', title: 'Server', icon: 'settings', comp: 'server' }
   ];
 
   var Root = {
@@ -15,10 +15,10 @@
 <div class="layout">\
   <aside class="side">\
     <div class="brand">lite-deploy</div>\
-    <div class="srv"><select v-model="state.server" @change="pick" aria-label="Server">\
-      <option v-for="h in state.servers" :key="h" :value="h">{{ h }}</option></select></div>\
-    <div class="srvbtns"><button @click="addServer">Add server</button><button v-if="state.servers.length" @click="removeServer">Remove</button></div>\
-    <nav><a v-for="m in menu" :key="m.id" :class="{cur: state.page === m.id}" @click="go(m.id)">{{ m.title }}</a></nav>\
+    <div class="srvbox"><icon name="server"></icon>\
+      <select v-model="state.server" @change="pick" aria-label="Server"><option v-for="h in state.servers" :key="h" :value="h">{{ h }}</option></select></div>\
+    <div class="srvbtns"><button @click="addServer"><icon name="plus"></icon>Add</button><button v-if="state.servers.length" @click="removeServer"><icon name="trash"></icon>Remove</button></div>\
+    <nav><a v-for="m in menu" :key="m.id" :class="{cur: state.page === m.id}" @click="go(m.id)"><icon :name="m.icon"></icon>{{ m.title }}</a></nav>\
   </aside>\
   <main class="main">\
     <div id="msg" :class="state.msg.kind" v-if="state.msg.kind">{{ state.msg.text }}</div>\
@@ -65,6 +65,7 @@
 
   var app = Vue.createApp(Root);
   var C = LU.components;
+  app.component('icon', C.Icon);
   app.component('overview', C.Overview);
   app.component('projects', C.Projects);
   app.component('ingress', C.Ingress);

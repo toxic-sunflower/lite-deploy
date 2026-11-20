@@ -55,3 +55,19 @@ pre.out { margin:8px 0 0; padding:8px 10px; background:var(--bg); border:1px sol
 #msg.ok { background:var(--okbg); color:var(--ok); } #msg.err { background:var(--badbg); color:var(--bad); }
 .empty { text-align:center; color:var(--muted); padding:28px 12px; }
 @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } .side { position:static; height:auto; border-right:0; border-bottom:1px solid var(--line); } nav { display:flex; flex-wrap:wrap; gap:4px; } .main { padding:16px; } }
+.icon { width:18px; height:18px; flex:none; vertical-align:-4px; }
+button .icon { width:15px; height:15px; margin-right:6px; vertical-align:-3px; }
+.srvbox { display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:10px; background:var(--bg); margin-bottom:8px; }
+.srvbox select { border:0; background:transparent; padding:4px 0; min-width:0; font-size:14px; }
+.srvbox select:focus { outline:none; }
+nav a { display:flex; align-items:center; gap:10px; }
+nav a .icon { opacity:.8; }
+.notice { gap:12px; }
+.notice > .icon { color:var(--muted); width:20px; height:20px; }
+.notice.warn > .icon { color:var(--warn); } .notice.bad > .icon { color:var(--bad); }
+.pill { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; }
+.pill .icon { width:15px; height:15px; vertical-align:0; }
+.card, .metric, .notice { border-radius:12px; }
+h1 { font-size:24px; letter-spacing:-.01em; }
+.metric .v { font-size:26px; }
+.main { padding:28px 32px 64px; }
