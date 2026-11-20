@@ -14,7 +14,7 @@ Invented and checked on a reference project (2026-10-23). Suitable for any proje
 - A stolen deploy key gives only "deploy a version" or "roll back", but not a console and not reading secrets.
 - The gatekeeper is installed on the server once by hand and changed only by hand: the key cannot extend its own rights.
 - The application secrets live on the server (a file with mode 600), not in the repository and not in the images.
-- To switch Caddy the project user has one `sudoers` rule: only `systemctl reload caddy`.
+- To switch Caddy the project user does not touch Caddy: it tells a root helper (`lite-deploy-switch`) the slot, `blue` or `green`. The helper identifies the caller by the kernel, serves only users of managed projects and only their own sites, writes the upstream file from a fixed template and reloads Caddy. The file belongs to root. (Older servers used a `sudoers` rule; `lite-deploy migrate` removes it.)
 - Every project has its own system user without a password and without `sudo`, its own rootless podman, and its own role and database in PostgreSQL.
 
 ## What is needed on the server once (per project)
@@ -55,7 +55,7 @@ We assume that one project can be hacked. Then the others must not suffer.
 - What remains for someone who hacked a project: guessing the passwords of other roles over the socket. The protection: long random passwords. Connecting as another role without a password is impossible (`peer` requires the OS user name to match the role).
 
 **Linux and containers:**
-- Every project has its own user without a password and without `sudo` (except one `systemctl reload caddy` rule), and the home directories are closed to each other (750 or 700).
+- Every project has its own user without a password and without `sudo`, and the home directories are closed to each other (750 or 700).
 - The container: not root, `DropCapability=ALL`, `NoNewPrivileges=true`, a read-only file system.
 - Resource limits in the units (`MemoryMax`, `PidsLimit`), so that one project does not eat the whole server.
 - Secrets, passwords and deploy keys share nothing between projects.

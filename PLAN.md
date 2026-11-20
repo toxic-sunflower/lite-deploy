@@ -80,13 +80,13 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 - Done later (2026-11-20, D-79): the Caddy switch on a deploy moved to a root helper with a peer check (no more `sudoers` rule, root-owned upstream files, `migrate` moves old servers), and a small safe set of systemd limits for the executor and the helper. Stronger limits were left out on purpose: they would block sysctl, ufw modules and package installs. To be checked on a real server.
 
 ### S7. The Cloudflare tunnel (done 2026-11-20)
-- Done: the plugin `cloudflare` (cloudflared as its own user, the token in a 600 file and never on a command line), a card in the Ingress page, and a switch to direct publishing as the fallback plan. Checking old DNS records is not done (it needs the Cloudflare API).
+- Done: the plugin `cloudflare` (cloudflared as its own user, the token in a 600 file and never on a command line), a card in the Ingress page, and a switch to direct publishing as the fallback plan. Checking old DNS records is not done: it needs the owner's Cloudflare account and an API token; it can be added when there is one.
 
 ### S8. Secrets and backup
-- Done: `age` encryption, the store, `secret encrypt|set|list|pubkey`, `init`; the `backup` plugin (settings and secrets encrypted with the owner key, dumps optionally, storage locations); restoring a server (README). Not done: `secret://` references in the daemon API, a journal of secret reads as root.
+- Done: `age` encryption, the store, `secret encrypt|set|list|pubkey`, `init`; the `backup` plugin (settings and secrets encrypted with the owner key, dumps optionally, storage locations); restoring a server (README). Done later (2026-11-20): every read of a secret by the executor is written to its journal (the name, never the value). Decided against: `secret://` references in the agent API: secret values never enter the API as plain text, they are encrypted on the person's computer with the executor key and travel as ciphertext, so references add nothing.
 
 ### S9. The UI (the first version done 2026-11-13)
-- Done: `lite-ui [--host user@server]` (a separate program): a local page on `127.0.0.1` with a token in the address, the state of projects, "Deploy" (by commit hash) and "Roll back", the firewall section, the plugins and `verify`, and a "New project" form with a plan preview. Since then: Overview, Projects, Ingress, Databases, Backups, Protection and Server pages in Vue 3, several servers, one ssh connection. Checked in a real browser against a stand-in for the server; not yet against a real one. Not done: forms generated from JSON Schema.
+- Done: `lite-ui [--host user@server]` (a separate program): a local page on `127.0.0.1` with a token in the address, the state of projects, "Deploy" (by commit hash) and "Roll back", the firewall section, the plugins and `verify`, and a "New project" form with a plan preview. Since then: Overview, Projects, Ingress, Databases, Backups, Protection and Server pages in Vue 3, several servers, one ssh connection. Checked in a real browser against a stand-in for the server; not yet against a real one. Decided against: forms generated from JSON Schema: the hand-written form with plain words is better for people who are not technical.
 
 ### The firewall plugin (done 2026-11-13)
 - Done: the package `internal/firewall` (`ufw status`, `allow`, `remove`, `enable`, modes), the `lite firewall …` commands, the "Firewall" section in the UI. The SSH (read from `sshd -T`), 80 and 443 ports are protected. Changes need `--yes` in the CLI and a confirmation in the browser. Decision D-62.
@@ -142,6 +142,6 @@ Decisions taken: D-25…D-38 in `DECISIONS.md`.
 | S4 | done in code and tests (2026-11-04); checked in a container and on a test WSL (2026-11-19) |
 | S5, S6, S9 | done in code; partly checked (2026-11-19) |
 | S7, S10, S11 | done in code (2026-11-20); to be checked on a real server |
-| S8 | the backup and secret parts done (the page has a guided setup); `secret://` references in the daemon API and the journal of secret reads not done |
+| S8 | done (the page has a guided setup; reads of secrets are journaled) |
 | C1 | partly (Coolify, Dokploy, Kamal: the main parts) |
 | C4 | not done |

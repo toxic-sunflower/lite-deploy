@@ -314,7 +314,7 @@ The image `localhost/<project>-<service>:<slot>` is created by the deploy with t
 
 The file names differ from the current ones (`shop.caddy` and `shop-admin.caddy`): with `adopt` the old files with the same `host` are replaced so that there are not two sites on one address (the step reports it).
 
-**`install_reload_rule`**: `{project}`. It writes `/etc/sudoers.d/lite-deploy-<project>` with a single line `U ALL=(root) NOPASSWD: /usr/bin/systemctl reload caddy`. The file is first written to a temporary one, checked with `visudo -cf`, then installed with mode 440. This stays until S6: in mode B the Caddy switch moves to the executor socket and sudoers disappears.
+**`install_reload_rule`** (no longer emitted by plans since D-79: a root helper switches traffic and the project user has no sudo rule; the action stays so that old plans still verify): `{project}`. It wrote `/etc/sudoers.d/lite-deploy-<project>` for `systemctl reload caddy`.
 
 **`reload_caddy`**: `{}`. A configuration check as the user `caddy` (`sudo -u caddy caddy validate --config /etc/caddy/Caddyfile`, not as root: otherwise files owned by root appear, `DEPLOY-PATTERN.md`), then `systemctl reload caddy`. A check error: the project site files written in this apply are returned to the previous state from `.bak` (or deleted if they were new), and no reload is done.
 

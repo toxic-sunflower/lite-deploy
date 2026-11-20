@@ -33,6 +33,10 @@ func secretKey(project, name string) string { return project + "/" + name }
 func (r *run) getSecret(project, name string) (val []byte, pending bool, err error) {
 	v, err := r.Secrets.Get(project, name)
 	if err == nil {
+		if !r.dry {
+			// every read of a secret as root is written to the journal: the name, never the value
+			_ = r.journal("", "", "secret_read", secretKey(project, name))
+		}
 		return v, false, nil
 	}
 	if errors.Is(err, secrets.ErrNotFound) && r.dry && r.wouldSet[secretKey(project, name)] {

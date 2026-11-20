@@ -307,6 +307,9 @@ func TestApplyFromScratchThenIdempotent(t *testing.T) {
 			t.Fatalf("the secret value ended up in the journal: %s", bad)
 		}
 	}
+	if !strings.Contains(string(j), "secret_read") || !strings.Contains(string(j), "shop/") {
+		t.Errorf("a read of a secret must be written to the journal (the name only):\n%s", j)
+	}
 	for _, s := range rep.Steps {
 		if strings.Contains(s.Detail+s.Error, "pa$$word") || strings.Contains(s.Detail+s.Error, w.rolePw) {
 			t.Fatalf("the secret value is in the output of step %s", s.ID)

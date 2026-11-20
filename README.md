@@ -100,6 +100,8 @@ A site is published through a Cloudflare Tunnel (`"publish": "tunnel"`, the defa
 
 The web interface with the "Deploy" and "Roll back" buttons is `lite-ui` (see above): start `lite-ui` and choose your server at the top of the page. It listens on `127.0.0.1` of your computer only.
 
+The pages of `lite-ui`: **Overview** (the state in plain words, what needs attention, projects, updates), **Projects** (create, deploy, roll back), **Ingress** (domains, tunnel or direct publishing, Cloudflare Tunnel), **Databases**, **Backups** (guided setup, copies outside the server), **Protection** (checks, ports, confirming dangerous changes with your key), **Server** (installed and available plugins, updating `lite`). An AI assistant can use the same program in the MCP mode: [Use an AI assistant](docs/ai-assistants.md).
+
 The server must have the agent: `liteup` installs it. The agent runs unprivileged and listens only on the local socket `/run/lite-deploy/api.sock` (nothing is opened to the internet). It hands every action to the executor, which systemd starts as root for each request; the executor accepts only a fixed list of actions (`status`, `deploy`, `rollback`, `info`, `verify`, `fix`, plugin commands, project creation) and exits. System administrators (group `sudo` or `wheel`) can use it; no `sudo` password and no `sudoers` rule are needed for the interface. The caller is identified by the kernel (`SO_PEERCRED`), every request is written to the agent journal `/var/lib/lite-deploy-agent/audit.log`, and the executor writes to the systemd journal (`journalctl -u 'lite-deploy-exec@*'`).
 
 ## Working without root
