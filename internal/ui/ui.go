@@ -9,6 +9,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"filippo.io/age"
 	"io"
 	"io/fs"
 	"net"
@@ -368,6 +369,15 @@ func (s *Server) Handler() http.Handler {
 		}
 		return s.call(r.Context(), "POST", "/v1/publish", map[string]string{"project": in.Project, "site": in.Site, "mode": in.Mode}), 200
 	}))
+	mux.HandleFunc("/api/backup/keygen", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		// the private key is made here, handed to the page once to be saved on this computer, and never kept by lite-ui
+		id, err := age.GenerateX25519Identity()
+		if err != nil {
+			return errBody("internal", err.Error()), 500
+		}
+		b, _ := json.Marshal(map[string]any{"ok": true, "data": map[string]string{"public": id.Recipient().String(), "private": id.String()}})
+		return b, 200
+	}))
 	s.ownerRoutes(mux)
 	mux.HandleFunc("/api/status", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		return s.call(r.Context(), "GET", "/v1/status", nil), 200
@@ -413,9 +423,10 @@ func (s *Server) Handler() http.Handler {
 			Plugin  string   `json:"plugin"`
 			Command string   `json:"command"`
 			Args    []string `json:"args"`
+			Stdin   string   `json:"stdin,omitempty"`
 		}
-		if code := readBody(r, &in); code != 0 {
-			return errBody("usage", "invalid request"), code
+		if code := readBody(r, &in); code != 0 || len(in.Stdin) > 4096 {
+			return errBody("usage", "invalid request"), 400
 		}
 		if !pluginRe.MatchString(in.Plugin) || !pluginRe.MatchString(in.Command) || !plugin.ValidArgs(in.Args) {
 			return errBody("usage", "invalid plugin, command or arguments"), 400

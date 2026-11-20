@@ -350,8 +350,9 @@ func (PG) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (p
 		res, _ := t.run("psql", "--version")
 		active := t.ok("systemctl", "is-active", "--quiet", "postgresql")
 		v := strings.TrimSpace(string(res.Stdout))
+		sched := t.ok("systemctl", "is-enabled", "--quiet", "lite-pg-backup.timer")
 		return plugin.Output{Text: fmt.Sprintf("%s, service %s\n", v, map[bool]string{true: "running", false: "not working"}[active]),
-			Data: map[string]any{"version": v, "active": active}}, nil
+			Data: map[string]any{"version": v, "active": active, "scheduled": sched}}, nil
 	case "databases", "roles":
 		sql := "select datname from pg_database where not datistemplate order by 1"
 		if cmd == "roles" {

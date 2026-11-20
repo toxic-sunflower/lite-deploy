@@ -535,3 +535,18 @@ func TestPostsAreSignedWhenTheServerAsksForTheOwnerKey(t *testing.T) {
 		}
 	}
 }
+
+func TestBackupKeyIsMadeForThePageAndNeverKept(t *testing.T) {
+	s, r := newServer("anna@203.0.113.7")
+	h := s.Handler()
+	w := do(h, "POST", "/api/backup/keygen", `{}`, tok)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"public":"age1`) || !strings.Contains(w.Body.String(), `"private":"AGE-SECRET-KEY-1`) {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	if len(r.Calls) != 0 {
+		t.Fatalf("the key must not be sent to the server by this call: %v", r.Calls)
+	}
+	if w2 := do(h, "POST", "/api/backup/keygen", `{}`, tok); w2.Body.String() == w.Body.String() {
+		t.Error("every call must make a new key")
+	}
+}

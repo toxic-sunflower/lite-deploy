@@ -13,10 +13,10 @@
   <p v-if="error" class="down">{{ error }}</p>\
   <table v-if="verify">\
     <tr v-for="f in verify.findings" :key="f.plugin + f.check">\
-      <td :class="cls(f)" style="white-space:nowrap">{{ f.level === "ok" ? "ok" : (f.level === "warn" ? "warning" : "error") }}</td>\
+      <td :class="cls(f)" style="white-space:nowrap"><icon :name="f.level === \'ok\' ? \'check\' : \'alert\'"></icon></td>\
       <td>{{ f.message }}<div class="help" v-if="f.fix && f.level !== \'ok\'">{{ f.fix }}</div></td></tr>\
   </table>\
-  <div class="notice" v-if="verify"><div class="t">{{ nextText }}</div></div>\
+  <div class="notice" v-if="verify"><icon name="info"></icon><div class="t">{{ nextText }}</div></div>\
   <h3>Confirm with my key</h3>\
   <div class="card" v-if="own">\
     <div v-if="!own.supported" class="muted">This server is older and cannot do this yet. Update lite on the server first.</div>\

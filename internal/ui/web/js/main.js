@@ -4,8 +4,8 @@
     { id: 'overview', title: 'Overview', icon: 'home', comp: 'overview' },
     { id: 'projects', title: 'Projects', icon: 'apps', comp: 'projects' },
     { id: 'ingress', title: 'Ingress', icon: 'world', plugin: 'caddy', comp: 'ingress' },
-    { id: 'databases', title: 'Databases', icon: 'database', plugin: 'pg' },
-    { id: 'backups', title: 'Backups', icon: 'backup', plugin: 'backup' },
+    { id: 'databases', title: 'Databases', icon: 'database', plugin: 'pg', comp: 'databases' },
+    { id: 'backups', title: 'Backups', icon: 'backup', plugin: 'backup', comp: 'backups' },
     { id: 'security', title: 'Protection', icon: 'shield', comp: 'security' },
     { id: 'server', title: 'Server', icon: 'settings', comp: 'server' }
   ];
@@ -69,6 +69,8 @@
   app.component('overview', C.Overview);
   app.component('projects', C.Projects);
   app.component('ingress', C.Ingress);
+  app.component('databases', C.Databases);
+  app.component('backups', C.Backups);
   app.component('security', C.Security);
   app.component('server', C.Server);
   app.component('project-card', C.ProjectCard);

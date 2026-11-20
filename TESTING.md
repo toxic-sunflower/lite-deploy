@@ -52,19 +52,28 @@ Do this on a domain you can afford to touch for a few minutes.
 ## 3. Backups
 
 1. **workstation**: `age-keygen -o lite-backup.key`. Keep the file off the server. Copy the `age1…` line.
-2. **Backups** in the page, or on the **server**: `lite backup setup age1… --encrypt-dumps`, then `lite backup schedule on`, then `lite backup run`, then `lite backup list`.
+2. In the page: **Backups**, “Create my key and turn on backups”. A file `lite-backup.key` is downloaded: keep it. Then “Back up now”. (On the **server** the same is `lite backup setup age1… --encrypt-dumps`, `lite backup schedule on`, `lite backup run`, `lite backup list`.)
 
 Expected: a backup file is listed; the file ends with `.age`.
 
 3. If you use Backblaze, S3 or SFTP: set the storage up (see the README), run `lite backup run` again. Expected: the last upload time appears in `lite verify` without warnings.
 4. Restore into a throw-away database, never over the live one: `lite pg restore LIVE_DB FILE.dump --as LIVE_DB_test` (the target database must exist). Expected: “Database … restored”; then drop the test database.
 
+4. In **Databases**: your database is listed, “Back up now” makes a copy that appears under Backups. Do not press Restore on the live database during a test.
+
+## 3b. Confirm changes with your key (optional, try it last)
+
+1. **Protection**, “Confirm with my key”, **Turn on**. Expected: “Done”.
+2. Open a port from **Protection**: it works from this page.
+3. **server**: `lite firewall allow 8080/tcp` is refused (owner_confirmation_required). Deploy and rollback from the page or CI still work.
+4. Turn it off again from the page. If it does not turn off, on the **server** as root: `sudo rm /etc/lite-deploy/owner-keys`.
+
 ## 4. Updating lite (the Update button)
 
 This needs a release newer than the one on the server. Tell me and I publish a throw-away patch release.
 
 1. **Overview** shows “A new version of lite is available”.
-2. Press **Update**. Expected: the page waits about a minute, then says “Updated to …”. `lite version` on the **server** shows the new version.
+2. Press **Update**. Expected: the page waits about a minute, then says “Updated to …”. (After the update the settings that lite manages are brought up to date by themselves.) `lite version` on the **server** shows the new version.
 3. `lite verify` still has no errors, and the project still runs.
 
 ## 5. Protection and access

@@ -41,6 +41,7 @@ func (Backup) Description() string {
 }
 func (Backup) Commands() []plugin.Command {
 	return []plugin.Command{
+		{Name: "status", Help: "are backups set up, scheduled, and when the last one was taken"},
 		{Name: "setup", Confirm: true, Args: "AGE_PUBLIC_KEY [--encrypt-dumps]", Help: "set the backup encryption key (age1…); the private part stays with you; --encrypt-dumps also encrypts database dumps"},
 		{Name: "run", Root: true, Help: "take backups: settings and secrets (encrypted), pg databases; upload to storage locations"},
 		{Name: "list", Root: true, Help: "settings and secrets backups"},
@@ -301,6 +302,19 @@ func (Backup) Run(ctx context.Context, env plugin.Env, cmd string, args []string
 	switch cmd {
 	case "run":
 		return t.backupRun()
+	case "status":
+		cfg, cerr := t.backupConfig()
+		files := t.configFiles()
+		last := ""
+		if len(files) > 0 {
+			last = files[0].At.Format(time.RFC3339)
+		}
+		scheduled := t.ok("systemctl", "is-enabled", "--quiet", "lite-backup.timer")
+		text := "Backups are not set up.\n"
+		if cerr == nil {
+			text = fmt.Sprintf("Backups are set up; daily schedule %s; %d settings backups.\n", map[bool]string{true: "on", false: "off"}[scheduled], len(files))
+		}
+		return plugin.Output{Text: text, Data: map[string]any{"configured": cerr == nil, "encrypt_dumps": cfg.EncryptDumps, "scheduled": scheduled, "count": len(files), "last": last}}, nil
 	case "list":
 		var sb strings.Builder
 		list := []string{}

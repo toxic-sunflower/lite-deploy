@@ -4,7 +4,7 @@
     data: function () { return { sha: '' }; },
     template: '\
 <div class="card">\
-  <div class="row spread"><h2>{{ p.project }}</h2><span class="muted">{{ p.active === "none" ? "not deployed yet" : "active slot: " + p.active }}</span></div>\
+  <div class="row spread"><h2><icon name="apps"></icon> {{ p.project }}</h2><span class="muted">{{ p.active === "none" ? "not deployed yet" : "active slot: " + p.active }}</span></div>\
   <table>\
     <tr><th>Slot</th><th>Component</th><th>Port</th><th>State</th></tr>\
     <template v-for="slot in [\'blue\', \'green\']">\
@@ -48,11 +48,11 @@
     template: '\
 <div>\
   <div class="row spread"><div><h1>Projects</h1><p class="sub">Your applications on this server.</p></div>\
-    <button class="primary" @click="creating = !creating">{{ creating ? "Close" : "New project" }}</button></div>\
+    <button class="primary" @click="creating = !creating"><icon :name="creating ? \'check\' : \'plus\'"></icon>{{ creating ? "Close" : "New project" }}</button></div>\
   <new-project v-if="creating" @created="created"></new-project>\
   <p v-if="error" class="down">{{ error }}</p>\
   <p v-if="projects && !projects.length && !creating" class="empty">No projects yet. Press “New project”.</p>\
-  <div v-if="undeployed" class="notice"><div class="t">Next: paste the commit hash of the version you want to run into the project card and press Deploy.</div></div>\
+  <div v-if="undeployed" class="notice"><icon name="info"></icon><div class="t">Next: paste the commit hash of the version you want to run into the project card and press Deploy.</div></div>\
   <project-card v-for="p in projects" :key="p.project" :p="p" @changed="load"></project-card>\
 </div>',
     computed: { undeployed: function () { return !!this.projects && this.projects.some(function (p) { return p.active === 'none'; }); } },
