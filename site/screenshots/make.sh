@@ -15,7 +15,7 @@ sleep 1
 base=$(sed -n 3p "$tmp/out.txt" | tr -d ' ')
 topath() { if command -v wslpath >/dev/null 2>&1 && case $EDGE in /mnt/*) true ;; *) false ;; esac; then wslpath -w "$1"; else echo "$1"; fi; }
 # NAME:ADDRESS:WIDTHxHEIGHT
-for spec in overview:overview:1240x860 projects:projects:1240x980 new-project:projects/new:1240x1000 ingress:ingress:1240x860 databases:databases:1240x800 backups:backups:1240x1180 protection:security:1240x1100 server:server:1240x900; do
+for spec in overview:overview:1240x860 projects:projects:1240x980 new-project:projects/new:1240x1000 ingress:ingress:1240x860 secrets:secrets:1240x700 databases:databases:1240x800 backups:backups:1240x1180 protection:security:1240x1100 server:server:1240x900; do
   name=${spec%%:*}; rest=${spec#*:}; addr=${rest%%:*}; size=${rest#*:}
   for theme in light dark; do
     out="$root/site/img/$name-$theme.png"

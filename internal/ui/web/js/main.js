@@ -3,6 +3,7 @@
   var ALL = [
     { id: 'overview', title: 'Overview', icon: 'home', comp: 'overview' },
     { id: 'projects', title: 'Projects', icon: 'apps', comp: 'projects' },
+    { id: 'secrets', title: 'Secrets', icon: 'lock', comp: 'shared-secrets' },
     { id: 'ingress', title: 'Ingress', icon: 'world', comp: 'ingress' },
     { id: 'databases', title: 'Databases', icon: 'database', plugin: 'pg', comp: 'databases' },
     { id: 'backups', title: 'Backups', icon: 'backup', plugin: 'backup', comp: 'backups' },
@@ -72,6 +73,7 @@
   app.component('overview', C.Overview);
   app.component('projects', C.Projects);
   app.component('ingress', C.Ingress);
+  app.component('shared-secrets', C.SharedSecrets);
   app.component('databases', C.Databases);
   app.component('backups', C.Backups);
   app.component('store-form', C.StoreForm);

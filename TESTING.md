@@ -49,7 +49,7 @@ Repeat the creation once more with the same form and **Create project**: every s
 
 ## 1c. Shared secrets and the server file
 
-1. **Projects**, **Shared secrets**: add `registry_token`. In **New project** write `shared:registry_token` in the “Read-only token” box and create the project. Expected: it works without a copy of the token in the project; **Secrets** of the project shows `shared/registry_token` as “set (shared)”.
+1. **Secrets** (in the menu): add `registry_token`. In **New project** write `shared:registry_token` in the “Read-only token” box and create the project. Expected: it works without a copy of the token in the project; **Secrets** of the project shows `shared/registry_token` as “set (shared)”.
 2. **Server**, **Save configuration**. Expected: a file `server.lite-config.json` with your users and their public keys, firewall mode, programs and backup key, and no secret.
 3. Do not run `lite init --config` on this server; keep the file for the next one.
 

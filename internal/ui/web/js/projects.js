@@ -59,13 +59,12 @@
   };
 
   LU.components.Projects = {
-    data: function () { return { projects: null, error: '', creating: location.hash === '#projects/new', shared: false }; },
+    data: function () { return { projects: null, error: '', creating: location.hash === '#projects/new' }; },
     template: '\
 <div>\
   <div class="row spread"><div><h1>Projects</h1><p class="sub">Your applications on this server.</p></div>\
-    <div class="row"><button @click="shared = !shared"><icon name="shield"></icon>{{ shared ? "Hide shared secrets" : "Shared secrets" }}</button>\
+    <div class="row">\
     <button class="primary" @click="creating = !creating"><icon :name="creating ? \'check\' : \'plus\'"></icon>{{ creating ? "Close" : "New project" }}</button></div></div>\
-  <secrets-panel v-if="shared" project="shared" style="margin-bottom:12px"></secrets-panel>\
   <new-project v-if="creating" @created="created"></new-project>\
   <p v-if="error" class="down">{{ error }}</p>\
   <p v-if="projects && !projects.length && !creating" class="empty">No projects yet. Press “New project”.</p>\

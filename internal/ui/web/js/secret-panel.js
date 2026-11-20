@@ -13,7 +13,7 @@
   <table v-if="rows.length"><tr><th>Name</th><th>State</th><th>New value</th><th></th></tr>\
     <tr v-for="r in rows" :key="r.name"><td><code>{{ r.name }}</code></td>\
       <td :class="r.isSet ? \'up\' : \'warntxt\'">{{ r.isSet ? "set" + (r.when ? ", " + r.when : "") : "missing" }}{{ r.shared ? " (shared)" : "" }}</td>\
-      <td><input v-if="!r.shared" type="password" v-model="values[r.name]" autocomplete="off" placeholder="type a value"><span v-else class="muted">change it in “Shared secrets”</span></td>\
+      <td><input v-if="!r.shared" type="password" v-model="values[r.name]" autocomplete="off" placeholder="type a value"><span v-else class="muted">change it in Secrets (the menu)</span></td>\
       <td style="white-space:nowrap" v-if="!r.shared"><button class="primary" @click="save(r.name, values[r.name])" :disabled="$root.state.busy">Save</button>\
         <button v-if="r.isSet" @click="remove(r.name)" :disabled="$root.state.busy"><icon name="trash"></icon></button></td><td v-else></td></tr></table>\
   <p v-else class="muted">This project has no secrets.</p>\
