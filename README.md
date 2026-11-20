@@ -156,11 +156,10 @@ lite security status            # the protection checks
 
 Related commands:
 
+- `lite security ssh [no-root]`: change SSH login: key only for every user, root by key only (`no-root`: root cannot log in at all);
 - `lite security allow-users NAME… | any`: allow only the listed users over SSH (project users that CI logs in as are added automatically; `any` removes the restriction);
 - `lite security banned` and `lite security unban ADDRESS`: who is blocked after repeated failed logins, and lifting a block;
 - `lite security logins [COUNT]`: recent logins and failed attempts.
-
-The single steps (`ssh`, `fail2ban`, `updates`, `sysctl`) still exist for experts but are not part of everyday use.
 
 `lite verify` checks: root and password login over SSH, empty passwords, the user restriction, `fail2ban`, automatic updates and pending security updates, kernel parameters, administrators and their keys, and ports that listen to the outside (and whether the firewall closes them).
 

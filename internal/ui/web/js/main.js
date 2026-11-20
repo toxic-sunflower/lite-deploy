@@ -3,7 +3,7 @@
   var ALL = [
     { id: 'overview', title: 'Overview', comp: 'overview' },
     { id: 'projects', title: 'Projects', comp: 'projects' },
-    { id: 'ingress', title: 'Ingress', plugin: 'caddy' },
+    { id: 'ingress', title: 'Ingress', plugin: 'caddy', comp: 'ingress' },
     { id: 'databases', title: 'Databases', plugin: 'pg' },
     { id: 'backups', title: 'Backups', plugin: 'backup' },
     { id: 'security', title: 'Protection', comp: 'security' },
@@ -67,6 +67,7 @@
   var C = LU.components;
   app.component('overview', C.Overview);
   app.component('projects', C.Projects);
+  app.component('ingress', C.Ingress);
   app.component('security', C.Security);
   app.component('server', C.Server);
   app.component('project-card', C.ProjectCard);

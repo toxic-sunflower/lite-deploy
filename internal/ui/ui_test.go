@@ -324,3 +324,22 @@ func TestServerListAndSelection(t *testing.T) {
 		t.Error("the removed server must be gone")
 	}
 }
+
+func TestIngressAndPublishGoToTheAgent(t *testing.T) {
+	s, r := newServer("anna@203.0.113.7")
+	h := s.Handler()
+	if w := do(h, "GET", "/api/ingress", "", tok); w.Code != 200 || len(r.Calls) != 1 || r.Calls[0].Args[len(r.Calls[0].Args)-1] != "/v1/ingress" {
+		t.Fatalf("ingress: %d %v", w.Code, r.Calls)
+	}
+	if w := do(h, "POST", "/api/publish", `{"project":"shop","site":"main","mode":"direct"}`, tok); w.Code != 200 || len(r.Calls) != 2 {
+		t.Fatalf("publish: %d %v", w.Code, r.Calls)
+	}
+	for _, bad := range []string{`{"project":"shop","site":"main","mode":"open"}`, `{"project":"Bad","site":"main","mode":"direct"}`, `{"project":"shop","site":"x y","mode":"direct"}`} {
+		if w := do(h, "POST", "/api/publish", bad, tok); w.Code != 400 {
+			t.Errorf("%s must be refused: %d", bad, w.Code)
+		}
+	}
+	if len(r.Calls) != 2 {
+		t.Errorf("a refused request must not reach the agent: %v", r.Calls)
+	}
+}

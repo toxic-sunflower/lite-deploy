@@ -54,9 +54,6 @@ type Command struct {
 	Root bool `json:"root,omitempty"`
 	// Args describes the arguments for help and the interface, for example "PACKAGE".
 	Args string `json:"args,omitempty"`
-	// Advanced: a step of a larger goal (for example one part of "protect the server"). It still works, but it is
-	// left out of the help text and of the interface, which show the goal.
-	Advanced bool `json:"advanced,omitempty"`
 }
 
 // Output is the result of a command.

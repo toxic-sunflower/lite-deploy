@@ -140,6 +140,10 @@ func TestAgentRoutes(t *testing.T) {
 		{"POST", "/v1/project/create", `{"project":{"name":"shop"}}`, "project bundle --yes --json"},
 		{"GET", "/v1/project/key", "", "secret pubkey --json"},
 		{"POST", "/v1/fix", `{}`, "fix --yes --json"},
+		{"GET", "/v1/update", "", "update --check --json"},
+		{"POST", "/v1/update/apply", `{}`, "update --yes --json"},
+		{"GET", "/v1/ingress", "", "ingress --json"},
+		{"POST", "/v1/publish", `{"project":"shop","site":"main","mode":"direct"}`, "publish shop main direct --yes --json"},
 	}
 	for _, c := range cases {
 		w := req(h, 1000, c.method, c.path, c.body)

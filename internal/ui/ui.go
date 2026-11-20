@@ -30,6 +30,7 @@ var webFiles embed.FS
 
 var (
 	projectRe = regexp.MustCompile(`\A[a-z][a-z0-9-]{1,30}\z`)
+	siteRe    = regexp.MustCompile(`\A[a-z][a-z0-9-]{0,15}\z`)
 	shaRe     = regexp.MustCompile(`\A[0-9a-f]{40}\z`)
 	hostRe    = regexp.MustCompile(`\A[A-Za-z0-9_][A-Za-z0-9._@:-]{0,100}\z`)
 	pluginRe  = regexp.MustCompile(`\A[a-z][a-z0-9-]{0,30}\z`)
@@ -248,6 +249,19 @@ func (s *Server) Handler() http.Handler {
 	}))
 	mux.HandleFunc("/api/update/apply", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
 		return s.call(r.Context(), "POST", "/v1/update/apply", map[string]string{}), 200
+	}))
+	mux.HandleFunc("/api/ingress", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
+		return s.call(r.Context(), "GET", "/v1/ingress", nil), 200
+	}))
+	mux.HandleFunc("/api/publish", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		var in struct{ Project, Site, Mode string }
+		if code := readBody(r, &in); code != 0 {
+			return errBody("usage", "invalid request"), code
+		}
+		if !projectRe.MatchString(in.Project) || !siteRe.MatchString(in.Site) || (in.Mode != "tunnel" && in.Mode != "direct") {
+			return errBody("usage", "invalid request"), 400
+		}
+		return s.call(r.Context(), "POST", "/v1/publish", map[string]string{"project": in.Project, "site": in.Site, "mode": in.Mode}), 200
 	}))
 	mux.HandleFunc("/api/status", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		return s.call(r.Context(), "GET", "/v1/status", nil), 200

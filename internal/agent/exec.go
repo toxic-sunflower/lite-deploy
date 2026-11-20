@@ -26,6 +26,7 @@ const (
 
 var (
 	projectRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,30}$`)
+	siteRe    = regexp.MustCompile(`^[a-z][a-z0-9-]{0,15}$`)
 	shaRe     = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	specRe    = regexp.MustCompile(`^([0-9]{1,5})/(tcp|udp)$`)
 	userRe    = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
@@ -131,7 +132,15 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, err
 		}
 		return []string{"secret", "pubkey"}, nil
-	case "info", "verify":
+	case "publish": // arguments: project, site, mode
+		if err := need(3); err != nil {
+			return nil, err
+		}
+		if !projectRe.MatchString(a[0]) || !siteRe.MatchString(a[1]) || (a[2] != "tunnel" && a[2] != "direct") {
+			return nil, errors.New("publish: a project, a site and the mode tunnel or direct are required")
+		}
+		return []string{"publish", a[0], a[1], a[2], "--yes"}, nil
+	case "info", "verify", "ingress":
 		if err := need(0); err != nil {
 			return nil, err
 		}

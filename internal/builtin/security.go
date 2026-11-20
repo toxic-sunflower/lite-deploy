@@ -63,11 +63,8 @@ func (Security) Commands() []plugin.Command {
 	return []plugin.Command{
 		{Name: "status", Root: true, Help: "protection state (the same as the security checks in lite verify)"},
 		{Name: "enable", Help: "enable everything: fail2ban, automatic updates, kernel parameters, then no SSH passwords and no root password login; no-root forbids root login entirely", Args: "[no-root]", Confirm: true},
-		{Name: "ssh", Help: "SSH: key-only login for everyone, root by key only (no-root: root cannot log in at all)", Args: "[no-root]", Confirm: true, Advanced: true},
+		{Name: "ssh", Help: "SSH: key-only login for everyone, root by key only (no-root: root cannot log in at all)", Args: "[no-root]", Confirm: true},
 		{Name: "allow-users", Help: "SSH: allow only the listed users (any: remove the restriction); project users are added automatically", Args: "NAME…|any", Confirm: true},
-		{Name: "fail2ban", Help: "install and configure fail2ban for SSH", Confirm: true, Advanced: true},
-		{Name: "updates", Help: "install security updates automatically", Confirm: true, Advanced: true},
-		{Name: "sysctl", Help: "apply the protective kernel parameters", Confirm: true, Advanced: true},
 		{Name: "logins", Root: true, Help: "login journal: recent logins and failed attempts", Args: "[NUMBER]"},
 		{Name: "banned", Root: true, Help: "who fail2ban has banned right now"},
 		{Name: "unban", Help: "remove a fail2ban ban from an address", Args: "ADDRESS", Confirm: true},
@@ -503,29 +500,6 @@ func (Security) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 			text = "SSH: only these users may log in: " + strings.Join(c.AllowUsers, ", ") + " (project users were added automatically).\n"
 		}
 		return plugin.Output{Text: text, Data: map[string]any{"allow_users": c.AllowUsers}}, nil
-	case "fail2ban", "updates", "sysctl":
-		if len(args) != 0 {
-			return plugin.Output{}, plugin.Errorf("usage", "usage: lite security %s", cmd)
-		}
-		var err error
-		note := ""
-		switch cmd {
-		case "fail2ban":
-			err = s.fail2ban()
-		case "updates":
-			note, err = s.updates()
-		default:
-			err = s.sysctl()
-		}
-		if err != nil {
-			return plugin.Output{}, err
-		}
-		if note == "" {
-			note = "Done: " + cmd + ".\n"
-		} else {
-			note += "\n"
-		}
-		return plugin.Output{Text: note, Data: map[string]any{"step": cmd}}, nil
 	case "logins":
 		return s.logins(args)
 	case "banned":

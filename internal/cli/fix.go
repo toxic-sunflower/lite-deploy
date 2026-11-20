@@ -11,7 +11,7 @@ import (
 // safeFixes are the fixes that may be run automatically: repeatable, without substituting owner values and without
 // broadening access to the server. Everything else (the firewall, users, keys, package updates) is only suggested.
 var safeFixes = map[string]bool{
-	"security enable": true, "security ssh": true, "security updates": true, "security sysctl": true, "security fail2ban": true,
+	"security enable": true, "security ssh": true,
 	"pg schedule on": true, "backup schedule on": true, "backblaze schedule on": true,
 	"podman install": true, "pg install": true, "redis install": true, "caddy install": true,
 }

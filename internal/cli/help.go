@@ -24,6 +24,7 @@ Everything else runs as a regular administrator, no sudo needed:
   publish PROJECT SITE [tunnel|direct]  show or switch how a site reaches the internet
   status [PROJECT]             show projects and slots
   update [--check]             check for a new version of lite and install it
+  ssh-key list|add|remove      change your own SSH keys without losing access
   secret encrypt PROJECT NAME  encrypt a secret value read from stdin
   version                      show the version
 

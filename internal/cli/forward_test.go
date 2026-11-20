@@ -195,3 +195,40 @@ func TestUpdateCheckAndVerifyWarning(t *testing.T) {
 		t.Error("verify must warn about a new version")
 	}
 }
+
+const keyA = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJi5Jedy5KNPnCRATLPXN1w/JstcLrxCXM8y3z6qQZ8W old@laptop"
+const keyB = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDtqJ7zOtqQtYqOo0CpvDXNlMhV3HeJDpjrASKGLWdop new@laptop"
+
+func TestSSHKeyReplaceNeverLocksOut(t *testing.T) {
+	env, out, _ := testEnv(t)
+	env.IsRoot = func() bool { return false }
+	env.Getenv = func(k string) string {
+		if k == "HOME" {
+			return "/home/anna"
+		}
+		return ""
+	}
+	_ = env.FS.MkdirAll("/home/anna/.ssh", 0o700)
+	_ = env.FS.WriteFile("/home/anna/.ssh/authorized_keys", []byte(keyA+"\n"), 0o600)
+	// the only key cannot be removed
+	if c := run(t, env, "ssh-key", "remove", fingerprint(keyA)); c == 0 {
+		t.Fatal("removing the only key must be refused")
+	}
+	if c := run(t, env, "ssh-key", "add", keyB); c != 0 {
+		t.Fatalf("add: %d %s", c, out.String())
+	}
+	b, _ := env.FS.ReadFile("/home/anna/.ssh/authorized_keys")
+	if !strings.Contains(string(b), "old@laptop") || !strings.Contains(string(b), "new@laptop") {
+		t.Fatalf("both keys must be there after add: %s", b)
+	}
+	if c := run(t, env, "ssh-key", "remove", fingerprint(keyA)); c != 0 {
+		t.Fatalf("remove: %d", c)
+	}
+	b, _ = env.FS.ReadFile("/home/anna/.ssh/authorized_keys")
+	if strings.Contains(string(b), "old@laptop") || !strings.Contains(string(b), "new@laptop") {
+		t.Fatalf("only the new key must stay: %s", b)
+	}
+	if c := run(t, env, "ssh-key", "add", "not a key"); c == 0 {
+		t.Error("an invalid key must be refused")
+	}
+}

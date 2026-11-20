@@ -553,3 +553,6 @@ func (e Env) snapshot(ctx context.Context) {
 	}
 	_ = e.FS.WriteFile(OriginalDir+"/saved", []byte("1\n"), fs.FileMode(0o600))
 }
+
+// ValidKey tells whether the line is a single public SSH key without options.
+func ValidKey(line string) bool { return keyRe.MatchString(strings.TrimSpace(line)) }

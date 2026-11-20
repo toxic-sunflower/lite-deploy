@@ -213,6 +213,10 @@ func dispatch(args []string, env Env) result {
 		return cmdPublish(args[1:], env)
 	case "update":
 		return cmdUpdate(args[1:], env)
+	case "ingress":
+		return cmdIngress(env)
+	case "ssh-key":
+		return cmdSSHKey(args[1:], env)
 	case "gate":
 		return cmdGate(args[1:], env)
 	case "agent":

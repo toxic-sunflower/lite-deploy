@@ -163,9 +163,6 @@ func cmdInfo(env Env, command string) result {
 		list = append(list, info)
 		fmt.Fprintf(&sb, "  %-12s %-9s %s\n", p.Name(), p.Kind(), p.Description())
 		for _, c := range p.Commands() {
-			if c.Advanced {
-				continue
-			}
 			fmt.Fprintf(&sb, "      %s — %s\n", strings.TrimSpace("lite "+p.Name()+" "+c.Name+" "+c.Args), c.Help)
 		}
 	}

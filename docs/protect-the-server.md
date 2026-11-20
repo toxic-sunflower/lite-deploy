@@ -32,6 +32,7 @@ lite security status
 
 A few related commands:
 
+- `lite security ssh --yes` (or `lite security ssh no-root --yes`): change how SSH login works.
 - `lite security allow-users alice bob --yes`: only these users may use SSH at all (project users that CI logs in as are added automatically; `any` removes the limit). Be sure every administrator is on the list.
 - `lite security banned` lists addresses blocked after repeated failed logins, `lite security unban ADDRESS --yes` lifts a block.
 - `lite security logins`: recent logins and failed attempts.

@@ -202,6 +202,14 @@ func (a *Agent) Handler() http.Handler {
 		}
 		return Request{Cmd: "update.apply"}, true
 	})
+	route(http.MethodGet, "/v1/ingress", func(*http.Request) (Request, bool) { return Request{Cmd: "ingress"}, true })
+	route(http.MethodPost, "/v1/publish", func(r *http.Request) (Request, bool) {
+		var in struct{ Project, Site, Mode string }
+		if !readJSON(r, &in) {
+			return Request{}, false
+		}
+		return Request{Cmd: "publish", Args: []string{in.Project, in.Site, in.Mode}}, true
+	})
 	route(http.MethodGet, "/v1/verify", func(*http.Request) (Request, bool) { return Request{Cmd: "verify"}, true })
 	route(http.MethodPost, "/v1/plugin", func(r *http.Request) (Request, bool) {
 		var in struct {

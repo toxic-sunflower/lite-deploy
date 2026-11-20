@@ -12,13 +12,12 @@
 
   LU.components.PluginPanel = {
     props: ['plugin'],
-    data: function () { return { args: {}, out: {} }; },
-    computed: { visible: function () { return (this.plugin.commands || []).filter(function (c) { return !c.advanced; }); } },
+    data: function () { return { args: {}, out: {} }; }
     template: '\
 <div class="card">\
   <h2>{{ plugin.name }}</h2>\
   <div class="help">{{ plugin.description }}</div>\
-  <div v-for="c in visible" :key="c.name" style="margin-top:12px">\
+  <div v-for="c in plugin.commands" :key="c.name" style="margin-top:12px">\
     <div><code>{{ c.name }}</code> <span class="help">{{ c.help }}</span></div>\
     <form class="row" style="margin-top:4px" @submit.prevent="run(c)">\
       <input v-if="c.args" class="grow" type="text" v-model="args[c.name]" :placeholder="c.args" autocomplete="off" spellcheck="false">\
