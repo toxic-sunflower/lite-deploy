@@ -3,8 +3,8 @@ package deploy
 import (
 	"bufio"
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
