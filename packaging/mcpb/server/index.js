@@ -8,7 +8,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-function say(msg) { process.stderr.write('[launcher] ' + msg + '\n'); }
+// Messages go to stderr (the log of the extension in Claude Desktop) and to a small file in the home folder, which is
+// rewritten at every start: if the extension fails, that file says why.
+let logFile = '';
+try { logFile = path.join(os.homedir(), 'lite-deploy-launcher.log'); fs.writeFileSync(logFile, ''); } catch (e) { logFile = ''; }
+function say(msg) {
+  const line = '[launcher] ' + msg + '\n';
+  process.stderr.write(line);
+  if (logFile) { try { fs.appendFileSync(logFile, new Date().toISOString() + ' ' + line); } catch (e) { /* no log file */ } }
+}
+process.on('uncaughtException', (e) => { say('crashed: ' + (e && e.stack || e)); process.exit(1); });
 
 // An optional setting that is empty may arrive empty or as the unreplaced placeholder.
 let server = process.argv[2] || '';
@@ -26,11 +35,21 @@ if (isWin) {
 for (const d of (process.env.PATH || '').split(path.delimiter)) if (d) candidates.push(path.join(d, exe));
 const found = candidates.find((p) => p && fs.existsSync(p));
 
+// The program gets its own pipes and the launcher carries the data across: handing the pipes of Claude Desktop over directly
+// (stdio: 'inherit') can leave a Windows program with a standard input it cannot read, and it exits at once.
 function run(cmd, args, what) {
   say('starting ' + what + ' (server: ' + (server || 'from the list of lite-ui') + ')');
-  const child = spawn(cmd, args, { stdio: 'inherit', windowsHide: true });
+  const child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
   child.on('error', (e) => { say('cannot start ' + what + ': ' + e.message); process.exit(1); });
-  child.on('exit', (code, signal) => { say(what + ' stopped (code ' + code + (signal ? ', signal ' + signal : '') + ')'); process.exit(code === null ? 1 : code); });
+  child.stdout.on('data', (d) => process.stdout.write(d));
+  child.stderr.on('data', (d) => process.stderr.write(d));
+  process.stdin.on('data', (d) => { try { child.stdin.write(d); } catch (e) { /* the program is gone */ } });
+  process.stdin.on('end', () => { try { child.stdin.end(); } catch (e) { /* the program is gone */ } });
+  child.stdin.on('error', () => { /* the program stopped: its exit is reported below */ });
+  child.on('exit', (code, signal) => {
+    say(what + ' stopped (code ' + code + (signal ? ', signal ' + signal : '') + ')');
+    setTimeout(() => process.exit(code === null ? 1 : code), 50); // let the last output through
+  });
 }
 
 const INSTALL_TEXT =
