@@ -14,7 +14,7 @@
     template: '\
 <div class="layout">\
   <aside class="side">\
-    <div class="brand">lite-deploy</div>\
+    <div class="brand"><img src="/static/logo.svg" alt="">lite-deploy</div>\
     <div class="srvbox"><icon name="server"></icon>\
       <select v-model="state.server" @change="pick" aria-label="Server"><option v-for="h in state.servers" :key="h" :value="h">{{ h }}</option></select></div>\
     <div class="srvbtns"><button @click="addServer"><icon name="plus"></icon>Add</button><button v-if="state.servers.length" @click="removeServer"><icon name="trash"></icon>Remove</button></div>\

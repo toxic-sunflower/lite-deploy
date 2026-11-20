@@ -34,8 +34,8 @@ code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, m
 .brand { display: flex; align-items: center; gap: 8px; font: 600 16px ui-monospace, SFMono-Regular, Menlo, monospace;
          color: var(--fg); margin: 2px 6px 14px; }
 .brand:hover { text-decoration: none; }
-.brand .logo { width: 24px; height: 24px; border-radius: 7px; background: var(--btn); color: var(--btnfg); display: grid; place-items: center; }
-.brand .logo svg { width: 15px; height: 15px; }
+.brand .logo { width: 26px; height: 26px; display: block; }
+.brand .logo svg { width: 26px; height: 26px; display: block; }
 .side h4 { margin: 20px 10px 6px; font-size: 11.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
 .side a.item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 7px; color: var(--fg); margin-bottom: 1px; }
 .side a.item:hover { background: var(--line); text-decoration: none; }
@@ -137,6 +137,7 @@ img { max-width: 100%; height: auto; }
   body.open .side { display: block; }
   .menu-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 18px; border: 0; border-bottom: 1px solid var(--line);
               background: var(--side); color: var(--fg); font: 600 15px ui-monospace, monospace; cursor: pointer; }
+  .menu-btn svg { width: 20px; height: 20px; }
   main { padding: 24px 18px 70px; }
   .hero h1 { font-size: 34px; }
   .row2, .row2.flip { grid-template-columns: 1fr; }

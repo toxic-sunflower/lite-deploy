@@ -120,7 +120,7 @@ def render(text: str) -> str:
 
 
 def nav(cur: str) -> str:
-    parts = [f'<a class="brand" href="./"><span class="logo">{icon("server")}</span>lite-deploy</a>',
+    parts = [f'<a class="brand" href="./"><span class="logo">{LOGO}</span>lite-deploy</a>',
              f'<button class="theme" type="button" id="theme">{icon("moon")}<span>Theme</span></button>']
     items = [("index", "Home", "./")]
     parts.append('<h4>Start</h4>')
@@ -165,8 +165,8 @@ SCRIPT = """
 
 HEAD_THEME = "(function(){try{var t=localStorage.getItem('lite-site-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();"
 
-FAVICON = ("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1a1a'/%3E"
-           "%3Cpath d='M7 10h18v5H7zM7 18h18v5H7z' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E")
+FAVICON = "logo.svg"
+LOGO = (ROOT / "site" / "logo.svg").read_text().strip()
 
 
 def page(slug: str, title: str, body: str, src: str | None, crumb: str = "", extra: str = "") -> str:
@@ -183,7 +183,7 @@ def page(slug: str, title: str, body: str, src: str | None, crumb: str = "", ext
 <meta property="og:title" content="{html.escape(full_title)}">
 <meta property="og:description" content="{html.escape(DESCRIPTION)}">
 <meta property="og:image" content="https://lite-deploy.prozorov.me/img/overview-light.png">
-<link rel="icon" href="{FAVICON}">
+<link rel="icon" type="image/svg+xml" href="{FAVICON}">
 <link rel="stylesheet" href="style.css">
 <script>{HEAD_THEME}</script>
 </head>
@@ -283,7 +283,7 @@ def main() -> int:
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir()
-    for f in ("style.css", "install.sh", "liteup", "install-ui.sh", "install-ui.ps1", "CNAME"):
+    for f in ("style.css", "logo.svg", "install.sh", "liteup", "install-ui.sh", "install-ui.ps1", "CNAME"):
         shutil.copy(ROOT / "site" / f, OUT / f)
     shutil.copytree(ROOT / "site" / "img", OUT / "img")
     # the old addresses of the interface installer keep working
