@@ -37,7 +37,7 @@ func loadToken(create bool) (string, error) {
 	if p == "" {
 		return "", errors.New("no place for the settings of the current user")
 	}
-	if b, err := os.ReadFile(p); err == nil && len(strings.TrimSpace(string(b))) >= 16 {
+	if b, err := os.ReadFile(filepath.Clean(p)); err == nil && len(strings.TrimSpace(string(b))) >= 16 {
 		return strings.TrimSpace(string(b)), nil
 	}
 	if !create {
