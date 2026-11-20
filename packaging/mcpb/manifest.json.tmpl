@@ -3,8 +3,8 @@
   "name": "lite-deploy",
   "display_name": "lite-deploy",
   "version": "@VERSION@",
-  "description": "Look at your servers and deploy to them from Claude: read the state, run checks, deploy and roll back.",
-  "long_description": "Connects Claude to servers managed by lite-deploy over SSH, with your SSH key. Claude can read the state of your projects, run the server check, see domains and plugins, and deploy or roll back a project. It never changes ports, SSH, backups or publishing: those stay in the lite-ui page, where you can confirm them with your key. You need Lite Deploy (lite-ui) installed on this workstation, and a key login to the server (ssh USER@ADDRESS must work without a password) and the OpenSSH client.",
+  "description": "Manage your servers from Claude: everything lite-ui can do, with your approval for every change.",
+  "long_description": "Connects Claude to servers managed by lite-deploy over SSH, with your SSH key. Claude can do what the lite-ui page does: read the state, run checks, deploy and roll back, create projects, set secrets, publish sites, manage the firewall, backups and Cloudflare. Claude asks you before every change. It never signs with your owner key, so changes that need your key (the “Confirm with my key” protection) can only be made in the page. You need Lite Deploy (lite-ui) installed on this workstation, and a key login to the server (ssh USER@ADDRESS must work without a password) and the OpenSSH client.",
   "author": { "name": "toxic-sunflower", "url": "https://github.com/toxic-sunflower" },
   "repository": { "type": "git", "url": "https://github.com/toxic-sunflower/lite-deploy" },
   "homepage": "https://lite-deploy.prozorov.me",
@@ -21,20 +21,39 @@
   },
   "tools": [
     { "name": "list_servers", "description": "The servers you can manage." },
+    { "name": "add_server", "description": "Add a server to your list." },
+    { "name": "remove_server", "description": "Remove a server from your list." },
     { "name": "verify", "description": "Check a server (read only)." },
     { "name": "project_status", "description": "Projects, the active slot, versions and history." },
     { "name": "ingress", "description": "Domains and how each is published." },
     { "name": "plugins", "description": "What is installed on the server and what can be added." },
     { "name": "update_check", "description": "Whether a newer lite exists." },
+    { "name": "firewall_status", "description": "The firewall and the open ports." },
+    { "name": "secrets_list", "description": "Names of a project's secrets (never values)." },
+    { "name": "project_export", "description": "A project description without secrets." },
+    { "name": "server_config", "description": "The server as a file." },
     { "name": "deploy", "description": "Deploy a version (full commit hash)." },
-    { "name": "rollback", "description": "Switch a project back to the previous version." }
+    { "name": "rollback", "description": "Switch a project back to the previous version." },
+    { "name": "update_server", "description": "Update lite on the server." },
+    { "name": "fix", "description": "Fix what the check can fix by itself." },
+    { "name": "run_plugin", "description": "Run a command of a plugin: firewall, security, backup, pg, caddy…" },
+    { "name": "publish", "description": "Tunnel or direct publishing of a site." },
+    { "name": "fallback_password", "description": "The password for direct mode." },
+    { "name": "project_preview", "description": "What creating a project would do." },
+    { "name": "project_create", "description": "Create or change a project." },
+    { "name": "secret_set", "description": "Set a secret." },
+    { "name": "secret_remove", "description": "Delete a secret." },
+    { "name": "connect_cloudflare_tunnel", "description": "Connect a Cloudflare Tunnel." },
+    { "name": "cloudflare_access", "description": "Close a domain with Cloudflare Access." }
   ],
+
   "user_config": {
     "server": {
       "type": "string",
-      "title": "Your server",
-      "description": "The server as user@address, for example serafim@203.0.113.7. A login with your SSH key must already work.",
-      "required": true
+      "title": "A server to add (optional)",
+      "description": "Leave empty to use the servers of lite-ui. Or give one as user@address, for example serafim@203.0.113.7, to add it. You can also ask Claude to add servers later. A login with your SSH key must already work.",
+      "required": false,
+      "default": ""
     }
   },
   "compatibility": { "platforms": ["win32", "darwin", "linux"] }

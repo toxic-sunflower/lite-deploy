@@ -6,7 +6,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const server = process.argv[2] || '';
+// An optional setting that is empty may arrive empty or as the unreplaced placeholder.
+let server = process.argv[2] || '';
+if (server.startsWith('${')) server = '';
 const exe = process.platform === 'win32' ? 'lite-ui.exe' : 'lite-ui';
 const home = os.homedir();
 const candidates = [process.env.LITE_UI_BIN];
@@ -26,8 +28,8 @@ function inWsl() {
   return r.status === 0;
 }
 
-if (!found && server && inWsl()) {
-  const script = 'p=$(command -v lite-ui || echo "$HOME/.local/bin/lite-ui"); exec "$p" mcp --server "$1"';
+if (!found && inWsl()) {
+  const script = 'p=$(command -v lite-ui || echo "$HOME/.local/bin/lite-ui"); exec "$p" mcp ${1:+--server "$1"}';
   const w = spawn('wsl.exe', ['-e', 'sh', '-c', script, 'sh', server], { stdio: 'inherit', windowsHide: true });
   w.on('error', (e) => { process.stderr.write('Cannot start WSL: ' + e.message + '\n'); process.exit(1); });
   w.on('exit', (code) => process.exit(code === null ? 1 : code));
@@ -39,12 +41,8 @@ if (!found && server && inWsl()) {
     '  macOS / Linux:        curl -fsSL https://lite-deploy.prozorov.me/install-ui.sh | sh\n');
   process.exit(1);
 }
-else if (!server) {
-  process.stderr.write('No server given: fill in "Your server" (user@address) in the extension settings.\n');
-  process.exit(1);
-}
 else {
-const child = spawn(found, ['mcp', '--server', server], { stdio: 'inherit', windowsHide: true });
+const child = spawn(found, server ? ['mcp', '--server', server] : ['mcp'], { stdio: 'inherit', windowsHide: true });
 child.on('error', (e) => { process.stderr.write('Cannot start ' + found + ': ' + e.message + '\n'); process.exit(1); });
 child.on('exit', (code) => process.exit(code === null ? 1 : code));
 }

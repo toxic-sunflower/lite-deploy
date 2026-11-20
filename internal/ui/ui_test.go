@@ -623,7 +623,7 @@ func TestExtensionManifestMatchesTheTools(t *testing.T) {
 	if m.ManifestVersion == "" || m.Name != "lite-deploy" || m.Version != "1.2.3" || m.Server.Type != "node" || m.Server.EntryPoint != "server/index.js" || m.Server.MCP.Command != "node" {
 		t.Fatalf("the manifest is incomplete: %+v", m)
 	}
-	if len(m.Server.MCP.Args) != 2 || !strings.HasSuffix(m.Server.MCP.Args[0], "server/index.js") || m.Server.MCP.Args[1] != "${user_config.server}" || !m.UserConfig["server"].Required {
+	if len(m.Server.MCP.Args) != 2 || !strings.HasSuffix(m.Server.MCP.Args[0], "server/index.js") || m.Server.MCP.Args[1] != "${user_config.server}" || m.UserConfig["server"].Required {
 		t.Errorf("the launcher must get the address the person typed: %+v", m.Server.MCP)
 	}
 	have := map[string]bool{}
@@ -753,4 +753,74 @@ func TestCloudflareAccessGoesToCloudflareNotToTheServer(t *testing.T) {
 	if w := do(h, "POST", "/api/cf-access", `{"action":"list"}`, ""); w.Code != 401 {
 		t.Errorf("a token is required: %d", w.Code)
 	}
+}
+
+// The assistant can do what the page can, but it asks first and never signs.
+func TestMCPToolsMatchThePage(t *testing.T) {
+	dir := t.TempDir()
+	var calls [][]string
+	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		calls = append(calls, c.Args)
+		return host.Result{Stdout: []byte(`{"ok":true,"data":{"done":true}}`)}, nil
+	}}
+	s := &Server{Runner: r, Servers: &ServerList{Path: dir + "/servers"}, Token: tok, OwnerKeyPath: dir + "/owner.key"}
+	_ = s.Servers.Add("anna@203.0.113.7")
+	if _, err := s.createOwnerKey(); err != nil {
+		t.Fatal(err)
+	}
+	by := map[string]mcpTool{}
+	readOnly := 0
+	for _, tl := range s.MCPTools() {
+		by[tl.Name] = mcpTool{tl.Run, tl.ReadOnly}
+		if tl.ReadOnly {
+			readOnly++
+		}
+	}
+	for _, want := range []string{"firewall_status", "secrets_list", "project_export", "server_config", "update_server", "fix", "run_plugin", "publish",
+		"fallback_password", "project_preview", "project_create", "secret_set", "secret_remove", "connect_cloudflare_tunnel", "cloudflare_access", "add_server", "remove_server"} {
+		if _, ok := by[want]; !ok {
+			t.Errorf("the page can do it, the assistant cannot: %s", want)
+		}
+	}
+	for _, ro := range []string{"verify", "project_status", "firewall_status", "secrets_list"} {
+		if !by[ro].readOnly {
+			t.Errorf("%s only reads and must say so", ro)
+		}
+	}
+	for _, ch := range []string{"deploy", "rollback", "run_plugin", "publish", "secret_set", "update_server"} {
+		if by[ch].readOnly {
+			t.Errorf("%s changes things and must not say it is read only", ch)
+		}
+	}
+	ctx := context.Background()
+	if out, err := by["run_plugin"].run(ctx, map[string]any{"plugin": "firewall", "command": "mode", "args": []any{"http"}}); err != nil || !strings.Contains(out, "done") {
+		t.Fatalf("run_plugin: %v %s", err, out)
+	}
+	if _, err := by["run_plugin"].run(ctx, map[string]any{"plugin": "Bad Name", "command": "x"}); err == nil {
+		t.Error("the checks of the page apply to the assistant too")
+	}
+	if _, err := by["publish"].run(ctx, map[string]any{"project": "shop", "site": "main", "mode": "sideways"}); err == nil {
+		t.Error("a wrong mode must be refused")
+	}
+	if _, err := by["secret_set"].run(ctx, map[string]any{"project": "shop", "name": "api_key", "value": "a-secret-value"}); err != nil {
+		t.Fatalf("secret_set: %v", err)
+	}
+	if out, err := by["add_server"].run(ctx, map[string]any{"server": "bob@203.0.113.9"}); err != nil || !s.Servers.Has("bob@203.0.113.9") {
+		t.Fatalf("add_server: %v %s", err, out)
+	}
+	if _, err := by["secrets_list"].run(ctx, map[string]any{"project": "../x"}); err == nil {
+		t.Error("an invalid project name must be refused")
+	}
+	for _, c := range calls {
+		for _, a := range c {
+			if a == "--sig" {
+				t.Fatalf("an assistant must never sign: %v", c)
+			}
+		}
+	}
+}
+
+type mcpTool struct {
+	run      func(context.Context, map[string]any) (string, error)
+	readOnly bool
 }

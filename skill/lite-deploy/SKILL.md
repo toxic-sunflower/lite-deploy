@@ -5,7 +5,7 @@ description: Look at and operate servers managed by lite-deploy (state of projec
 
 # Working with lite-deploy
 
-lite-deploy sets up a Linux server and deploys projects to it. You reach the person's servers through the MCP server `lite-deploy` (`lite-ui mcp` on their computer). It uses their list of servers and their SSH key; you never see a password or a key.
+lite-deploy sets up a Linux server and deploys projects to it. You reach the person's servers through the MCP server `lite-deploy` (`lite-ui mcp` on their workstation). It uses their list of servers and their SSH key; you never see a password or a key.
 
 ## Tools
 
@@ -20,7 +20,7 @@ lite-deploy sets up a Linux server and deploys projects to it. You reach the per
 ## Rules
 
 1. **Look before you act.** Run `project_status` (and `verify` when something is wrong) before suggesting a change.
-2. **Ask before `deploy` and `rollback`**, and say which project, which version (a deploy needs the full 40-character commit hash) and what will happen: traffic switches to the new version only after it answers its health check, and stays on the old one if it does not; a rollback switches back to the previous version.
+2. **Ask before every tool that changes something** (all except those marked read only): `deploy`, `rollback`, `run_plugin`, `publish`, `project_create`, `secret_set`, `update_server` and the rest. For example, before `deploy` and `rollback`, and say which project, which version (a deploy needs the full 40-character commit hash) and what will happen: traffic switches to the new version only after it answers its health check, and stays on the old one if it does not; a rollback switches back to the previous version.
 3. **Never invent a commit hash.** If the person did not give one, ask, or read it from the history that `project_status` returns.
 4. **Dangerous changes are not yours.** Opening ports, SSH settings, backups, publishing, installing programs and similar changes are made by the person in the lite-ui page, which can confirm them with their key. You have no tool for them on purpose. Say where to click instead.
 5. **Secrets.** Never ask for, print or store passwords, tokens or keys. If a task needs one, tell the person to enter it in the page.
@@ -32,3 +32,7 @@ lite-deploy sets up a Linux server and deploys projects to it. You reach the per
 - “What version is live?” → `project_status`.
 - “Deploy abc123… to shop” → confirm, then `deploy`; afterwards `project_status` to show the result.
 - “Something broke after the deploy” → `project_status`, then offer `rollback` and ask.
+
+## More than deploying
+
+The tools match the page: projects (`project_preview` before `project_create`), secrets, publishing and the password of direct mode, Cloudflare tunnels and Access, the firewall and every plugin command through `run_plugin` (see `plugins` for what exists). Always show the person what a change will do first. Do not ask the person to paste secrets, passwords or tokens into the chat; send them to the page for those. If a change is refused with `owner_confirmation_required`, the person has turned on the protection that only the page can satisfy: tell them to make that change in the page.

@@ -18,6 +18,9 @@ type Tool struct {
 	Description string
 	// Schema is the JSON Schema of the arguments.
 	Schema map[string]any
+	// ReadOnly: the tool only reads. The others change something, and the assistant is told so (readOnlyHint, destructiveHint):
+	// Claude Desktop then asks the person before each call.
+	ReadOnly bool
 	// Run does the work and returns the text the assistant sees.
 	Run func(ctx context.Context, args map[string]any) (string, error)
 }
@@ -98,7 +101,8 @@ func (s *Server) handle(ctx context.Context, req request, send func(any)) {
 	case "tools/list":
 		list := []map[string]any{}
 		for _, t := range s.Tools {
-			list = append(list, map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Schema})
+			list = append(list, map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Schema,
+				"annotations": map[string]any{"readOnlyHint": t.ReadOnly, "destructiveHint": !t.ReadOnly, "openWorldHint": true}})
 		}
 		reply(map[string]any{"tools": list})
 	case "tools/call":

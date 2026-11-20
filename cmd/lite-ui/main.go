@@ -226,7 +226,7 @@ func runMCP(args []string, in io.Reader, out, errw io.Writer) int {
 		}
 	}
 	runner := host.ExecRunner{}
-	srv := &ui.Server{Runner: runner, Servers: list, Token: "mcp-mode-has-no-web-page", SSHOptions: sshSharing(), Streamer: runner}
+	srv := &ui.Server{Runner: runner, Servers: list, Token: "mcp-mode-has-no-web-page", SSHOptions: sshSharing(), Streamer: runner, CF: &cfaccess.Store{Path: cfTokenPath()}}
 	m := &mcp.Server{Name: "lite-deploy", Version: Version, Tools: srv.MCPTools()}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
