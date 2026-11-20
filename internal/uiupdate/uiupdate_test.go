@@ -7,11 +7,20 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/toxic-sunflower/lite-deploy/internal/host"
 )
+
+func runCmd(name string, args ...string) (string, error) {
+	res, err := host.ExecRunner{}.Run(context.Background(), host.Cmd{Name: name, Args: args})
+	if err == nil && res.ExitCode != 0 {
+		err = os.ErrInvalid
+	}
+	return string(res.Stdout) + string(res.Stderr), err
+}
 
 func TestNewer(t *testing.T) {
 	cases := []struct {
@@ -37,14 +46,13 @@ type signer struct {
 
 func newSigner(t *testing.T) *signer {
 	t.Helper()
-	bin, err := exec.LookPath("minisign")
-	if err != nil {
+	if _, err := runCmd("minisign", "-v"); err != nil {
 		t.Skip("minisign is not installed")
 	}
 	dir := t.TempDir()
 	s := &signer{t: t, dir: dir, key: filepath.Join(dir, "k.key")}
 	pubFile := filepath.Join(dir, "k.pub")
-	if out, err := exec.Command(bin, "-G", "-W", "-f", "-s", s.key, "-p", pubFile).CombinedOutput(); err != nil { //nolint:gosec // test
+	if out, err := runCmd("minisign", "-G", "-W", "-f", "-s", s.key, "-p", pubFile); err != nil {
 		t.Fatalf("%v %s", err, out)
 	}
 	b, _ := os.ReadFile(pubFile)
@@ -56,7 +64,7 @@ func (s *signer) sign(text []byte) []byte {
 	s.t.Helper()
 	f := filepath.Join(s.dir, "msg")
 	_ = os.WriteFile(f, text, 0o600)
-	if out, err := exec.Command("minisign", "-S", "-s", s.key, "-m", f).CombinedOutput(); err != nil { //nolint:gosec // test
+	if out, err := runCmd("minisign", "-S", "-s", s.key, "-m", f); err != nil {
 		s.t.Fatalf("%v %s", err, out)
 	}
 	b, _ := os.ReadFile(f + ".minisig")
