@@ -41,6 +41,9 @@ type Options struct {
 	Firewall string   // off, http, max or keep (do not change)
 	Plugins  []string // podman, postgres
 	Yes      bool     // do not ask for confirmation of the plan
+	// WaitLogin: before closing password login, wait until the person has really logged in with the key (the SSH log).
+	WaitLogin    bool
+	LoginTimeout time.Duration // how long to wait; 5 minutes by default
 }
 
 // Env is the environment.
@@ -51,6 +54,8 @@ type Env struct {
 	Out    io.Writer
 	// Projects are the names of project users: init does not touch them.
 	Projects []string
+	Sleep    func(time.Duration) // for waiting for the key login
+	Now      func() time.Time
 }
 
 // Account is an /etc/passwd entry.
@@ -234,6 +239,19 @@ func (e Env) Apply(ctx context.Context, o Options) error {
 		}
 		keyed = append(keyed, u)
 	}
+	protect := true
+	if o.WaitLogin {
+		protect = e.waitKeyLogin(ctx, keyed, o)
+		if !protect {
+			var rest []string
+			for _, pl := range o.Plugins {
+				if pl != "security" {
+					rest = append(rest, pl)
+				}
+			}
+			o.Plugins = rest
+		}
+	}
 	for _, pl := range o.Plugins {
 		penv := plugin.Env{Runner: e.Runner, FS: e.FS, Projects: e.Projects, User: o.Current}
 		if err := builtin.InstallPlugin(ctx, penv, pl, builtin.Say(e.say)); err != nil {
@@ -245,11 +263,17 @@ func (e Env) Apply(ctx context.Context, o Options) error {
 			return err
 		}
 	}
-	if err := e.sshKeyOnly(ctx, keyed); err != nil {
-		return err
+	if protect {
+		if err := e.sshKeyOnly(ctx, keyed); err != nil {
+			return err
+		}
 	}
 	e.say("")
-	e.say("Done. Keep this session open, open a new one and check key login: ssh %s@this-server, then sudo -v.", users[0])
+	if !protect {
+		e.say("Done, but the server is NOT protected yet: password login is still on, because no login with your key was seen.")
+		e.say("Log in with your key (ssh %s@this-server), then run: lite security enable", users[0])
+		return nil
+	}
 	hardened := false
 	for _, pl := range o.Plugins {
 		hardened = hardened || pl == "security"
@@ -446,4 +470,50 @@ func (e Env) sshKeyOnly(ctx context.Context, users []string) error {
 	}
 	e.say("SSH password login is disabled for: %s (key login remains).", strings.Join(users, ", "))
 	return nil
+}
+
+var acceptedRe = regexp.MustCompile(`Accepted publickey for ([a-z_][a-z0-9_-]*) from`)
+
+// waitKeyLogin waits until one of the users logs in with the key, so that password login is closed only after the key
+// is proven to work. It returns false if no login is seen in time; true if one is seen, or if the SSH log cannot be read
+// (then nothing can be verified and the earlier behaviour is kept).
+func (e Env) waitKeyLogin(ctx context.Context, users []string, o Options) bool {
+	sleep, now := e.Sleep, e.Now
+	if sleep == nil {
+		sleep = time.Sleep
+	}
+	if now == nil {
+		now = time.Now
+	}
+	limit := o.LoginTimeout
+	if limit == 0 {
+		limit = 5 * time.Minute
+	}
+	start := now()
+	want := map[string]bool{}
+	for _, u := range users {
+		want[u] = true
+	}
+	e.say("")
+	e.say("Before closing password login, please check that your key works.")
+	e.say("Open a NEW terminal on your workstation and log in: ssh %s@this-server", users[0])
+	e.say("Waiting for that login (up to %d minutes)...", int(limit.Minutes()))
+	for {
+		res, err := e.Runner.Run(ctx, host.Cmd{Name: "journalctl", Args: []string{"-q", "--no-pager", "-o", "cat", "-u", "ssh", "-u", "sshd", "--since", "@" + strconv.FormatInt(start.Unix()-1, 10)}, Timeout: 20 * time.Second})
+		if err != nil || res.ExitCode != 0 {
+			e.say("Could not read the SSH log, so the login cannot be checked automatically: check key login yourself in a second window.")
+			return true
+		}
+		for _, m := range acceptedRe.FindAllStringSubmatch(string(res.Stdout), -1) {
+			if want[m[1]] {
+				e.say("Key login of %s seen. Closing password login.", m[1])
+				return true
+			}
+		}
+		if now().Sub(start) >= limit || ctx.Err() != nil {
+			e.say("No login with your key was seen in %d minutes.", int(limit.Minutes()))
+			return false
+		}
+		sleep(3 * time.Second)
+	}
 }

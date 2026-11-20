@@ -122,8 +122,8 @@ func cmdInit(args []string, env Env) result {
 	if stdin == nil {
 		stdin = strings.NewReader("")
 	}
-	se := setup.Env{Runner: env.Runner, FS: env.FS, In: bufio.NewReader(stdin), Out: env.Stderr, Projects: projects}
-	opts := setup.Options{Users: split(users), AllUsers: *allUsers, Current: current, Firewall: *ufw, Plugins: withSecurity(split([]string{*plugins}), *noSecurity), Yes: *yes}
+	se := setup.Env{Runner: env.Runner, FS: env.FS, In: bufio.NewReader(stdin), Out: env.Stderr, Projects: projects, Sleep: env.Sleep, Now: env.Now}
+	opts := setup.Options{Users: split(users), AllUsers: *allUsers, Current: current, Firewall: *ufw, Plugins: withSecurity(split([]string{*plugins}), *noSecurity), Yes: *yes, WaitLogin: !*yes}
 	if err := se.Apply(context.Background(), opts); err != nil {
 		return fail("init", plan.CodePrecondition, err.Error())
 	}

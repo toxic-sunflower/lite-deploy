@@ -32,7 +32,7 @@ sudo lite init --user alice --ufw max --plugins caddy,podman,pg
 
 `init` shows what it will do and asks for confirmation. It creates the user `alice` (asking for a password and for your public SSH key), gives them administrator rights, sets the firewall to "SSH only" (`--ufw max`), installs Caddy, podman and PostgreSQL, **and protects the server**: SSH by key only (root too), protection against password guessing, automatic security updates.
 
-Keep your root session open, open a second terminal and check that you can log in as `alice` with your key and run `sudo -v`. From now on you work as `alice`, and you do not need `sudo` for `lite` commands.
+After the user is created, `init` asks you to log in once with your key: open a new terminal on your workstation and run `ssh alice@YOUR_SERVER`. `init` waits for that login (up to 5 minutes) and only then closes password login and finishes the protection, so you cannot lock yourself out. From now on you work as `alice`, and you do not need `sudo` for `lite` commands.
 
 ## 3. Check the server
 

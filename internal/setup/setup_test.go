@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/builtin"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
@@ -24,6 +25,7 @@ type world struct {
 	noUfw   bool
 	created []string
 	pkgs    map[string]bool // installed packages
+	journal string          // what journalctl prints (the SSH log)
 }
 
 func newWorld() *world {
@@ -61,6 +63,8 @@ func (w *world) env(input string) Env {
 			return host.Result{ExitCode: 2}, nil
 		case line == "sshd -T":
 			return host.Result{Stdout: []byte("port 2222\n")}, nil
+		case c.Name == "journalctl":
+			return host.Result{Stdout: []byte(w.journal)}, nil
 		case c.Name == "gpg":
 			w.fs.Files[c.Args[len(c.Args)-1]] = c.Stdin // the real gpg creates the key file
 		case c.Name == "useradd":
@@ -352,5 +356,57 @@ func TestFirewallKeepDoesNotTouchUfw(t *testing.T) {
 	}
 	if _, err := e.Plan(Options{Firewall: "bogus"}, nil); err == nil {
 		t.Fatal("an unknown mode must be rejected")
+	}
+}
+
+// clock is a clock that moves one minute on every reading, so that waiting ends without real time passing.
+func clock() func() time.Time {
+	t := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	return func() time.Time { t = t.Add(time.Minute); return t }
+}
+
+func TestWaitsForKeyLoginThenClosesPasswords(t *testing.T) {
+	w := newWorld()
+	w.noPass["anna"] = false
+	w.journal = "Accepted publickey for anna from 203.0.113.5 port 5000 ssh2: ED25519 SHA256:x\n"
+	e := w.env(key + "\n")
+	e.Sleep, e.Now = func(time.Duration) {}, clock()
+	if err := e.Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Yes: true, WaitLogin: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := w.fs.Files[SSHDropIn]; !ok {
+		t.Error("after a seen key login the password ban must be written")
+	}
+}
+
+func TestNoKeyLoginLeavesPasswordsOn(t *testing.T) {
+	w := newWorld()
+	e := w.env(key + "\n")
+	e.Sleep, e.Now = func(time.Duration) {}, clock()
+	err := e.Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Plugins: []string{"security"}, Yes: true, WaitLogin: true, LoginTimeout: 3 * time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := w.fs.Files[SSHDropIn]; ok {
+		t.Error("without a seen key login password login must stay on")
+	}
+	if w.index("apt-get install -y fail2ban") >= 0 {
+		t.Error("the security plugin must wait too")
+	}
+	if !strings.Contains(w.out.String(), "NOT protected yet") || !strings.Contains(w.out.String(), "lite security enable") {
+		t.Errorf("the person must be told what to do: %s", w.out.String())
+	}
+}
+
+func TestUnreadableSSHLogKeepsOldBehaviour(t *testing.T) {
+	w := newWorld()
+	w.failOn = "journalctl"
+	e := w.env(key + "\n")
+	e.Sleep, e.Now = func(time.Duration) {}, clock()
+	if err := e.Apply(context.Background(), Options{Users: []string{"anna"}, Firewall: "off", Yes: true, WaitLogin: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := w.fs.Files[SSHDropIn]; !ok {
+		t.Error("when the log cannot be read nothing can be verified: the old behaviour stays")
 	}
 }

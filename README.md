@@ -74,7 +74,7 @@ The command first shows what it will do and asks for confirmation. Then it:
 - installs plugins: `--plugins caddy,podman,pg,redis,backblaze` (the name `postgres` is accepted as `pg`). Caddy is needed for project sites: it is installed from the official repository, the main Caddyfile includes the sites from `/etc/caddy/conf.d`, and the old Caddyfile is saved as a copy;
 - **protects the server** (unless you pass `--no-security`): SSH login by key only for everyone (root by key only), fail2ban, automatic security updates and protective kernel parameters; the SSH setting is checked with `sshd -t` and the previous one is restored on an error.
 
-Keep your root session open and check, in a second window, that your own key login works. After `init` log in as the regular user. Daily work needs **no root and no sudo**: if a command needs privileges, the CLI hands it to the agent (see "Working without root"). When logged in as root, the commands other than `lite init` and `lite --help` refuse to run.
+Before it closes password login, `init` waits (up to 5 minutes) until you have logged in with your key from a new terminal; if no login is seen it leaves password login on and tells you how to finish later (`lite security enable`). With `--yes` it does not wait. After `init` log in as the regular user. Daily work needs **no root and no sudo**: if a command needs privileges, the CLI hands it to the agent (see "Working without root"). When logged in as root, the commands other than `lite init` and `lite --help` refuse to run.
 
 Without `--user`, the user who ran `sudo lite init` is configured. `lite` is the short name of `lite-deploy`; `lite --help` lists everything.
 
