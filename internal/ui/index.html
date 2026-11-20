@@ -51,7 +51,7 @@
 </head>
 <body>
 <div class="wrap">
-  <header><h1>lite-deploy</h1><span class="srv" id="srv"></span></header>
+  <header><h1>lite-deploy</h1><span class="srv" id="srv"><select id="srvsel" title="Server"></select> <button id="srvadd" type="button">Add server</button> <button id="srvdel" type="button">Remove</button></span></header>
   <div id="msg"></div>
   <div id="list"><p class="empty">Loading…</p></div>
   <h3>New project</h3>
@@ -68,9 +68,11 @@
   var token = new URLSearchParams(location.search).get('t') || sessionStorage.getItem('t') || '';
   if (token) { sessionStorage.setItem('t', token); history.replaceState(null, '', location.pathname); }
   var busy = false;
+  var server = '';
+  try { server = localStorage.getItem('lite-ui-server') || ''; } catch (e) {}
 
   function api(path, body) {
-    var opt = { headers: { 'X-Token': token } };
+    var opt = { headers: { 'X-Token': token, 'X-Server': server } };
     if (body) { opt.method = 'POST'; opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
     return fetch(path, opt).then(function (r) { return r.json(); });
   }
@@ -471,7 +473,35 @@
   }
 
   newProject();
-  api('/api/info').then(function (i) { document.getElementById('srv').textContent = i.host ? 'server: ' + i.host : 'this computer'; }).catch(function () {});
+  function setServer(v) { server = v; try { localStorage.setItem('lite-ui-server', v); } catch (e) {} }
+  function addServer() {
+    var v = prompt('Your server as USER@ADDRESS, for example serafim@203.0.113.7');
+    if (!v) return;
+    api('/api/servers/add', { host: v.trim() }).then(function (r) {
+      if (r.ok === false) { msg('err', r.error ? r.error.message : 'could not add the server'); return; }
+      setServer(v.trim()); location.reload();
+    });
+  }
+  function loadServers() {
+    var sel = document.getElementById('srvsel');
+    api('/api/servers').then(function (r) {
+      var list = r.servers || [];
+      document.getElementById('srvadd').style.display = r.editable ? '' : 'none';
+      document.getElementById('srvdel').style.display = r.editable && list.length ? '' : 'none';
+      if (list.length && list.indexOf(server) < 0) { setServer(list[0]); location.reload(); return; }
+      sel.textContent = '';
+      list.forEach(function (h) { var o = el('option', null, h); o.value = h; if (h === server) o.selected = true; sel.appendChild(o); });
+      sel.style.display = list.length ? '' : 'none';
+      if (!list.length) { msg('err', 'Add your server first: press "Add server" and enter USER@ADDRESS.'); }
+    }).catch(function () {});
+  }
+  document.getElementById('srvsel').addEventListener('change', function (e) { setServer(e.target.value); location.reload(); });
+  document.getElementById('srvadd').addEventListener('click', addServer);
+  document.getElementById('srvdel').addEventListener('click', function () {
+    if (!server || !confirm('Remove ' + server + ' from the list? Nothing changes on the server.')) return;
+    api('/api/servers/remove', { host: server }).then(function () { setServer(''); location.reload(); });
+  });
+  loadServers();
   load(); loadFw(); loadPlugins();
   setInterval(function () { if (!busy && document.activeElement.tagName !== 'INPUT') { load(); loadFw(); } }, 10000);
 })();

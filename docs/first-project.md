@@ -124,10 +124,10 @@ Edit `shop.json` and run `lite project create` again with the same `--ciphertext
 Everything above is also in the web interface, including a form for a new project. The interface is the small program `lite-ui` on **your computer**: it reaches the server over SSH and is never installed on the server. Install it (Windows PowerShell: `irm https://lite-deploy.prozorov.me/lite-ui.ps1 | iex`; WSL, Linux and macOS: `curl -fsSL https://lite-deploy.prozorov.me/lite-ui | sh`), then:
 
 ```sh
-lite-ui --host alice@YOUR_SERVER
+lite-ui
 ```
 
-It opens in your browser at an address like `http://127.0.0.1:8787/?t=…` (the server is remembered for next time). In the "New project" section fill in the form and press "Preview plan", then "Create project". Secret values you type are encrypted in the page before they leave it.
+It opens in your browser at an address like `http://127.0.0.1:8787/?t=…`. At the top press "Add server" and enter `alice@YOUR_SERVER`; your servers are listed there for next time. In the "New project" section fill in the form and press "Preview plan", then "Create project". Secret values you type are encrypted in the page before they leave it.
 
 ## Next
 

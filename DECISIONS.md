@@ -209,3 +209,5 @@ Taken from the documentation of the projects themselves, 2026-10-29:
 
 **D-74. A separate UI-only client.** The person's computer gets a small program with only the interface, started by a double click, not the whole product. It reaches the server over SSH and opens nothing to the internet. Status: accepted by the owner (2026-11-20).
 
+**D-75. `lite-ui` manages many servers.** The page has a list of servers (USER@ADDRESS) kept in a file on the workstation; the person adds, removes and chooses a server in the browser. Every request names the chosen server, and `lite-ui` connects only to servers from the list. Status: accepted by the owner (2026-11-20).
+

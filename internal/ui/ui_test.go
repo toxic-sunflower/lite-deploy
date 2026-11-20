@@ -274,3 +274,53 @@ func TestProjectEndpointsValidate(t *testing.T) {
 		t.Fatalf("on a wrong request the agent is not called: %v", r.Calls)
 	}
 }
+
+func doServer(h http.Handler, method, path, body, server string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, "http://127.0.0.1:8787"+path, strings.NewReader(body))
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("X-Token", tok)
+	if server != "" {
+		req.Header.Set("X-Server", server)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	return w
+}
+
+func TestServerListAndSelection(t *testing.T) {
+	s, r := newServer("")
+	s.Host = ""
+	s.Servers = &ServerList{Path: t.TempDir() + "/lite-ui/servers"}
+	h := s.Handler()
+
+	if w := doServer(h, "GET", "/api/status", "", ""); !strings.Contains(w.Body.String(), "no_server") || len(r.Calls) != 0 {
+		t.Fatalf("without a selected server nothing may run: %s %v", w.Body.String(), r.Calls)
+	}
+	for _, host := range []string{"anna@203.0.113.7", "bob@198.51.100.2"} {
+		if w := doServer(h, "POST", "/api/servers/add", `{"host":"`+host+`"}`, ""); w.Code != 200 {
+			t.Fatalf("add %s: %d %s", host, w.Code, w.Body.String())
+		}
+	}
+	if w := doServer(h, "POST", "/api/servers/add", `{"host":"not-a-server"}`, ""); w.Code != 400 {
+		t.Errorf("a server without USER@ must be refused: %d", w.Code)
+	}
+	if w := doServer(h, "GET", "/api/servers", "", ""); !strings.Contains(w.Body.String(), `"bob@198.51.100.2","anna@203.0.113.7"`) {
+		t.Fatalf("the newest server goes first: %s", w.Body.String())
+	}
+	// the request goes to the server the page selected, not to another one
+	if w := doServer(h, "GET", "/api/status", "", "anna@203.0.113.7"); w.Code != 200 || len(r.Calls) != 1 || r.Calls[0].Args[4] != "anna@203.0.113.7" {
+		t.Fatalf("wrong target: %d %v", w.Code, r.Calls)
+	}
+	// a server that is not in the list is refused: the page cannot make lite-ui connect anywhere
+	if w := doServer(h, "GET", "/api/status", "", "evil@203.0.113.99"); !strings.Contains(w.Body.String(), "unknown_server") || len(r.Calls) != 1 {
+		t.Fatalf("an unlisted server must be refused: %s %v", w.Body.String(), r.Calls)
+	}
+	if w := doServer(h, "POST", "/api/servers/remove", `{"host":"anna@203.0.113.7"}`, ""); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	if strings.Contains(doServer(h, "GET", "/api/servers", "", "").Body.String(), "anna@") {
+		t.Error("the removed server must be gone")
+	}
+}

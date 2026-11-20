@@ -56,13 +56,13 @@ irm https://lite-deploy.prozorov.me/lite-ui.ps1 | iex
 curl -fsSL https://lite-deploy.prozorov.me/lite-ui | sh
 ```
 
-Then, in a new terminal, give it your server once (it is remembered):
+Then start it in a terminal:
 
 ```sh
-lite-ui --host YOUR_USER@YOUR_SERVER
+lite-ui
 ```
 
-The page opens in your browser at an address like `http://127.0.0.1:8787/?t=…`; only your computer can reach it. This needs the OpenSSH client (built into Windows 10 and later and into macOS) and a key login to the server.
+The page opens in your browser at an address like `http://127.0.0.1:8787/?t=…`; only your computer can reach it. At the top of the page, press "Add server" and enter `YOUR_USER@YOUR_SERVER`. You can add several servers and switch between them in the same place; the list is kept on your workstation. (`lite-ui --host USER@SERVER` adds a server from the command line.) This needs the OpenSSH client (built into Windows 10 and later and into macOS) and a key login to the server.
 
 ## Prepare the server
 
@@ -98,7 +98,7 @@ lite rollback PROJECT
 
 A site is published through a Cloudflare Tunnel (`"publish": "tunnel"`, the default) or directly, with Caddy getting its own TLS certificate (`"publish": "direct"`). Switch at any time: `lite publish PROJECT SITE tunnel|direct` ([tutorial](docs/publish-a-site.md)).
 
-The web interface with the "Deploy" and "Roll back" buttons is `lite-ui` (see above): `lite-ui --host admin@YOUR_SERVER`. It listens on `127.0.0.1` of your computer only.
+The web interface with the "Deploy" and "Roll back" buttons is `lite-ui` (see above): start `lite-ui` and choose your server at the top of the page. It listens on `127.0.0.1` of your computer only.
 
 The server must have the agent: `liteup` installs it. The agent runs unprivileged and listens only on the local socket `/run/lite-deploy/api.sock` (nothing is opened to the internet). It hands every action to the executor, which systemd starts as root for each request; the executor accepts only a fixed list of actions (`status`, `deploy`, `rollback`, `info`, `verify`, `fix`, plugin commands, project creation) and exits. System administrators (group `sudo` or `wheel`) can use it; no `sudo` password and no `sudoers` rule are needed for the interface. The caller is identified by the kernel (`SO_PEERCRED`), every request is written to the agent journal `/var/lib/lite-deploy-agent/audit.log`, and the executor writes to the systemd journal (`journalctl -u 'lite-deploy-exec@*'`).
 

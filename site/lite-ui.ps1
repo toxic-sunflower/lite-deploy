@@ -71,7 +71,7 @@ try {
         Write-Host "[3/3] Installed $dir\lite-ui.exe"
     }
     Write-Host "Done: $(& (Join-Path $dir 'lite-ui.exe') --version)."
-    Write-Host 'Next: lite-ui --host YOUR_USER@YOUR_SERVER   (it opens the interface in your browser; needs the OpenSSH client and a key login to the server)'
+    Write-Host 'Next: lite-ui   (it opens the interface in your browser: press "Add server" and enter YOUR_USER@YOUR_SERVER; needs the OpenSSH client and a key login to the server)'
 } finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }

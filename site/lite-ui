@@ -5,7 +5,7 @@
 #
 # It downloads the small lite-ui program from the latest release into ~/.local/bin, checks its SHA256 against the
 # SHA256SUMS of the same release (and the minisign signature too, if minisign is installed). Nothing is installed on
-# the server. Then: lite-ui --host YOUR_USER@YOUR_SERVER
+# the server. Then: lite-ui
 #
 # Options (environment variables): LITE_UI_VERSION (a tag like v0.7.0, the latest by default), LITE_UI_PREFIX
 # (the folder, ~/.local/bin by default), LITE_UI_BASE_URL (for testing), LITE_UI_SKIP_SIG=1.
@@ -69,4 +69,4 @@ install -m 755 "$tmp/$name" "$prefix/lite-ui"
 say "[3/3] Installed $prefix/lite-ui"
 case ":$PATH:" in *":$prefix:"*) ;; *) say "Note: $prefix is not in your PATH; run $prefix/lite-ui or add it to PATH." ;; esac
 say "Done: $("$prefix/lite-ui" --version)."
-say "Next: lite-ui --host YOUR_USER@YOUR_SERVER   (it opens the interface in your browser; needs a key login to the server over ssh)"
+say "Next: lite-ui   (it opens the interface in your browser: press "Add server" and enter YOUR_USER@YOUR_SERVER; needs a key login to the server over ssh)"

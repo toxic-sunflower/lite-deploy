@@ -4,7 +4,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -30,7 +29,7 @@ func main() { os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)) }
 func run(args []string, in io.Reader, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("lite-ui", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	hostFlag := fs.String("host", "", "the server as USER@ADDRESS (remembered for next time)")
+	hostFlag := fs.String("host", "", "add a server as USER@ADDRESS to your list")
 	listen := fs.String("listen", "127.0.0.1:8787", "local address of the page (loopback only)")
 	noOpen := fs.Bool("no-open", false, "do not open the browser")
 	version := fs.Bool("version", false, "print the version")
@@ -47,17 +46,12 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 		_, _ = fmt.Fprintln(errw, "ERROR: the page listens on 127.0.0.1 only (it is never exposed to the internet)")
 		return 2
 	}
-	server := *hostFlag
-	saved := savedHostPath()
-	if server == "" {
-		if b, err := os.ReadFile(filepath.Clean(saved)); err == nil {
-			server = strings.TrimSpace(string(b))
+	list := &ui.ServerList{Path: savedListPath()}
+	if *hostFlag != "" {
+		if err := list.Add(*hostFlag); err != nil {
+			_, _ = fmt.Fprintln(errw, "ERROR:", err)
+			return 2
 		}
-	}
-	if server == "" {
-		_, _ = fmt.Fprint(out, "Your server as USER@ADDRESS (for example serafim@203.0.113.7): ")
-		line, _ := bufio.NewReader(in).ReadString('\n')
-		server = strings.TrimSpace(line)
 	}
 	raw := make([]byte, 16)
 	if _, err := io.ReadFull(rand.Reader, raw); err != nil {
@@ -65,18 +59,10 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 		return 1
 	}
 	runner := host.ExecRunner{}
-	srv := &ui.Server{Runner: runner, Host: server, Token: hex.EncodeToString(raw)}
-	if server == "" {
-		_, _ = fmt.Fprintln(errw, "ERROR: the server address is needed: lite-ui --host USER@ADDRESS")
-		return 2
-	}
+	srv := &ui.Server{Runner: runner, Servers: list, Token: hex.EncodeToString(raw)}
 	if err := srv.Validate(); err != nil {
 		_, _ = fmt.Fprintln(errw, "ERROR:", err)
 		return 2
-	}
-	if saved != "" && server != "" {
-		_ = os.MkdirAll(filepath.Dir(saved), 0o700)
-		_ = os.WriteFile(saved, []byte(server+"\n"), 0o600)
 	}
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
@@ -84,7 +70,7 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 		return 1
 	}
 	url := fmt.Sprintf("http://%s/?t=%s", ln.Addr().String(), srv.Token)
-	_, _ = fmt.Fprintf(out, "The interface for %s is running.\n\n  %s\n\nIt opens in your browser. Close this window or press Ctrl+C to stop.\n", server, url)
+	_, _ = fmt.Fprintf(out, "The interface is running.\n\n  %s\n\nIt opens in your browser; choose or add your server there. Close this window or press Ctrl+C to stop.\n", url)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if !*noOpen {
@@ -97,12 +83,12 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 	return 0
 }
 
-func savedHostPath() string {
+func savedListPath() string {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "lite-ui", "server")
+	return filepath.Join(dir, "lite-ui", "servers")
 }
 
 // openBrowser tries the usual openers of the system; a failure is not an error: the address is printed anyway.

@@ -12,8 +12,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/firewall"
@@ -41,6 +44,84 @@ type Server struct {
 	Token string
 	// Timeout for one action; a deploy can take minutes.
 	Timeout time.Duration
+	// Servers is the person's list of servers; the page picks one for every request (header X-Server).
+	// nil: the single Host is used (tests, a fixed server).
+	Servers *ServerList
+}
+
+type ctxKey struct{}
+
+// ServerList is the list of servers the person manages, kept in a file (one USER@ADDRESS per line).
+type ServerList struct {
+	Path string
+	mu   sync.Mutex
+}
+
+// List returns the servers in the order of use (the most recently added first).
+func (l *ServerList) List() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.read()
+}
+
+func (l *ServerList) read() []string {
+	b, err := os.ReadFile(filepath.Clean(l.Path))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(string(b), "\n") {
+		if h := strings.TrimSpace(line); h != "" && hostRe.MatchString(h) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+func (l *ServerList) write(list []string) error {
+	if err := os.MkdirAll(filepath.Dir(l.Path), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(l.Path, []byte(strings.Join(list, "\n")+"\n"), 0o600)
+}
+
+// Add puts a server first (or moves it there).
+func (l *ServerList) Add(host string) error {
+	if !hostRe.MatchString(host) || !strings.Contains(host, "@") {
+		return errors.New("the server must look like USER@ADDRESS, for example serafim@203.0.113.7")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	list := []string{host}
+	for _, h := range l.read() {
+		if h != host {
+			list = append(list, h)
+		}
+	}
+	return l.write(list)
+}
+
+// Remove deletes a server from the list.
+func (l *ServerList) Remove(host string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var list []string
+	for _, h := range l.read() {
+		if h != host {
+			list = append(list, h)
+		}
+	}
+	return l.write(list)
+}
+
+// Has tells whether the server is in the list.
+func (l *ServerList) Has(host string) bool {
+	for _, h := range l.List() {
+		if h == host {
+			return true
+		}
+	}
+	return false
 }
 
 // Validate validates the settings.
@@ -61,9 +142,19 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 	if body != nil {
 		in, _ = json.Marshal(body)
 	}
+	target := s.Host
+	if s.Servers != nil {
+		target, _ = ctx.Value(ctxKey{}).(string)
+		if target == "" {
+			return errBody("no_server", "no server is selected: add one with \"Add server\" at the top of the page")
+		}
+		if !s.Servers.Has(target) {
+			return errBody("unknown_server", "this server is not in your list: choose another or add it")
+		}
+	}
 	var cmd host.Cmd
-	if s.Host != "" {
-		cmd = host.Cmd{Name: "ssh", Args: []string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=10", s.Host, "lite-deploy", "call", method, path}}
+	if target != "" {
+		cmd = host.Cmd{Name: "ssh", Args: []string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=10", target, "lite-deploy", "call", method, path}}
 	} else {
 		bin := s.Bin
 		if bin == "" {
@@ -108,6 +199,36 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/info", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		b, _ := json.Marshal(map[string]string{"host": s.Host})
 		return b, 200
+	}))
+	mux.HandleFunc("/api/servers", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
+		list := []string{}
+		if s.Servers != nil {
+			list = append(list, s.Servers.List()...)
+		} else if s.Host != "" {
+			list = append(list, s.Host)
+		}
+		b, _ := json.Marshal(map[string]any{"servers": list, "editable": s.Servers != nil})
+		return b, 200
+	}))
+	mux.HandleFunc("/api/servers/add", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		var in struct{ Host string }
+		if code := readBody(r, &in); code != 0 || s.Servers == nil {
+			return errBody("usage", "invalid request"), 400
+		}
+		if err := s.Servers.Add(strings.TrimSpace(in.Host)); err != nil {
+			return errBody("usage", err.Error()), 400
+		}
+		return []byte(`{"ok":true}`), 200
+	}))
+	mux.HandleFunc("/api/servers/remove", s.api(http.MethodPost, func(r *http.Request) ([]byte, int) {
+		var in struct{ Host string }
+		if code := readBody(r, &in); code != 0 || s.Servers == nil {
+			return errBody("usage", "invalid request"), 400
+		}
+		if err := s.Servers.Remove(strings.TrimSpace(in.Host)); err != nil {
+			return errBody("internal", err.Error()), 500
+		}
+		return []byte(`{"ok":true}`), 200
 	}))
 	mux.HandleFunc("/api/status", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		return s.call(r.Context(), "GET", "/v1/status", nil), 200
@@ -245,6 +366,7 @@ func (s *Server) api(method string, h func(*http.Request) ([]byte, int)) http.Ha
 			_, _ = w.Write(errBody("permission_denied", "a token from the address printed by lite-ui is required"))
 			return
 		}
+		r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, r.Header.Get("X-Server")))
 		b, code := h(r)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
