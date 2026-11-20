@@ -6,6 +6,8 @@
   function lines(t) { return t.split('\n').map(function (l) { return l.trim(); }).filter(Boolean); }
   function pair(l) { var i = l.indexOf('='); return i < 1 ? null : [l.slice(0, i).trim(), l.slice(i + 1)]; }
   function secretName(parts) { var n = parts.join('_').toLowerCase().replace(/[^a-z0-9_]/g, '_'); return /^[a-z]/.test(n) ? n : 's_' + n; }
+  // a value written as shared:NAME refers to a shared secret instead of giving a value
+  function sharedRef(v) { var m = /^shared:([a-z][a-z0-9_]{1,63})$/.exec((v || '').trim()); return m ? 'secret://shared/' + m[1] : null; }
   function opt(o, k, v) { if (v !== '' && v !== undefined && v !== null) o[k] = v; }
 
   LU.components.NewProject = {
@@ -35,7 +37,7 @@
   <label class="check"><input type="checkbox" v-model="regOn"> The container image is in a private registry</label>\
   <div class="box" v-if="regOn">\
     <div class="row"><div class="grow"><label>Registry</label><input type="text" v-model="reg.host"></div><div class="grow"><label>User</label><input type="text" v-model="reg.user" autocomplete="off"></div></div>\
-    <label>Read-only token</label><input type="password" v-model="reg.token" autocomplete="off">\
+    <label>Read-only token (or <code>shared:NAME</code> to use a shared secret)</label><input type="password" v-model="reg.token" autocomplete="off">\
   </div>\
   <h3>Components</h3>\
   <div class="box" v-for="(s, i) in services" :key="i">\
@@ -53,7 +55,7 @@
     <div class="row"><div class="grow"><label>Memory this component may use</label><input type="text" v-model="s.mem"></div>\
       <div class="grow"><label>Address that answers “I am ready” after start</label><input type="text" v-model="s.health"></div></div>\
     <label>Settings that are not secret (one per line: NAME=value)</label><textarea v-model="s.env" placeholder="ENVIRONMENT=Production" spellcheck="false"></textarea>\
-    <label>Secret settings: passwords, keys (one per line: NAME=value; stored encrypted on the server)</label><textarea v-model="s.sec" spellcheck="false"></textarea>\
+    <label>Secret settings: passwords, keys (one per line: NAME=value; stored encrypted on the server; write NAME=shared:KEY to use a shared secret)</label><textarea v-model="s.sec" spellcheck="false"></textarea>\
     <label>Name of the setting that receives the database address (optional)</label><input type="text" v-model="s.dbenv" placeholder="DATABASE_URL" autocomplete="off">\
     <div style="margin-top:10px"><button type="button" @click="services.splice(i, 1)" v-if="services.length > 1">Remove this component</button></div>\
   </div>\
@@ -132,14 +134,16 @@
           if (this.db.server.trim()) {
             p.database.server = this.db.server.trim();
             if (this.db.port.trim()) p.database.port = parseInt(this.db.port, 10);
-            if (!this.db.pass) errs.push('The database role password is needed (it is never in an exported file)');
-          p.database.password_secret = 'secret://db_password'; sec.db_password = this.db.pass;
+            var dref = sharedRef(this.db.pass);
+          if (dref) p.database.password_secret = dref;
+          else { if (!this.db.pass) errs.push('The database role password is needed (it is never in an exported file)'); p.database.password_secret = 'secret://db_password'; sec.db_password = this.db.pass; }
           }
         }
         if (this.regOn) {
           p.registry = { host: this.reg.host.trim(), username: this.reg.user.trim(), token_secret: 'secret://registry_token' };
-          if (!this.reg.token) errs.push('The registry token is needed (it is never in an exported file)');
-          sec.registry_token = this.reg.token;
+          var rref = sharedRef(this.reg.token);
+          if (rref) p.registry.token_secret = rref;
+          else { if (!this.reg.token) errs.push('The registry token is needed (it is never in an exported file)'); sec.registry_token = this.reg.token; }
         }
         p.services = {};
         this.services.forEach(function (s) {
@@ -155,7 +159,7 @@
           lines(s.env).forEach(function (l) { var kv = pair(l); if (kv) env[kv[0]] = kv[1]; else errs.push('Setting "' + l + '": write it as NAME=value'); });
           if (Object.keys(env).length) o.env = env;
           var sc = {};
-          lines(s.sec).forEach(function (l) { var kv = pair(l); if (kv && kv[1] === '') errs.push('The secret ' + kv[0] + ' needs a value (secret values are never in an exported file)'); else if (kv) { var sn = secretName([n, kv[0]]); sc[kv[0]] = 'secret://' + sn; sec[sn] = kv[1]; } else errs.push('Secret "' + l.split('=')[0] + '": write it as NAME=value'); });
+          lines(s.sec).forEach(function (l) { var kv = pair(l); var sref = kv && sharedRef(kv[1]); if (sref) sc[kv[0]] = sref; else if (kv && kv[1] === '') errs.push('The secret ' + kv[0] + ' needs a value (secret values are never in an exported file)'); else if (kv) { var sn = secretName([n, kv[0]]); sc[kv[0]] = 'secret://' + sn; sec[sn] = kv[1]; } else errs.push('Secret "' + l.split('=')[0] + '": write it as NAME=value'); });
           if (Object.keys(sc).length) o.secrets = sc;
           opt(o, 'database_env', s.dbenv.trim());
           p.services[n] = o;

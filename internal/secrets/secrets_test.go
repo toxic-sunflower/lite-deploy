@@ -203,3 +203,23 @@ func TestEnsureKey(t *testing.T) {
 		t.Fatal(v, err)
 	}
 }
+
+func TestSharedSecretIsReadByReferenceFromAnyProject(t *testing.T) {
+	m := host.NewMemFS()
+	s := NewStoreAt(m, "/var/lib/lite-deploy/secrets")
+	if _, err := s.Put(SharedProject, "registry_token", []byte("ghp_token_value_123")); err != nil {
+		t.Fatal(err)
+	}
+	for _, project := range []string{"shop", "blog"} {
+		v, err := s.Get(project, "shared/registry_token")
+		if err != nil || string(v) != "ghp_token_value_123" {
+			t.Fatalf("%s must read the shared secret: %v %q", project, err, v)
+		}
+	}
+	if _, err := s.Get("shop", "shared/nothing"); err == nil {
+		t.Error("a missing shared secret must be reported")
+	}
+	if _, err := s.Get("shop", "shared/../x"); err == nil {
+		t.Error("a path trick must be refused")
+	}
+}

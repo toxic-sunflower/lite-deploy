@@ -5,7 +5,16 @@
   var saved = '';
   try { saved = localStorage.getItem('lite-ui-server') || ''; } catch (e) {}
 
+  // theme: light, dark, or the one the system uses (auto); chosen once, kept in the browser
+  var theme = 'auto';
+  try { theme = localStorage.getItem('lite-ui-theme') || 'auto'; } catch (e) {}
+  function applyTheme(t) {
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
+  }
+  applyTheme(theme);
+
   LU.state = Vue.reactive({
+    theme: theme,
     server: saved, servers: [], editable: false, serversLoaded: false,
     plugins: [], pluginsLoaded: false, update: null, busy: false, msg: { kind: '', text: '' }, page: (location.hash || '#overview').slice(1).split('/')[0] || 'overview'
   });
@@ -98,6 +107,16 @@
       out.push(it);
     });
     return out;
+  };
+
+  LU.setTheme = function (t) {
+    LU.state.theme = t; applyTheme(t);
+    try { localStorage.setItem('lite-ui-theme', t); } catch (e) {}
+  };
+  // toggles between light and dark (starting from what the system shows when the choice is automatic)
+  LU.toggleTheme = function () {
+    var dark = LU.state.theme === 'dark' || (LU.state.theme === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    LU.setTheme(dark ? 'light' : 'dark');
   };
 
   LU.setServer = function (v) {

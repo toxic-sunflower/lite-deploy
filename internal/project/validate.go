@@ -21,7 +21,7 @@ var dataNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,15}$`)
 
 var reservedNames = map[string]bool{
 	"root": true, "postgres": true, "caddy": true, "cloudflared": true,
-	"lite-deploy": true, "www-data": true, "daemon": true,
+	"lite-deploy": true, "www-data": true, "daemon": true, "shared": true,
 }
 
 // Reserved reports that a name cannot be used as a project name.

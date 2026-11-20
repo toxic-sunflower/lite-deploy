@@ -39,7 +39,11 @@ func (s *Server) secretRoutes(mux *http.ServeMux) {
 		if bad != nil {
 			return bad, 200
 		}
-		ct, err := secrets.Encrypt(pub, in.Project, in.Name, []byte(in.Value), time.Now())
+		bind := in.Project
+		if bind == "shared" {
+			bind = secrets.SharedProject // the ciphertext of a shared secret is bound to the shared store
+		}
+		ct, err := secrets.Encrypt(pub, bind, in.Name, []byte(in.Value), time.Now())
 		if err != nil {
 			return errBody("invalid_secret", err.Error()), 400
 		}

@@ -27,7 +27,7 @@
         },
         "password_secret": {
           "description": "for a database on another server: the secret with the role password (the role and database are named after the project, hyphens replaced by _)",
-          "pattern": "^secret://[a-z][a-z0-9_]{1,63}$",
+          "pattern": "^secret://(shared/)?[a-z][a-z0-9_]{1,63}$",
           "type": "string"
         },
         "port": {
@@ -80,7 +80,7 @@
         },
         "token_secret": {
           "description": "secret://name reference; a read-only token",
-          "pattern": "^secret://[a-z][a-z0-9_]{1,63}$",
+          "pattern": "^secret://(shared/)?[a-z][a-z0-9_]{1,63}$",
           "type": "string"
         },
         "username": {
@@ -218,7 +218,7 @@
               },
               "token_secret": {
                 "description": "secret://name reference; the token is sent as Authorization: Bearer",
-                "pattern": "^secret://[a-z][a-z0-9_]{1,63}$",
+                "pattern": "^secret://(shared/)?[a-z][a-z0-9_]{1,63}$",
                 "type": "string"
               },
               "url": {
@@ -236,7 +236,7 @@
           },
           "secrets": {
             "additionalProperties": {
-              "pattern": "^secret://[a-z][a-z0-9_]{1,63}$",
+              "pattern": "^secret://(shared/)?[a-z][a-z0-9_]{1,63}$",
               "type": "string"
             },
             "maxProperties": 128,

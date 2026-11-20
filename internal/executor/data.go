@@ -39,6 +39,9 @@ func (r *run) getSecret(project, name string) (val []byte, pending bool, err err
 		}
 		return v, false, nil
 	}
+	if errors.Is(err, secrets.ErrNotFound) && strings.HasPrefix(name, secrets.SharedPrefix) {
+		return nil, false, fmt.Errorf("the shared secret %s is not set: add it in the interface (Projects, Shared secrets)", strings.TrimPrefix(name, secrets.SharedPrefix))
+	}
 	if errors.Is(err, secrets.ErrNotFound) && r.dry && r.wouldSet[secretKey(project, name)] {
 		return nil, true, nil
 	}

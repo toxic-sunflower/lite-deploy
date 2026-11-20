@@ -248,6 +248,9 @@ func ProjectHash(p *project.Project) (string, error) {
 
 func secretName(ref string) string { return strings.TrimPrefix(ref, "secret://") }
 
+// own tells whether the plan has to bring the secret: a shared secret lives on the server and is set separately.
+func own(name string) bool { return !strings.HasPrefix(name, "shared/") }
+
 func sortedKeys[V any](m map[string]V) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -288,17 +291,25 @@ func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) (
 	need := map[string]bool{}
 	for _, s := range d.Services {
 		for _, ref := range s.Secrets {
-			need[secretName(ref)] = true
+			if n := secretName(ref); own(n) {
+				need[n] = true
+			}
 		}
 		if s.Release != nil && s.Release.TokenSecret != "" {
-			need[secretName(s.Release.TokenSecret)] = true
+			if n := secretName(s.Release.TokenSecret); own(n) {
+				need[n] = true
+			}
 		}
 	}
 	if d.Registry != nil {
-		need[secretName(d.Registry.TokenSecret)] = true
+		if n := secretName(d.Registry.TokenSecret); own(n) {
+			need[n] = true
+		}
 	}
 	if d.Database != nil && !d.Database.IsLocal() {
-		need[secretName(d.Database.PasswordSecret)] = true
+		if n := secretName(d.Database.PasswordSecret); own(n) {
+			need[n] = true
+		}
 	}
 	have := map[string]bool{}
 	for _, n := range cur.Secrets {

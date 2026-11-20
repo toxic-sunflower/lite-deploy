@@ -228,12 +228,21 @@ func secretSet(args []string, env Env) result {
 		text: fmt.Sprintf("Secret %s of project %s %s.\n", pos[1], pos[0], word)}
 }
 
+// scope maps the name the interface uses for the shared secrets ("shared") to the store that holds them.
+func scope(project string) string {
+	if project == "shared" {
+		return secrets.SharedProject
+	}
+	return project
+}
+
 func secretList(args []string, env Env) result {
 	fs := flag.NewFlagSet("secret.list", flag.ContinueOnError)
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 1 {
-		return fail("secret.list", CodeUsage, "usage: lite-deploy secret list <project>")
+		return fail("secret.list", CodeUsage, "usage: lite-deploy secret list <project|shared>")
 	}
+	pos[0] = scope(pos[0])
 	type item struct {
 		Name      string  `json:"name"`
 		UpdatedAt *string `json:"updated_at"`
@@ -271,10 +280,16 @@ func secretList(args []string, env Env) result {
 	if len(items) == 0 {
 		sb.WriteString("No secrets.\n")
 	}
-	return result{command: "secret.list", data: map[string]any{"secrets": items, "needed": neededSecrets(env, pos[0])}, text: sb.String()}
+	shared := []string{}
+	if entries, err := secrets.NewStoreAt(env.FS, env.secretsDir()).List(secrets.SharedProject); err == nil {
+		for _, e := range entries {
+			shared = append(shared, e.Name)
+		}
+	}
+	return result{command: "secret.list", data: map[string]any{"secrets": items, "needed": neededSecrets(env, pos[0]), "shared": shared}, text: sb.String()}
 }
 
-var secretRefRe = regexp.MustCompile(`secret://([a-z][a-z0-9_]{1,63})`)
+var secretRefRe = regexp.MustCompile(`secret://((?:shared/)?[a-z][a-z0-9_]{1,63})`)
 
 // neededSecrets are the secrets the description of a project refers to (names only), without the internal ones.
 func neededSecrets(env Env, project string) []string {
@@ -309,8 +324,11 @@ func secretPut(args []string, env Env) result {
 	if !secrets.ValidName(pos[1]) || strings.HasPrefix(pos[1], "_") {
 		return fail(command, CodeInvalidSecret, "invalid secret name")
 	}
-	if _, err := env.FS.Stat("/etc/lite-deploy/projects/" + pos[0] + ".json"); err != nil {
-		return fail(command, CodeProjectMissing, "project "+pos[0]+" not found")
+	pos[0] = scope(pos[0])
+	if pos[0] != secrets.SharedProject {
+		if _, err := env.FS.Stat("/etc/lite-deploy/projects/" + pos[0] + ".json"); err != nil {
+			return fail(command, CodeProjectMissing, "project "+pos[0]+" not found")
+		}
 	}
 	raw, err := io.ReadAll(io.LimitReader(env.Stdin, secrets.MaxCiphertextSize+1))
 	if err != nil || len(raw) > secrets.MaxCiphertextSize {
@@ -341,6 +359,7 @@ func secretRemove(args []string, env Env) result {
 	if !env.root() {
 		return fail(command, "permission_denied", "secret remove runs as root, through the agent")
 	}
+	pos[0] = scope(pos[0])
 	if !secrets.ValidName(pos[1]) || strings.HasPrefix(pos[1], "_") || !secrets.ValidProject(pos[0]) {
 		return fail(command, CodeInvalidSecret, "invalid project or secret name")
 	}

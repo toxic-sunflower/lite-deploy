@@ -33,7 +33,7 @@ type Database struct {
 	Engine           string `json:"engine" enum:"postgres"`
 	Server           string `json:"server,omitempty" pattern:"^[a-z][a-z0-9-]{0,30}$" doc:"server from the registry (lite server add) where PostgreSQL runs; local by default"`
 	Port             int    `json:"port,omitempty" min:"1" max:"65535" doc:"PostgreSQL port on another server; 5432 by default"`
-	PasswordSecret   string `json:"password_secret,omitempty" pattern:"^secret://[a-z][a-z0-9_]{1,63}$" doc:"for a database on another server: the secret with the role password (the role and database are named after the project, hyphens replaced by _)"`
+	PasswordSecret   string `json:"password_secret,omitempty" pattern:"^secret://(shared/)?[a-z][a-z0-9_]{1,63}$" doc:"for a database on another server: the secret with the role password (the role and database are named after the project, hyphens replaced by _)"`
 	ConnectionFormat string `json:"connection_format,omitempty" enum:"npgsql,url,libpq" doc:"connection string format, url by default"`
 }
 
@@ -41,7 +41,7 @@ type Database struct {
 type Registry struct {
 	Host        string `json:"host" pattern:"^[a-z0-9.-]+(:[0-9]{2,5})?$" maxLen:"255"`
 	Username    string `json:"username" pattern:"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"`
-	TokenSecret string `json:"token_secret" pattern:"^secret://[a-z][a-z0-9_]{1,63}$" doc:"secret://name reference; a read-only token"`
+	TokenSecret string `json:"token_secret" pattern:"^secret://(shared/)?[a-z][a-z0-9_]{1,63}$" doc:"secret://name reference; a read-only token"`
 }
 
 // Component kinds.
@@ -66,14 +66,14 @@ type Service struct {
 	Health        *Health           `json:"health,omitempty"`
 	Limits        *Limits           `json:"limits,omitempty"`
 	Env           map[string]string `json:"env,omitempty" keypattern:"^[A-Za-z_][A-Za-z0-9_]*$" valpattern:"^[^\\r\\n]*$" valMaxLen:"1024" maxProps:"128"`
-	Secrets       map[string]string `json:"secrets,omitempty" keypattern:"^[A-Za-z_][A-Za-z0-9_]*$" valpattern:"^secret://[a-z][a-z0-9_]{1,63}$" maxProps:"128"`
+	Secrets       map[string]string `json:"secrets,omitempty" keypattern:"^[A-Za-z_][A-Za-z0-9_]*$" valpattern:"^secret://(shared/)?[a-z][a-z0-9_]{1,63}$" maxProps:"128"`
 	DatabaseEnv   string            `json:"database_env,omitempty" pattern:"^[A-Za-z_][A-Za-z0-9_]*$" doc:"variable holding the database connection string"`
 }
 
 // Release is where the release of a kind unit component comes from: a tar.gz archive unpacked into the slot directory.
 type Release struct {
 	URL         string `json:"url" pattern:"^https://[A-Za-z0-9.-]+(:[0-9]{2,5})?/[^\\s{}]*\\{sha\\}[^\\s{}]*$" maxLen:"512" doc:"URL of the tar.gz archive; {sha} is replaced with the hash of the version being deployed"`
-	TokenSecret string `json:"token_secret,omitempty" pattern:"^secret://[a-z][a-z0-9_]{1,63}$" doc:"secret://name reference; the token is sent as Authorization: Bearer"`
+	TokenSecret string `json:"token_secret,omitempty" pattern:"^secret://(shared/)?[a-z][a-z0-9_]{1,63}$" doc:"secret://name reference; the token is sent as Authorization: Bearer"`
 	MinisignKey string `json:"minisign_key" pattern:"^RW[A-Za-z0-9+/]{54}$" doc:"minisign public key that CI signs the archive with; the signature sits next to it: the archive URL plus .minisig"`
 }
 

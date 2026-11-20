@@ -441,3 +441,26 @@ func TestInterruptedCreateCanBeRetried(t *testing.T) {
 		t.Error("a foreign user without our directory stays foreign")
 	}
 }
+
+func TestSharedSecretNeedsNoCiphertextInThePlan(t *testing.T) {
+	p := example(t)
+	if p.Registry == nil {
+		t.Skip("the example has no registry")
+	}
+	p.Registry.TokenSecret = "secret://shared/registry_token"
+	st := baseState()
+	delete(st.Ciphertexts, "ghcr_read_token")
+	pl := build(t, p, st)
+	for _, s := range pl.Steps {
+		if s.Action == "set_secret" && strings.Contains(string(s.Params), "registry_token") {
+			t.Errorf("a shared secret is set separately, not by the plan of one project: %s", s.Params)
+		}
+	}
+	var uses bool
+	for _, s := range pl.Steps {
+		uses = uses || strings.Contains(string(s.Params), "shared/registry_token")
+	}
+	if !uses {
+		t.Error("the registry login step must refer to the shared secret")
+	}
+}

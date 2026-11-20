@@ -37,7 +37,7 @@ const (
 )
 
 var (
-	projectRe = regexp.MustCompile(`\A[a-z][a-z0-9-]{1,30}\z`)
+	projectRe = regexp.MustCompile(`\A([a-z][a-z0-9-]{1,30}|_shared)\z`)
 	nameRe    = regexp.MustCompile(`\A_?[a-z][a-z0-9_]{1,63}\z`)
 	// ArmorPattern is the ciphertext shape for checks in the plan and in action parameters.
 	ArmorPattern = `^-----BEGIN AGE ENCRYPTED FILE-----\n[A-Za-z0-9+/=\n]{20,}-----END AGE ENCRYPTED FILE-----$`
@@ -58,6 +58,12 @@ type payload struct {
 	Value     string `json:"value"`
 	CreatedAt string `json:"created_at"`
 }
+
+// SharedProject is the store of the secrets that several projects use; a project refers to one as secret://shared/NAME.
+const (
+	SharedProject = "_shared"
+	SharedPrefix  = "shared/"
+)
 
 // ValidName validates a secret name; internal names with "_" are allowed.
 func ValidName(name string) bool { return nameRe.MatchString(name) }
@@ -179,6 +185,9 @@ func NewStore(fsys host.FS) *Store { return &Store{FS: fsys, Dir: DefaultStoreDi
 func NewStoreAt(fsys host.FS, dir string) *Store { return &Store{FS: fsys, Dir: dir} }
 
 func (s *Store) path(project, name string) (string, error) {
+	if rest, ok := strings.CutPrefix(name, SharedPrefix); ok {
+		project, name = SharedProject, rest // a reference to a shared secret reads the shared store
+	}
 	if !ValidProject(project) || !ValidName(name) {
 		return "", fmt.Errorf("%w: project or secret name", ErrInvalid)
 	}

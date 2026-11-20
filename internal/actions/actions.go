@@ -125,7 +125,7 @@ type RegistryLogin struct {
 	Project  string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	Registry string `json:"registry" pattern:"^[a-z0-9.-]+(:[0-9]{2,5})?$" maxLen:"255"`
 	Username string `json:"username" pattern:"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"`
-	Secret   string `json:"secret" pattern:"^[a-z][a-z0-9_]{1,63}$"`
+	Secret   string `json:"secret" pattern:"^(shared/)?[a-z][a-z0-9_]{1,63}$"`
 }
 
 // EnvVar is one line of a service env file.
@@ -133,7 +133,7 @@ type EnvVar struct {
 	Name   string `json:"name" pattern:"^[A-Za-z_][A-Za-z0-9_]*$"`
 	Kind   string `json:"kind" enum:"literal,secret,database"`
 	Value  string `json:"value,omitempty" pattern:"^[^\\r\\n]*$" maxLen:"1024" doc:"value for literal; connection string format for database"`
-	Secret string `json:"secret,omitempty" pattern:"^[a-z][a-z0-9_]{1,63}$" doc:"secret name: for secret the variable value, for database with host the role password"`
+	Secret string `json:"secret,omitempty" pattern:"^(shared/)?[a-z][a-z0-9_]{1,63}$" doc:"secret name: for secret the variable value, for database with host the role password"`
 	Host   string `json:"host,omitempty" pattern:"^[A-Za-z0-9.:-]{1,253}$" doc:"database only: PostgreSQL address on another server; without it the database is on this server, over a socket"`
 	Port   int    `json:"port,omitempty" min:"1" max:"65535" doc:"database with host only"`
 }
@@ -175,7 +175,7 @@ type InstallUnit struct {
 type WriteReleaseAuth struct {
 	Project string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 	Service string `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
-	Secret  string `json:"secret" pattern:"^[a-z][a-z0-9_]{1,63}$"`
+	Secret  string `json:"secret" pattern:"^(shared/)?[a-z][a-z0-9_]{1,63}$"`
 }
 
 // ReloadUserUnits re-reads the units in the project user's session.

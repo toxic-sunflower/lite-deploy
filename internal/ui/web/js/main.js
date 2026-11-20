@@ -18,6 +18,7 @@
     <div class="srvbox"><icon name="server"></icon>\
       <select v-model="state.server" @change="pick" aria-label="Server"><option v-for="h in state.servers" :key="h" :value="h">{{ h }}</option></select></div>\
     <div class="srvbtns"><button @click="addServer"><icon name="plus"></icon>Add</button><button v-if="state.servers.length" @click="removeServer"><icon name="trash"></icon>Remove</button></div>\
+    <button class="theme" @click="toggleTheme" :title="\'Switch to the \' + (isDark ? \'light\' : \'dark\') + \' theme\'"><icon :name="isDark ? \'sun\' : \'moon\'"></icon>{{ isDark ? "Light theme" : "Dark theme" }}</button>\
     <nav><a v-for="m in menu" :key="m.id" :class="{cur: state.page === m.id}" @click="go(m.id)"><icon :name="m.icon"></icon>{{ m.title }}</a></nav>\
   </aside>\
   <main class="main">\
@@ -36,11 +37,13 @@
 </div>',
     data: function () { return { state: S }; },
     computed: {
+      isDark: function () { return S.theme === 'dark' || (S.theme === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); },
       menu: function () { return ALL.filter(function (m) { return !m.plugin || LU.present(m.plugin) || m.plugin === 'backup'; }); },
       current: function () { return ALL.filter(function (m) { return m.id === S.page; })[0] || ALL[0]; },
       pluginObj: function () { var n = this.current.plugin; return S.plugins.filter(function (p) { return p.name === n && p.installed !== false; })[0]; }
     },
     methods: {
+      toggleTheme: function () { LU.toggleTheme(); },
       go: function (id) { S.page = id; location.hash = id; LU.clear(); },
       pick: function () { LU.setServer(S.server); LU.clear(); LU.loadPlugins(); },
       reload: function () { LU.loadPlugins(); },
