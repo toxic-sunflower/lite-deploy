@@ -92,7 +92,7 @@ func (s *Server) handle(ctx context.Context, req request, send func(any)) {
 		}
 		reply(map[string]any{"protocolVersion": p.ProtocolVersion, "capabilities": map[string]any{"tools": map[string]any{}},
 			"serverInfo": map[string]any{"name": s.Name, "version": s.Version}})
-	case "notifications/initialized", "notifications/cancelled":
+	case "notifications/initialized", "notifications/cancelled": //nolint:misspell // the protocol spells it this way
 	case "ping":
 		reply(map[string]any{})
 	case "tools/list":
