@@ -4,7 +4,7 @@
   "display_name": "lite-deploy",
   "version": "@VERSION@",
   "description": "Look at your servers and deploy to them from Claude: read the state, run checks, deploy and roll back.",
-  "long_description": "Connects Claude to servers managed by lite-deploy over SSH, with your SSH key. Claude can read the state of your projects, run the server check, see domains and plugins, and deploy or roll back a project. It never changes ports, SSH, backups or publishing: those stay in the lite-ui page, where you can confirm them with your key. You need a key login to the server (ssh USER@ADDRESS must work without a password) and the OpenSSH client.",
+  "long_description": "Connects Claude to servers managed by lite-deploy over SSH, with your SSH key. Claude can read the state of your projects, run the server check, see domains and plugins, and deploy or roll back a project. It never changes ports, SSH, backups or publishing: those stay in the lite-ui page, where you can confirm them with your key. You need Lite Deploy (lite-ui) installed on this workstation, and a key login to the server (ssh USER@ADDRESS must work without a password) and the OpenSSH client.",
   "author": { "name": "toxic-sunflower", "url": "https://github.com/toxic-sunflower" },
   "repository": { "type": "git", "url": "https://github.com/toxic-sunflower/lite-deploy" },
   "homepage": "https://lite-deploy.prozorov.me",
@@ -12,11 +12,11 @@
   "license": "MIT",
   "keywords": ["deploy", "server", "devops"],
   "server": {
-    "type": "binary",
-    "entry_point": "server/@BINARY@",
+    "type": "node",
+    "entry_point": "server/index.js",
     "mcp_config": {
-      "command": "${__dirname}/server/@BINARY@",
-      "args": ["mcp", "--server", "${user_config.server}"]
+      "command": "node",
+      "args": ["${__dirname}/server/index.js", "${user_config.server}"]
     }
   },
   "tools": [
@@ -37,5 +37,5 @@
       "required": true
     }
   },
-  "compatibility": { "platforms": ["@PLATFORM@"] }
+  "compatibility": { "platforms": ["win32", "darwin", "linux"] }
 }

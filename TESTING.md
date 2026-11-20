@@ -115,7 +115,7 @@ This needs a release newer than the one on the server. Tell me and I publish a t
 
 ## 6b. Claude Desktop (optional)
 
-Install `lite-deploy-windows-amd64.mcpb` from the Releases page (Settings, Extensions, Install Extension), type `user@address`. Ask “Is my server fine?”. Expected: Claude calls `verify` and answers in plain words. If it says it cannot connect, run `ssh user@address` in PowerShell: it must log in with no password question.
+Install `lite-deploy.mcpb` from the Releases page (`lite-ui` must be installed on the workstation) (Settings, Extensions, Install Extension), type `user@address`. Ask “Is my server fine?”. Expected: Claude calls `verify` and answers in plain words. If it says it cannot connect, run `ssh user@address` in PowerShell: it must log in with no password question.
 
 ## 7. Clean-up (only if you want to start over)
 

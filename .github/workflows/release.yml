@@ -40,7 +40,7 @@ jobs:
           cp site/liteup dist/liteup
           cp site/install-ui.sh dist/install-ui.sh
           cp site/install-ui.ps1 dist/install-ui.ps1
-          (cd dist && sha256sum lite-deploy-* lite-ui-* liteup install-ui.sh install-ui.ps1 > SHA256SUMS)
+          (cd dist && sha256sum lite-deploy-* lite-deploy.mcpb lite-ui-* liteup install-ui.sh install-ui.ps1 > SHA256SUMS)
       - name: Sign SHA256SUMS
         env:
           MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
