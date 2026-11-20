@@ -168,7 +168,13 @@ func forwardProjectData(env Env, command string, data []byte, yes, rotate bool, 
 	if bad != nil {
 		return result{command: command, err: bad}
 	}
-	return fromEnvelope(raw, command)
+	res := fromEnvelope(raw, command)
+	if m, ok := res.data.(map[string]any); ok {
+		if name, ok := m["project"].(string); ok {
+			res = withCreateHint(res, name)
+		}
+	}
+	return res
 }
 
 func previewSteps(d any) string {
@@ -229,9 +235,9 @@ func forwardProject(env Env, command, path string, body map[string]string) resul
 	if m, ok := r.data.(map[string]any); ok && r.err == nil {
 		switch command {
 		case "deploy":
-			r.text = fmt.Sprintf("Deployed %v, project %v, slot %v (was %v). Traffic switched.\n", short(fmt.Sprint(m["version"])), m["project"], m["slot"], m["previous_slot"])
+			r.text = fmt.Sprintf("Deployed %v, project %v, slot %v (was %v). Traffic switched.\nNext: lite status %v shows that everything runs; lite rollback %v goes back if something is wrong.\n", short(fmt.Sprint(m["version"])), m["project"], m["slot"], m["previous_slot"], m["project"], m["project"])
 		case "rollback":
-			r.text = fmt.Sprintf("Rollback done: project %v, slot %v (was %v), version %v.\n", m["project"], m["slot"], m["previous_slot"], short(fmt.Sprint(m["version"])))
+			r.text = fmt.Sprintf("Rollback done: project %v, slot %v (was %v), version %v.\nNext: lite status %v\n", m["project"], m["slot"], m["previous_slot"], short(fmt.Sprint(m["version"])), m["project"])
 		}
 	}
 	return r

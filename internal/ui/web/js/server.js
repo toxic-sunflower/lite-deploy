@@ -37,7 +37,7 @@
       reload: function () { LU.loadPlugins(); },
       install: function (p) {
         if (!confirm('Install ' + p.name + ' on this server?')) return;
-        LU.run('Installing ' + p.name + '…', '/api/plugin', { plugin: p.name, command: 'install', args: [] }, function () { return p.name + ' is installed.'; })
+        LU.run('Installing ' + p.name + '…', '/api/plugin', { plugin: p.name, command: 'install', args: [] }, function () { return p.name + ' is installed. Next: create a project in Projects.'; })
           .then(function () { LU.loadPlugins(); });
       }
     }

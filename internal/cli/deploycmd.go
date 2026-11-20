@@ -58,7 +58,7 @@ func doDeploy(name, sha string, env Env) result {
 		return deployFail("deploy", e)
 	}
 	return result{command: "deploy", data: res,
-		text: fmt.Sprintf("Deployed %s, project %s, slot %s (was %s). Traffic switched.\n", short(res.Version), res.Project, res.Slot, res.PreviousSlot)}
+		text: fmt.Sprintf("Deployed %s, project %s, slot %s (was %s). Traffic switched.\nNext: lite status %s shows that everything runs; lite rollback %s goes back if something is wrong.\n", short(res.Version), res.Project, res.Slot, res.PreviousSlot, res.Project, res.Project)}
 }
 
 func cmdRollback(args []string, env Env) result {
@@ -83,7 +83,7 @@ func doRollback(name string, env Env) result {
 		return deployFail("rollback", e)
 	}
 	return result{command: "rollback", data: res,
-		text: fmt.Sprintf("Rollback done: project %s, slot %s (was %s), version %s.\n", res.Project, res.Slot, res.PreviousSlot, short(res.Version))}
+		text: fmt.Sprintf("Rollback done: project %s, slot %s (was %s), version %s.\nNext: lite status %s\n", res.Project, res.Slot, res.PreviousSlot, short(res.Version), res.Project)}
 }
 
 func cmdStatus(args []string, env Env) result {

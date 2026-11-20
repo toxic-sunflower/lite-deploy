@@ -52,8 +52,10 @@
   <new-project v-if="creating" @created="created"></new-project>\
   <p v-if="error" class="down">{{ error }}</p>\
   <p v-if="projects && !projects.length && !creating" class="empty">No projects yet. Press “New project”.</p>\
+  <div v-if="undeployed" class="notice"><div class="t">Next: paste the commit hash of the version you want to run into the project card and press Deploy.</div></div>\
   <project-card v-for="p in projects" :key="p.project" :p="p" @changed="load"></project-card>\
 </div>',
+    computed: { undeployed: function () { return !!this.projects && this.projects.some(function (p) { return p.active === 'none'; }); } },
     methods: {
       load: function () {
         var self = this; self.error = '';

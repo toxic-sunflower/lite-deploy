@@ -591,7 +591,16 @@ func cmdProjectCreate(args []string, env Env) result {
 	if pos[0] != "-" {
 		projJSON, _ = os.ReadFile(pos[0])
 	}
-	return applyPlan("project.create", env, planBytes, false, *yes, projJSON)
+	res := applyPlan("project.create", env, planBytes, false, *yes, projJSON)
+	return withCreateHint(res, pr.pl.Project)
+}
+
+// withCreateHint adds what to do after a project is created.
+func withCreateHint(r result, name string) result {
+	if r.err == nil && name != "" {
+		r.text += "Next: deploy a version of the project: lite deploy " + name + " FULL_40_CHARACTER_COMMIT_HASH\n"
+	}
+	return r
 }
 
 func cmdList(env Env) result {

@@ -163,6 +163,9 @@ func cmdInfo(env Env, command string) result {
 		list = append(list, info)
 		fmt.Fprintf(&sb, "  %-12s %-9s %s\n", p.Name(), p.Kind(), p.Description())
 		for _, c := range p.Commands() {
+			if c.Advanced {
+				continue
+			}
 			fmt.Fprintf(&sb, "      %s — %s\n", strings.TrimSpace("lite "+p.Name()+" "+c.Name+" "+c.Args), c.Help)
 		}
 	}
@@ -206,6 +209,14 @@ func verifyResult(all []plugin.Finding) result {
 	}
 	data := map[string]any{"findings": all, "ok": counts[plugin.LevelOK], "warnings": counts[plugin.LevelWarn], "failures": counts[plugin.LevelFail]}
 	fmt.Fprintf(&sb, "Total: ok %d, warnings %d, errors %d\n", counts[plugin.LevelOK], counts[plugin.LevelWarn], counts[plugin.LevelFail])
+	switch {
+	case counts[plugin.LevelFail] > 0:
+		sb.WriteString("Next: fix the errors above; lite fix --dry-run shows what can be fixed automatically.\n")
+	case counts[plugin.LevelWarn] > 0:
+		sb.WriteString("Next: the warnings are not urgent; each one shows the command that fixes it.\n")
+	default:
+		sb.WriteString("Next: nothing to fix. Create a project in the interface (lite-ui) or with lite project create.\n")
+	}
 	res := result{command: "verify", data: data, text: sb.String()}
 	if counts[plugin.LevelFail] > 0 {
 		res.err = &ErrorBody{Code: "verify_failed", Message: fmt.Sprintf("the check found errors: %d", counts[plugin.LevelFail])}

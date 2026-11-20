@@ -16,6 +16,7 @@
       <td :class="cls(f)" style="white-space:nowrap">{{ f.level === "ok" ? "ok" : (f.level === "warn" ? "warning" : "error") }}</td>\
       <td>{{ f.message }}<div class="help" v-if="f.fix && f.level !== \'ok\'">{{ f.fix }}</div></td></tr>\
   </table>\
+  <div class="notice" v-if="verify"><div class="t">{{ nextText }}</div></div>\
   <h3>Open ports</h3>\
   <p v-if="fwErr" class="down">{{ fwErr }}</p>\
   <div class="card" v-if="fw">\
@@ -32,7 +33,13 @@
       <button class="primary" type="submit" :disabled="$root.state.busy">Open port</button></form>\
   </div>\
 </div>',
-    computed: { needsFix: function () { return this.verify && this.verify.findings.some(function (f) { return f.fix && f.level !== 'ok' && f.plugin !== 'lite'; }); } },
+    computed: {
+      nextText: function () {
+        if (this.verify.failures) return 'Next: fix the errors above. “Fix what can be fixed automatically” handles the safe ones.';
+        if (this.verify.warnings) return 'Next: the warnings are not urgent; each one says what to do.';
+        return 'Next: nothing to fix. Create a project in Projects.';
+      },
+      needsFix: function () { return this.verify && this.verify.findings.some(function (f) { return f.fix && f.level !== 'ok' && f.plugin !== 'lite'; }); } },
     methods: {
       cls: function (f) { return f.level === 'ok' ? 'up' : (f.level === 'warn' ? 'warntxt' : 'down'); },
       check: function () {

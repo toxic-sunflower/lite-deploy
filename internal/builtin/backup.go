@@ -255,7 +255,7 @@ func (t tools) backupSchedule(args []string) (plugin.Output, error) {
 	if err := t.must("systemctl", "enable", "--now", "lite-backup.timer"); err != nil {
 		return plugin.Output{}, err
 	}
-	return textOut("Backups (settings, secrets, databases, upload) will run daily around 03:00.\n"), nil
+	return textOut("Backups (settings, secrets, databases, upload) will run daily around 03:00.\nNext: lite backup run tries one now; lite backup list shows what exists.\n"), nil
 }
 
 func (Backup) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (plugin.Output, error) {
@@ -292,6 +292,7 @@ func (Backup) Run(ctx context.Context, env plugin.Env, cmd string, args []string
 		if encDumps {
 			msg += "Database dumps will be encrypted too (restore: lite pg restore DATABASE FILE.age --identity-stdin).\n"
 		}
+		msg += "Next: lite backup schedule on (daily backups), then lite backup run to try one.\n"
 		return textOut(msg), nil
 	}
 	if err := noArgs(args, cmd, "backup"); err != nil {

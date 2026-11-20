@@ -148,7 +148,7 @@ func (Caddy) Run(ctx context.Context, env plugin.Env, cmd string, args []string)
 		if err := InstallCaddy(ctx, env, nil); err != nil {
 			return plugin.Output{}, err
 		}
-		return textOut("Caddy is installed and running.\n"), nil
+		return textOut("Caddy is installed and running.\nNext: create a project with a domain (lite-ui or lite project create).\n"), nil
 	case "validate", "reload", "status", "sites":
 		if !t.ok("caddy", "version") {
 			e := plugin.Errorf("precondition_failed", "Caddy is not installed")

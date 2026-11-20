@@ -94,7 +94,7 @@ func (Podman) Run(ctx context.Context, env plugin.Env, cmd string, args []string
 		if err := InstallPodman(ctx, env, nil); err != nil {
 			return plugin.Output{}, err
 		}
-		return textOut("podman is installed.\n"), nil
+		return textOut("podman is installed.\nNext: create a project that runs containers (lite-ui or lite project create).\n"), nil
 	case "status":
 		res, err := t.run("podman", "--version")
 		if err != nil || res.ExitCode != 0 {
@@ -340,7 +340,7 @@ func (PG) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (p
 		if err := InstallPG(ctx, env, nil); err != nil {
 			return plugin.Output{}, err
 		}
-		return textOut("PostgreSQL is installed.\n"), nil
+		return textOut("PostgreSQL is installed.\nNext: create a project with a database, and set up backups: lite backup setup age1…\n"), nil
 	case "status":
 		if !t.ok("psql", "--version") {
 			e := plugin.Errorf("precondition_failed", "PostgreSQL is not installed")

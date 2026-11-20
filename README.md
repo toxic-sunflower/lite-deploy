@@ -152,14 +152,15 @@ lite security enable            # everything at once, SSH last
 lite security status            # the protection checks
 ```
 
-What `enable` does (each step is also available on its own):
+`enable` protects the server in one go: SSH login by key only for every user (root by key only; `lite security enable no-root` forbids root entirely), protection against password guessing, automatic security updates and protective kernel parameters. `lite init` already does this for you.
 
-- `lite security ssh [no-root]`: SSH login by key only for every user, root by key only (`no-root`: root cannot log in at all), a limit on attempts. The setting goes to `/etc/ssh/sshd_config.d/01-lite-security.conf` (before `50-cloud-init.conf`: sshd takes the first value). Before writing, it checks that an administrator with a key remains and that you have one; after writing, `sshd -t` and the effective `sshd -T` values are checked; on any failure the previous state is restored, so that the server is never locked out;
+Related commands:
+
 - `lite security allow-users NAME… | any`: allow only the listed users over SSH (project users that CI logs in as are added automatically; `any` removes the restriction);
-- `lite security fail2ban`: installs and configures `fail2ban` for SSH (5 attempts in 10 minutes, a one-hour ban); `lite security banned` and `lite security unban ADDRESS`;
-- `lite security updates`: automatic security updates (`unattended-upgrades` on apt, `dnf-automatic` on dnf);
-- `lite security sysctl`: protective kernel parameters;
+- `lite security banned` and `lite security unban ADDRESS`: who is blocked after repeated failed logins, and lifting a block;
 - `lite security logins [COUNT]`: recent logins and failed attempts.
+
+The single steps (`ssh`, `fail2ban`, `updates`, `sysctl`) still exist for experts but are not part of everyday use.
 
 `lite verify` checks: root and password login over SSH, empty passwords, the user restriction, `fail2ban`, automatic updates and pending security updates, kernel parameters, administrators and their keys, and ports that listen to the outside (and whether the firewall closes them).
 

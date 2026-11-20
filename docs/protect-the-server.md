@@ -28,16 +28,15 @@ lite security enable --yes
 lite security status
 ```
 
-or step by step:
+`enable` sets SSH to key-only login for everyone (root only by key; `lite security enable no-root --yes` forbids root entirely), turns on protection against password guessing, automatic security updates and protective kernel parameters. It refuses to close password login unless an administrator with a key will remain, it checks the SSH configuration before applying it and puts the old one back on an error.
 
-- `lite security ssh --yes`: SSH login **by key only**, for every user. Root may log in only by key (`lite security ssh no-root --yes` forbids root entirely). It refuses to apply unless an administrator with a key will remain and **you** have a key, it checks `sshd -t` and the effective settings, and it rolls back on any problem.
+A few related commands:
+
 - `lite security allow-users alice bob --yes`: only these users may use SSH at all (project users that CI logs in as are added automatically; `any` removes the limit). Be sure every administrator is on the list.
-- `lite security fail2ban --yes`: bans an address for an hour after five failed logins in ten minutes. `lite security banned` lists bans, `lite security unban ADDRESS --yes` lifts one.
-- `lite security updates --yes`: installs security updates automatically.
-- `lite security sysctl --yes`: protective kernel network parameters.
+- `lite security banned` lists addresses blocked after repeated failed logins, `lite security unban ADDRESS --yes` lifts a block.
 - `lite security logins`: recent logins and failed attempts.
 
-**Before** `ssh` or `allow-users`: open a second terminal and prove that your key login works. Keep the first session open until you have.
+**Before** you close password login on a server that was not set up by `lite init`: open a second terminal and prove that your key login works.
 
 ## The firewall
 

@@ -63,11 +63,11 @@ func (Security) Commands() []plugin.Command {
 	return []plugin.Command{
 		{Name: "status", Root: true, Help: "protection state (the same as the security checks in lite verify)"},
 		{Name: "enable", Help: "enable everything: fail2ban, automatic updates, kernel parameters, then no SSH passwords and no root password login; no-root forbids root login entirely", Args: "[no-root]", Confirm: true},
-		{Name: "ssh", Help: "SSH: key-only login for everyone, root by key only (no-root: root cannot log in at all)", Args: "[no-root]", Confirm: true},
+		{Name: "ssh", Help: "SSH: key-only login for everyone, root by key only (no-root: root cannot log in at all)", Args: "[no-root]", Confirm: true, Advanced: true},
 		{Name: "allow-users", Help: "SSH: allow only the listed users (any: remove the restriction); project users are added automatically", Args: "NAME…|any", Confirm: true},
-		{Name: "fail2ban", Help: "install and configure fail2ban for SSH", Confirm: true},
-		{Name: "updates", Help: "install security updates automatically", Confirm: true},
-		{Name: "sysctl", Help: "apply the protective kernel parameters", Confirm: true},
+		{Name: "fail2ban", Help: "install and configure fail2ban for SSH", Confirm: true, Advanced: true},
+		{Name: "updates", Help: "install security updates automatically", Confirm: true, Advanced: true},
+		{Name: "sysctl", Help: "apply the protective kernel parameters", Confirm: true, Advanced: true},
 		{Name: "logins", Root: true, Help: "login journal: recent logins and failed attempts", Args: "[NUMBER]"},
 		{Name: "banned", Root: true, Help: "who fail2ban has banned right now"},
 		{Name: "unban", Help: "remove a fail2ban ban from an address", Args: "ADDRESS", Confirm: true},
@@ -455,7 +455,7 @@ func (Security) Run(ctx context.Context, env plugin.Env, cmd string, args []stri
 				return plugin.Output{}, err
 			}
 		}
-		return plugin.Output{Text: "Protection enabled: " + strings.Join(done, ", ") + ".\nKeep this session open, open a new one and check that key login works.\n", Data: map[string]any{"steps": done}}, nil
+		return plugin.Output{Text: "Protection enabled: " + strings.Join(done, ", ") + ".\nNext: check that you can still log in with your key from a new terminal, then run: lite verify\n", Data: map[string]any{"steps": done}}, nil
 	case "ssh":
 		root, err := noRoot()
 		if err != nil {
@@ -629,19 +629,19 @@ func (s *sec) findings() []plugin.Finding {
 	} else {
 		switch eff["permitrootlogin"] {
 		case "yes":
-			add("ssh-root", plugin.LevelFail, "root can log in over SSH with a password", "lite security ssh")
+			add("ssh-root", plugin.LevelFail, "root can log in over SSH with a password", "lite security enable")
 		case "no":
 			add("ssh-root", plugin.LevelOK, "root cannot log in over SSH", "")
 		default:
 			add("ssh-root", plugin.LevelOK, "root can log in over SSH with a key only", "")
 		}
 		if eff["passwordauthentication"] == "yes" {
-			add("ssh-password", plugin.LevelFail, "SSH password login is allowed", "lite security ssh")
+			add("ssh-password", plugin.LevelFail, "SSH password login is allowed", "lite security enable")
 		} else {
 			add("ssh-password", plugin.LevelOK, "SSH password login is disabled", "")
 		}
 		if eff["permitemptypasswords"] == "yes" {
-			add("ssh-empty", plugin.LevelFail, "login with an empty password is allowed", "lite security ssh")
+			add("ssh-empty", plugin.LevelFail, "login with an empty password is allowed", "lite security enable")
 		}
 		if au := eff["allowusers"]; au != "" {
 			add("ssh-allow", plugin.LevelOK, "SSH only for: "+au, "")
@@ -652,7 +652,7 @@ func (s *sec) findings() []plugin.Finding {
 
 	// fail2ban
 	if res, err := s.run("fail2ban-client", "status", "sshd"); err != nil || res.ExitCode != 0 {
-		add("fail2ban", plugin.LevelFail, "fail2ban does not protect SSH (not installed, not running, or no sshd jail)", "lite security fail2ban")
+		add("fail2ban", plugin.LevelFail, "fail2ban does not protect SSH (not installed, not running, or no sshd jail)", "lite security enable")
 	} else {
 		add("fail2ban", plugin.LevelOK, "fail2ban protects SSH", "")
 	}
@@ -663,7 +663,7 @@ func (s *sec) findings() []plugin.Finding {
 		if res, err := s.run("apt-config", "dump"); err == nil && strings.Contains(string(res.Stdout), `APT::Periodic::Unattended-Upgrade "1"`) {
 			add("auto-updates", plugin.LevelOK, "security updates are installed automatically", "")
 		} else {
-			add("auto-updates", plugin.LevelWarn, "automatic security updates are off", "lite security updates")
+			add("auto-updates", plugin.LevelWarn, "automatic security updates are off", "lite security enable")
 		}
 		if res, err := s.run("apt-get", "-s", "upgrade"); err == nil && res.ExitCode == 0 {
 			n := 0
@@ -685,7 +685,7 @@ func (s *sec) findings() []plugin.Finding {
 				break
 			}
 		}
-		add("auto-updates", plugin.LevelWarn, "automatic security updates are off", "lite security updates")
+		add("auto-updates", plugin.LevelWarn, "automatic security updates are off", "lite security enable")
 	}
 
 	// kernel parameters
@@ -696,7 +696,7 @@ func (s *sec) findings() []plugin.Finding {
 		}
 	}
 	if len(bad) > 0 {
-		add("sysctl", plugin.LevelWarn, "protective kernel parameters are not applied: "+strings.Join(bad, ", "), "lite security sysctl")
+		add("sysctl", plugin.LevelWarn, "protective kernel parameters are not applied: "+strings.Join(bad, ", "), "lite security enable")
 	} else {
 		add("sysctl", plugin.LevelOK, "protective kernel parameters are applied", "")
 	}
