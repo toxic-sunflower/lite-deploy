@@ -59,7 +59,7 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 		return 1
 	}
 	runner := host.ExecRunner{}
-	srv := &ui.Server{Runner: runner, Servers: list, Token: hex.EncodeToString(raw)}
+	srv := &ui.Server{Runner: runner, Servers: list, Token: hex.EncodeToString(raw), SSHOptions: sshSharing()}
 	if err := srv.Validate(); err != nil {
 		_, _ = fmt.Fprintln(errw, "ERROR:", err)
 		return 2
@@ -110,4 +110,17 @@ func openBrowser(ctx context.Context, r host.Runner, url string) {
 			return
 		}
 	}
+}
+
+// sshSharing makes all requests to a server share one ssh connection where the system allows it (not on Windows),
+// so the page does not open a new login for every request.
+func sshSharing() []string {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	dir := filepath.Join(os.TempDir(), fmt.Sprintf("lite-ui-%d", os.Getuid()))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil
+	}
+	return []string{"-o", "ControlMaster=auto", "-o", "ControlPath=" + filepath.Join(dir, "%C"), "-o", "ControlPersist=120"}
 }

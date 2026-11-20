@@ -343,3 +343,39 @@ func TestIngressAndPublishGoToTheAgent(t *testing.T) {
 		t.Errorf("a refused request must not reach the agent: %v", r.Calls)
 	}
 }
+
+func TestFailedLoginsDoNotPileUp(t *testing.T) {
+	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		return host.Result{ExitCode: 255, Stderr: []byte("serafim@203.0.113.7: Permission denied (publickey).")}, nil
+	}}
+	s := &Server{Runner: r, Host: "serafim@203.0.113.7", Token: tok}
+	h := s.Handler()
+	// a page opens with several requests at once: only one login attempt may reach the server
+	done := make(chan struct{}, 6)
+	for i := 0; i < 6; i++ {
+		go func() { do(h, "GET", "/api/status", "", tok); done <- struct{}{} }()
+	}
+	for i := 0; i < 6; i++ {
+		<-done
+	}
+	if len(r.Calls) != 1 {
+		t.Fatalf("a burst of requests must make one login attempt, made %d", len(r.Calls))
+	}
+	w := do(h, "GET", "/api/verify", "", tok)
+	if len(r.Calls) != 1 || !strings.Contains(w.Body.String(), "ssh_failed") || !strings.Contains(w.Body.String(), "ssh-add") {
+		t.Fatalf("after a failed login lite-ui must stop trying and say what to do: %d calls, %s", len(r.Calls), w.Body.String())
+	}
+}
+
+func TestWorkingConnectionIsUsedInParallel(t *testing.T) {
+	s, r := newServer("anna@203.0.113.7")
+	h := s.Handler()
+	for i := 0; i < 3; i++ {
+		if w := do(h, "GET", "/api/status", "", tok); w.Code != 200 || strings.Contains(w.Body.String(), "ssh_failed") {
+			t.Fatal(w.Body.String())
+		}
+	}
+	if len(r.Calls) != 3 {
+		t.Fatalf("working requests must all go through: %d", len(r.Calls))
+	}
+}

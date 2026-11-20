@@ -49,6 +49,43 @@ type Server struct {
 	// Servers is the person's list of servers; the page picks one for every request (header X-Server).
 	// nil: the single Host is used (tests, a fixed server).
 	Servers *ServerList
+	// SSHOptions are extra options for ssh (for example connection sharing, so one connection serves all requests).
+	SSHOptions []string
+
+	mu  sync.Mutex
+	ssh map[string]*sshState
+}
+
+// sshState remembers how connecting to one server is going. Until a connection has worked, requests go one at a time,
+// and after a failed login lite-ui stops trying for a while: several failed logins in a row get an address blocked by
+// the server's protection (fail2ban), so the interface must never produce a burst of them.
+type sshState struct {
+	mu        sync.Mutex
+	ok        bool
+	failUntil time.Time
+	failMsg   string
+}
+
+func (s *Server) state(target string) *sshState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ssh == nil {
+		s.ssh = map[string]*sshState{}
+	}
+	if s.ssh[target] == nil {
+		s.ssh[target] = &sshState{}
+	}
+	return s.ssh[target]
+}
+
+// sshFailure reports whether the ssh output means that connecting or logging in failed (not the command on the server).
+func sshFailure(stderr string) bool {
+	for _, m := range []string{"Permission denied", "Connection refused", "Connection timed out", "Could not resolve", "Host key verification failed", "No route to host", "Connection closed by", "Connection reset by"} {
+		if strings.Contains(stderr, m) {
+			return true
+		}
+	}
+	return false
 }
 
 type ctxKey struct{}
@@ -154,9 +191,29 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 			return errBody("unknown_server", "this server is not in your list: choose another or add it")
 		}
 	}
+	var st *sshState
+	held := false
+	if target != "" {
+		st = s.state(target)
+		st.mu.Lock()
+		if st.ok {
+			st.mu.Unlock()
+		} else if time.Now().Before(st.failUntil) {
+			msg := st.failMsg
+			st.mu.Unlock()
+			return errBody("ssh_failed", msg)
+		} else {
+			held = true // one request at a time until a connection has worked
+		}
+	}
+	if held {
+		defer st.mu.Unlock()
+	}
 	var cmd host.Cmd
 	if target != "" {
-		cmd = host.Cmd{Name: "ssh", Args: []string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=10", target, "lite-deploy", "call", method, path}}
+		args := append([]string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=10"}, s.SSHOptions...)
+		args = append(args, target, "lite-deploy", "call", method, path)
+		cmd = host.Cmd{Name: "ssh", Args: args}
 	} else {
 		bin := s.Bin
 		if bin == "" {
@@ -172,6 +229,9 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 	res, err := s.Runner.Run(ctx, cmd)
 	out := strings.TrimSpace(string(res.Stdout))
 	if err == nil && strings.HasPrefix(out, "{") {
+		if st != nil && held {
+			st.ok = true // we hold st.mu
+		}
 		return []byte(out)
 	}
 	msg := strings.TrimSpace(string(res.Stderr))
@@ -181,8 +241,19 @@ func (s *Server) call(ctx context.Context, method, path string, body any) []byte
 	if msg == "" {
 		msg = "the command returned no answer"
 	}
+	if st != nil && sshFailure(msg) {
+		friendly := msg + "\nlite-ui stops trying for a minute so that your address is not blocked by the server after repeated failed logins. Check in a terminal that `ssh " + target + "` logs in without asking anything (a key with a passphrase must be loaded first: ssh-add), then reload the page."
+		if !held {
+			st.mu.Lock()
+			defer st.mu.Unlock()
+		}
+		st.ok = false
+		st.failUntil = time.Now().Add(time.Minute)
+		st.failMsg = friendly
+		return errBody("ssh_failed", friendly)
+	}
 	b, _ := json.Marshal(map[string]any{"ok": false, "api_version": "v1", "command": "ui",
-		"error": map[string]string{"code": "internal", "message": msg, "hint": "the agent must be running on the server: it is installed by liteup (curl -fsSL https://lite-deploy.prozorov.me/liteup | sudo sh), and the user must be a system administrator (sudo or wheel)"}})
+		"error": map[string]string{"code": "internal", "message": msg, "hint": "the agent must be running on the server: it is installed by liteup (sudo liteup install), and the user must be a system administrator (sudo or wheel)"}})
 	return b
 }
 
