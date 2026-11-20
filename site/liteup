@@ -360,6 +360,7 @@ case $cmd in
     cp -p "$prefix/lite-deploy" "$prev" 2>/dev/null || prev=""
     if ( do_install ) && "$prefix/lite-deploy" version >/dev/null 2>&1 && systemctl is-active --quiet lite-deploy-agent.socket; then
       [ -z "$prev" ] || rm -f "$prev"
+      "$prefix/lite-deploy" migrate >/dev/null 2>&1 || say "Note: the new version could not bring the server settings up to date; run: sudo lite-deploy migrate"
       say "Done: $(installed_version). The agent was restarted."
     else
       if [ -n "$prev" ] && [ -f "$prev" ]; then

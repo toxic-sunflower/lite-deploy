@@ -232,3 +232,15 @@ func TestSSHKeyReplaceNeverLocksOut(t *testing.T) {
 		t.Error("an invalid key must be refused")
 	}
 }
+
+func TestMigrateDoesNothingWhereProtectionIsOff(t *testing.T) {
+	env, out, _ := testEnv(t)
+	if c := run(t, env, "migrate"); c != 0 || !strings.Contains(out.String(), "Nothing to bring up to date") {
+		t.Fatalf("%d %s", c, out.String())
+	}
+	env2, _, _ := testEnv(t)
+	env2.IsRoot = func() bool { return false }
+	if c := run(t, env2, "migrate"); c == 0 {
+		t.Fatal("migrate must refuse to run without root")
+	}
+}

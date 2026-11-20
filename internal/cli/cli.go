@@ -157,7 +157,7 @@ func directRoot(args []string, env Env) string {
 		return ""
 	}
 	switch args[0] {
-	case "init", "version", "schema", "agent", "exec":
+	case "init", "version", "schema", "agent", "exec", "migrate":
 		return ""
 	}
 	if uid, ok := env.LoginUID(); ok && uid == 0 {
@@ -215,6 +215,8 @@ func dispatch(args []string, env Env) result {
 		return cmdUpdate(args[1:], env)
 	case "ingress":
 		return cmdIngress(env)
+	case "migrate":
+		return cmdMigrate(env)
 	case "ssh-key":
 		return cmdSSHKey(args[1:], env)
 	case "gate":

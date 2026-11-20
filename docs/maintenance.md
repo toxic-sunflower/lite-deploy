@@ -2,6 +2,8 @@
 
 ## Update `lite`
 
+After an update the settings that `lite` manages on the server (for example the SSH protection) are brought up to date automatically; you do not run anything by hand.
+
 As root (or with `sudo`):
 
 ```sh
