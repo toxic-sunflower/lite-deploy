@@ -26,13 +26,14 @@ const (
 )
 
 var (
-	projectRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,30}$`)
-	siteRe    = regexp.MustCompile(`^[a-z][a-z0-9-]{0,15}$`)
-	keyIDRe   = regexp.MustCompile(`^[0-9a-f]{12}$`)
-	shaRe     = regexp.MustCompile(`^[0-9a-f]{40}$`)
-	specRe    = regexp.MustCompile(`^([0-9]{1,5})/(tcp|udp)$`)
-	userRe    = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
-	pluginRe  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
+	projectRe    = regexp.MustCompile(`^[a-z][a-z0-9-]{1,30}$`)
+	siteRe       = regexp.MustCompile(`^[a-z][a-z0-9-]{0,15}$`)
+	keyIDRe      = regexp.MustCompile(`^[0-9a-f]{12}$`)
+	secretNameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{1,63}$`)
+	shaRe        = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	specRe       = regexp.MustCompile(`^([0-9]{1,5})/(tcp|udp)$`)
+	userRe       = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+	pluginRe     = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 )
 
 // Request is an agent request to the executor.
@@ -60,7 +61,7 @@ func checkSpec(spec, from string) error {
 // Everything not in the list is rejected.
 func (r Request) CLIArgs() ([]string, error) {
 	a := r.Args
-	if r.Body != "" && r.Cmd != "project.preview" && r.Cmd != "project.create" && r.Cmd != "plugin.run" {
+	if r.Body != "" && r.Cmd != "project.preview" && r.Cmd != "project.create" && r.Cmd != "plugin.run" && r.Cmd != "secret.put" {
 		return nil, fmt.Errorf("%s: a request body is not allowed", r.Cmd)
 	}
 	if r.Cmd == "plugin.run" && len(r.Body) > MaxPluginStdin {
@@ -129,6 +130,36 @@ func (r Request) CLIArgs() ([]string, error) {
 			return nil, err
 		}
 		return []string{"update", "--yes"}, nil
+	case "project.export", "secret.list":
+		if err := need(1); err != nil {
+			return nil, err
+		}
+		if !projectRe.MatchString(a[0]) {
+			return nil, errors.New("invalid project name")
+		}
+		if r.Cmd == "project.export" {
+			return []string{"project", "export", a[0]}, nil
+		}
+		return []string{"secret", "list", a[0]}, nil
+	case "secret.put": // arguments: project, name; the body is the ciphertext
+		if err := need(2); err != nil {
+			return nil, err
+		}
+		if !projectRe.MatchString(a[0]) || !secretNameRe.MatchString(a[1]) {
+			return nil, errors.New("secret.put: invalid project or secret name")
+		}
+		if r.Body == "" || len(r.Body) > MaxPluginStdin {
+			return nil, errors.New("secret.put: the ciphertext is required")
+		}
+		return []string{"secret", "put", a[0], a[1]}, nil
+	case "secret.remove":
+		if err := need(2); err != nil {
+			return nil, err
+		}
+		if !projectRe.MatchString(a[0]) || !secretNameRe.MatchString(a[1]) {
+			return nil, errors.New("secret.remove: invalid project or secret name")
+		}
+		return []string{"secret", "remove", a[0], a[1]}, nil
 	case "owner.list":
 		if err := need(0); err != nil {
 			return nil, err

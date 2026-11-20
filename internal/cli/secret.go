@@ -6,9 +6,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/toxic-sunflower/lite-deploy/internal/setup"
 	"io"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 
 	"github.com/toxic-sunflower/lite-deploy/internal/plan"
 	"github.com/toxic-sunflower/lite-deploy/internal/secrets"
+	"github.com/toxic-sunflower/lite-deploy/internal/setup"
 )
 
 // CodeInvalidSecret is an invalid secret name or value.
@@ -137,7 +139,7 @@ func cmdInit(args []string, env Env) result {
 
 func cmdSecret(args []string, env Env) result {
 	if len(args) == 0 {
-		return fail("secret", CodeUsage, "usage: lite-deploy secret pubkey|encrypt|set|list")
+		return fail("secret", CodeUsage, "usage: lite-deploy secret pubkey|encrypt|set|list|put|remove")
 	}
 	switch args[0] {
 	case "pubkey":
@@ -148,6 +150,10 @@ func cmdSecret(args []string, env Env) result {
 		return secretSet(args[1:], env)
 	case "list":
 		return secretList(args[1:], env)
+	case "put":
+		return secretPut(args[1:], env)
+	case "remove":
+		return secretRemove(args[1:], env)
 	}
 	return fail("secret", CodeUsage, "unknown secret subcommand: "+args[0])
 }
@@ -265,7 +271,84 @@ func secretList(args []string, env Env) result {
 	if len(items) == 0 {
 		sb.WriteString("No secrets.\n")
 	}
-	return result{command: "secret.list", data: map[string]any{"secrets": items}, text: sb.String()}
+	return result{command: "secret.list", data: map[string]any{"secrets": items, "needed": neededSecrets(env, pos[0])}, text: sb.String()}
+}
+
+var secretRefRe = regexp.MustCompile(`secret://([a-z][a-z0-9_]{1,63})`)
+
+// neededSecrets are the secrets the description of a project refers to (names only), without the internal ones.
+func neededSecrets(env Env, project string) []string {
+	b, err := env.FS.ReadFile("/etc/lite-deploy/projects/" + project + ".json")
+	if err != nil {
+		return []string{}
+	}
+	seen := map[string]bool{}
+	out := []string{}
+	for _, m := range secretRefRe.FindAllStringSubmatch(string(b), -1) {
+		if !seen[m[1]] {
+			seen[m[1]] = true
+			out = append(out, m[1])
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// secretPut stores a secret that arrived encrypted with the executor key (the interface encrypts it on the person's computer).
+// The value is read from the ciphertext here, as root, and written to the store; it never appears in an answer.
+func secretPut(args []string, env Env) result {
+	const command = "secret.put"
+	fs := flag.NewFlagSet(command, flag.ContinueOnError)
+	pos, err := parseArgs(fs, args)
+	if err != nil || len(pos) != 2 {
+		return fail(command, CodeUsage, "usage: lite-deploy secret put <project> <name> (the age ciphertext from `secret encrypt` on standard input)")
+	}
+	if !env.root() {
+		return fail(command, "permission_denied", "secret put runs as root, through the agent")
+	}
+	if !secrets.ValidName(pos[1]) || strings.HasPrefix(pos[1], "_") {
+		return fail(command, CodeInvalidSecret, "invalid secret name")
+	}
+	if _, err := env.FS.Stat("/etc/lite-deploy/projects/" + pos[0] + ".json"); err != nil {
+		return fail(command, CodeProjectMissing, "project "+pos[0]+" not found")
+	}
+	raw, err := io.ReadAll(io.LimitReader(env.Stdin, secrets.MaxCiphertextSize+1))
+	if err != nil || len(raw) > secrets.MaxCiphertextSize {
+		return fail(command, CodeInvalidSecret, "the ciphertext is missing or too large")
+	}
+	key, err := env.FS.ReadFile(env.keyPath())
+	if err != nil {
+		return fail(command, plan.CodePrecondition, "the executor key could not be read: run lite init")
+	}
+	val, err := secrets.Decrypt(string(key), strings.TrimSpace(string(raw)), pos[0], pos[1])
+	if err != nil {
+		return secretErr(command, err)
+	}
+	changed, err := secrets.NewStoreAt(env.FS, env.secretsDir()).Put(pos[0], pos[1], val)
+	if err != nil {
+		return secretErr(command, err)
+	}
+	return result{command: command, data: map[string]any{"project": pos[0], "name": pos[1], "changed": changed}, text: "The secret " + pos[1] + " of " + pos[0] + " is saved.\nNext: deploy the project again so that the new value is used.\n"}
+}
+
+// secretRemove deletes one secret of a project.
+func secretRemove(args []string, env Env) result {
+	const command = "secret.remove"
+	pos := args
+	if len(pos) != 2 {
+		return fail(command, CodeUsage, "usage: lite-deploy secret remove <project> <name>")
+	}
+	if !env.root() {
+		return fail(command, "permission_denied", "secret remove runs as root, through the agent")
+	}
+	if !secrets.ValidName(pos[1]) || strings.HasPrefix(pos[1], "_") || !secrets.ValidProject(pos[0]) {
+		return fail(command, CodeInvalidSecret, "invalid project or secret name")
+	}
+	p := env.secretsDir() + "/" + pos[0] + "/" + pos[1]
+	if err := env.FS.Remove(p); err != nil {
+		return fail(command, CodeIO, "the secret is not there or could not be removed: "+err.Error())
+	}
+	return result{command: command, data: map[string]any{"removed": true}, text: "The secret " + pos[1] + " was removed.\n"}
 }
 
 // withSecurity adds the security plugin (SSH by key only, fail2ban, automatic updates, kernel parameters) to the plugin

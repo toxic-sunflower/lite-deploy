@@ -753,6 +753,160 @@
           }
         }
       }
+    },
+    "/v1/project/export": {
+      "get": {
+        "summary": "The description of a project as kept on the server (no secret values) and the names of the secrets it needs.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access, or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/secrets": {
+      "get": {
+        "summary": "The names of a project's secrets (set and needed), never the values.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access, or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/secret": {
+      "post": {
+        "summary": "Set a secret: the value arrives encrypted with the executor key (bound to the project and name).",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access, or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": "Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "ciphertext": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "project",
+                  "name",
+                  "ciphertext"
+                ]
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
+    },
+    "/v1/secret/remove": {
+      "post": {
+        "summary": "Remove one secret of a project.",
+        "responses": {
+          "200": {
+            "description": "The answer envelope: ok, api_version, command, data or error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access, or the action needs the owner's signature (owner_confirmation_required)."
+          }
+        },
+        "description": "Changes the server: when an owner key is registered it must carry a valid X-Lite-Sig signature.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "project",
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "x-changes-server": true
+      }
     }
   },
   "components": {

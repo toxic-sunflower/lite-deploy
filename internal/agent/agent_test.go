@@ -147,6 +147,10 @@ func TestAgentRoutes(t *testing.T) {
 		{"GET", "/v1/update", "", "update --check --json"},
 		{"POST", "/v1/update/apply", `{}`, "update --yes --json"},
 		{"GET", "/v1/ingress", "", "ingress --json"},
+		{"GET", "/v1/secrets?project=shop", "", "secret list shop --json"},
+		{"GET", "/v1/project/export?project=shop", "", "project export shop --json"},
+		{"POST", "/v1/secret", `{"project":"shop","name":"api_key","ciphertext":"-----BEGIN AGE ENCRYPTED FILE-----"}`, "secret put shop api_key --json"},
+		{"POST", "/v1/secret/remove", `{"project":"shop","name":"api_key"}`, "secret remove shop api_key --json"},
 		{"POST", "/v1/publish", `{"project":"shop","site":"main","mode":"direct"}`, "publish shop main direct --yes --json"},
 	}
 	for _, c := range cases {

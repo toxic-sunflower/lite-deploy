@@ -1,7 +1,7 @@
 (function () {
   LU.components.ProjectCard = {
     props: ['p'],
-    data: function () { return { sha: '' }; },
+    data: function () { return { sha: '', showSecrets: false }; },
     template: '\
 <div class="card">\
   <div class="row spread"><h2><icon name="apps"></icon> {{ p.project }}</h2><span class="muted">{{ p.active === "none" ? "not deployed yet" : "active slot: " + p.active }}</span></div>\
@@ -20,6 +20,10 @@
     <button class="primary" type="submit" :disabled="$root.state.busy">Deploy</button>\
     <button type="button" @click="rollback" :disabled="$root.state.busy">Roll back</button>\
   </form>\
+  <div class="row" style="margin-top:10px">\
+    <button @click="showSecrets = !showSecrets"><icon name="shield"></icon>{{ showSecrets ? "Hide secrets" : "Secrets" }}</button>\
+    <button @click="exportIt" :disabled="$root.state.busy"><icon name="backup"></icon>Export (no secrets)</button></div>\
+  <secrets-panel v-if="showSecrets" :project="p.project" style="margin-top:10px"></secrets-panel>\
   <div class="hist" v-if="p.history && p.history.length"><div v-for="(x, i) in history" :key="i">{{ x.time }}  {{ x.event }}  {{ short(x.version) }}  slot {{ x.slot }}</div></div>\
 </div>',
     computed: { history: function () { return this.p.history.slice().reverse(); } },
@@ -32,6 +36,17 @@
         LU.run('Deploying, this can take a few minutes…', '/api/deploy', { project: this.p.project, sha: sha }, function (d) {
           return 'Deployed ' + LU.short(d.version) + ' to slot ' + d.slot + '. Traffic switched.';
         }).then(function () { self.$emit('changed'); });
+      },
+      exportIt: function () {
+        var name = this.p.project;
+        LU.api('/api/project/export?project=' + encodeURIComponent(name)).then(function (r) {
+          if (!r.ok) { LU.say('err', LU.errText(r)); return; }
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob([JSON.stringify(r.data.project, null, 2) + '\n'], { type: 'application/json' }));
+          a.download = name + '.lite-project.json'; document.body.appendChild(a); a.click(); a.remove();
+          var need = r.data.needed || [];
+          LU.say('ok', 'Saved ' + name + '.lite-project.json. It holds no secret values.' + (need.length ? ' Where you import it, type these secrets again: ' + need.join(', ') + '.' : ''));
+        });
       },
       rollback: function () {
         var self = this;

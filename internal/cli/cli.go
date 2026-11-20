@@ -195,6 +195,8 @@ func dispatch(args []string, env Env) result {
 			return cmdList(env)
 		case "create":
 			return cmdProjectCreate(args[2:], env)
+		case "export":
+			return cmdProjectExport(args[2:], env)
 		case "bundle":
 			return cmdProjectBundle(args[2:], env)
 		}

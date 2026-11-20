@@ -159,7 +159,7 @@ func (a *Agent) guardOwner(ctx context.Context, r *http.Request, req Request, bo
 }
 
 // readOnly are the commands that change nothing; they do not count against the quota.
-var readOnly = map[string]bool{"status": true, "info": true, "verify": true, "ingress": true, "project.key": true,
+var readOnly = map[string]bool{"project.export": true, "secret.list": true, "status": true, "info": true, "verify": true, "ingress": true, "project.key": true,
 	"project.preview": true, "firewall.status": true, "update.check": true}
 
 // overQuota records a changing action and reports whether the hourly quota is used up.
@@ -376,6 +376,34 @@ func (a *Agent) Handler() http.Handler {
 		return Request{Cmd: "owner.remove", Args: []string{in.ID}}, true
 	})
 	route(http.MethodGet, "/v1/owner", func(*http.Request) (Request, bool) { return Request{Cmd: "owner.list"}, true })
+	route(http.MethodGet, "/v1/project/export", func(r *http.Request) (Request, bool) {
+		p := r.URL.Query().Get("project")
+		if !projectRe.MatchString(p) {
+			return Request{}, false
+		}
+		return Request{Cmd: "project.export", Args: []string{p}}, true
+	})
+	route(http.MethodGet, "/v1/secrets", func(r *http.Request) (Request, bool) {
+		p := r.URL.Query().Get("project")
+		if !projectRe.MatchString(p) {
+			return Request{}, false
+		}
+		return Request{Cmd: "secret.list", Args: []string{p}}, true
+	})
+	route(http.MethodPost, "/v1/secret", func(r *http.Request) (Request, bool) {
+		var in struct{ Project, Name, Ciphertext string }
+		if !readJSON(r, &in) || len(in.Ciphertext) == 0 || len(in.Ciphertext) > MaxPluginStdin {
+			return Request{}, false
+		}
+		return Request{Cmd: "secret.put", Args: []string{in.Project, in.Name}, Body: in.Ciphertext}, true
+	})
+	route(http.MethodPost, "/v1/secret/remove", func(r *http.Request) (Request, bool) {
+		var in struct{ Project, Name string }
+		if !readJSON(r, &in) {
+			return Request{}, false
+		}
+		return Request{Cmd: "secret.remove", Args: []string{in.Project, in.Name}}, true
+	})
 	route(http.MethodGet, "/v1/verify", func(*http.Request) (Request, bool) { return Request{Cmd: "verify"}, true })
 	route(http.MethodPost, "/v1/plugin", func(r *http.Request) (Request, bool) {
 		var in struct {

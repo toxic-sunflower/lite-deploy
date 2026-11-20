@@ -636,3 +636,34 @@ func TestExtensionManifestMatchesTheTools(t *testing.T) {
 		t.Errorf("lite-ui has a tool the manifest does not list: %s", name)
 	}
 }
+
+func TestSecretValueIsEncryptedBeforeItLeavesThisComputer(t *testing.T) {
+	id, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sent []string
+	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		path := c.Args[len(c.Args)-1]
+		if path == "/v1/project/key" {
+			return host.Result{Stdout: []byte(`{"ok":true,"data":{"public_key":"` + id.Recipient().String() + `"}}`)}, nil
+		}
+		sent = append(sent, string(c.Stdin))
+		return host.Result{Stdout: []byte(`{"ok":true,"data":{}}`)}, nil
+	}}
+	s := &Server{Runner: r, Host: "anna@203.0.113.7", Token: tok}
+	h := s.Handler()
+	w := do(h, "POST", "/api/secret/set", `{"project":"shop","name":"api_key","value":"s3cr3t-value-123"}`, tok)
+	if w.Code != 200 || len(sent) != 1 {
+		t.Fatalf("%d %s %v", w.Code, w.Body.String(), sent)
+	}
+	if strings.Contains(sent[0], "s3cr3t-value-123") || !strings.Contains(sent[0], "BEGIN AGE ENCRYPTED FILE") {
+		t.Fatalf("the value must travel encrypted: %s", sent[0])
+	}
+	if w := do(h, "POST", "/api/secret/set", `{"project":"shop","name":"_db_password","value":"x"}`, tok); w.Code != 400 {
+		t.Errorf("an internal name must be refused: %d", w.Code)
+	}
+	if w := do(h, "GET", "/api/secrets?project=Shop%20x", "", tok); w.Code != 400 {
+		t.Errorf("a bad project name must be refused: %d", w.Code)
+	}
+}

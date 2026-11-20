@@ -75,6 +75,7 @@
   app.component('security', C.Security);
   app.component('server', C.Server);
   app.component('project-card', C.ProjectCard);
+  app.component('secrets-panel', C.SecretsPanel);
   app.component('new-project', C.NewProject);
   app.component('plugin-panel', C.PluginPanel);
   app.config.globalProperties.state = S;

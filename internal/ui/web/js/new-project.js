@@ -13,12 +13,15 @@
       return {
         name: '', desc: '', dbOn: false, db: { server: '', port: '5432', fmt: 'url', pass: '' },
         regOn: false, reg: { host: 'ghcr.io', user: '', token: '' },
-        services: [newService()], sites: [newSite()], key: '', hash: '', plan: null, planErr: null
+        services: [newService()], sites: [newSite()], key: '', hash: '', plan: null, planErr: null, imported: false
       };
     },
     template: '\
 <div class="card">\
   <h2>New project</h2>\
+  <div class="row" style="margin-bottom:6px"><label style="margin:0">Start from an exported project file:</label>\
+    <input type="file" accept=".json,application/json" @change="importFile" style="width:auto"></div>\
+  <p v-if="imported" class="help">Imported. Secret values are never in the file: fill in the ones shown with an empty value (secret settings, registry token, database password), then press “Show what will happen”.</p>\
   <div v-if="!podman" class="notice warn"><div class="t">Container components need podman, which is not on this server yet. Add it in <b>Server</b> first.</div></div>\
   <div class="row"><div class="grow"><label>Project name (Latin letters, digits and “-”)</label><input type="text" v-model="name" placeholder="shop" autocomplete="off" spellcheck="false"></div>\
     <div class="grow"><label>Description (optional)</label><input type="text" v-model="desc" autocomplete="off"></div></div>\
@@ -81,6 +84,45 @@
     watch: { snapshot: function () { this.hash = ''; } },
     methods: {
       newService: newService, newSite: newSite,
+      // importFile fills the form from an exported project description (it holds no secret values)
+      importFile: function (e) {
+        var self = this, file = e.target.files && e.target.files[0];
+        if (!file) return;
+        var rd = new FileReader();
+        rd.onload = function () {
+          var p;
+          try { p = JSON.parse(rd.result); } catch (x) { LU.say('err', 'This file is not a project description (it is not valid JSON).'); return; }
+          if (!p || typeof p.name !== 'string' || typeof p.services !== 'object') { LU.say('err', 'This file is not a lite-deploy project description.'); return; }
+          self.fromProject(p); self.imported = true; self.hash = ''; self.plan = null; self.planErr = null; LU.clear();
+        };
+        rd.readAsText(file);
+      },
+      fromProject: function (p) {
+        var self = this;
+        this.name = p.name || ''; this.desc = p.description || '';
+        this.dbOn = !!p.database;
+        this.db = { server: (p.database && p.database.server) || '', port: String((p.database && p.database.port) || '5432'), fmt: (p.database && p.database.connection_format) || 'url', pass: '' };
+        this.regOn = !!p.registry;
+        this.reg = { host: (p.registry && p.registry.host) || 'ghcr.io', user: (p.registry && p.registry.username) || '', token: '' };
+        this.services = Object.keys(p.services || {}).map(function (n) {
+          var o = p.services[n], s = newService();
+          s.name = n; s.kind = o.kind === 'unit' ? 'unit' : 'quadlet';
+          s.image = o.image || ''; s.cport = String(o.container_port || '8080');
+          s.exec = (o.exec || []).join(' ');
+          if (o.release) { s.rurl = o.release.url || ''; s.rkey = o.release.minisign_key || ''; }
+          s.mem = (o.limits && o.limits.memory) || '512m'; s.health = (o.health && o.health.path) || '/health/ready';
+          s.env = Object.keys(o.env || {}).map(function (k) { return k + '=' + o.env[k]; }).join('\n');
+          s.sec = Object.keys(o.secrets || {}).map(function (k) { return k + '='; }).join('\n');
+          s.dbenv = o.database_env || '';
+          return s;
+        });
+        if (!this.services.length) this.services = [newService()];
+        this.sites = (p.sites || []).map(function (x) {
+          return { name: x.name || 'main', host: x.host || '', service: x.service || '', publish: x.publish === 'direct' ? 'direct' : 'tunnel', proxy: x.trusted_proxy === 'cloudflare' ? 'cloudflare' : 'none', body: x.max_body || '5MB' };
+        });
+        if (!this.sites.length) this.sites = [newSite()];
+        this.key = (p.deploy_key && p.deploy_key.public_key) || '';
+      },
       // build makes the project description and the secret values; it returns a string if the form has an error
       build: function () {
         var p = { schema: 'lite-deploy/project/v2', name: this.name.trim() }, sec = {}, errs = [];
@@ -90,11 +132,13 @@
           if (this.db.server.trim()) {
             p.database.server = this.db.server.trim();
             if (this.db.port.trim()) p.database.port = parseInt(this.db.port, 10);
-            p.database.password_secret = 'secret://db_password'; sec.db_password = this.db.pass;
+            if (!this.db.pass) errs.push('The database role password is needed (it is never in an exported file)');
+          p.database.password_secret = 'secret://db_password'; sec.db_password = this.db.pass;
           }
         }
         if (this.regOn) {
           p.registry = { host: this.reg.host.trim(), username: this.reg.user.trim(), token_secret: 'secret://registry_token' };
+          if (!this.reg.token) errs.push('The registry token is needed (it is never in an exported file)');
           sec.registry_token = this.reg.token;
         }
         p.services = {};
@@ -111,7 +155,7 @@
           lines(s.env).forEach(function (l) { var kv = pair(l); if (kv) env[kv[0]] = kv[1]; else errs.push('Setting "' + l + '": write it as NAME=value'); });
           if (Object.keys(env).length) o.env = env;
           var sc = {};
-          lines(s.sec).forEach(function (l) { var kv = pair(l); if (kv) { var sn = secretName([n, kv[0]]); sc[kv[0]] = 'secret://' + sn; sec[sn] = kv[1]; } else errs.push('Secret "' + l.split('=')[0] + '": write it as NAME=value'); });
+          lines(s.sec).forEach(function (l) { var kv = pair(l); if (kv && kv[1] === '') errs.push('The secret ' + kv[0] + ' needs a value (secret values are never in an exported file)'); else if (kv) { var sn = secretName([n, kv[0]]); sc[kv[0]] = 'secret://' + sn; sec[sn] = kv[1]; } else errs.push('Secret "' + l.split('=')[0] + '": write it as NAME=value'); });
           if (Object.keys(sc).length) o.secrets = sc;
           opt(o, 'database_env', s.dbenv.trim());
           p.services[n] = o;

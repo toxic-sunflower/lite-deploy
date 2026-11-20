@@ -40,6 +40,13 @@ Expected: traffic goes to the previous version and back, with no moment when the
 
 Repeat the creation once more with the same form and **Create project**: every step must say `unchanged`.
 
+## 1b. Secrets, export and import
+
+1. On the project card press **Secrets**. Expected: the names the project needs, each “set” or “missing”; no value is ever shown.
+2. Type a new value for one secret and **Save**, then deploy the same version again. Expected: the application uses the new value.
+3. **Export (no secrets)**. Expected: a file `NAME.lite-project.json` is downloaded; open it: it holds no password, token or key, only names like `secret://api_key`.
+4. **New project**, “Start from an exported project file”, pick that file. Expected: the form is filled in; secret values and the registry token are empty and the page asks for them. (Do not create a second copy of your live project: close the form.)
+
 ## 2. Publishing (Ingress)
 
 Do this on a domain you can afford to touch for a few minutes.
