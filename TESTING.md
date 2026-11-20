@@ -117,6 +117,12 @@ This needs a release newer than the one on the server. Tell me and I publish a t
 
 Install `lite-deploy.mcpb` from the Releases page (`lite-ui` must be installed on the workstation) (Settings, Extensions, Install Extension), type `user@address`. Ask “Is my server fine?”. Expected: Claude calls `verify` and answers in plain words. If it says it cannot connect, run `ssh user@address` in PowerShell: it must log in with no password question.
 
+## 6c. Updating the page, background run, the extension
+
+1. **workstation**: `lite-ui --version`, then install an older release if you have one. With a newer release out, **Overview** shows “A new version of Lite Deploy (this page)”; **Update**. Expected: the page reloads by itself and `lite-ui --version` shows the new version. If it does not come back, start `lite-ui` again and send me the text.
+2. **workstation**: `lite-ui service install`, open the printed address, reboot or log out and in, open it again. Expected: the same address works. `lite-ui service status` says it runs; `lite-ui service uninstall` turns it off.
+3. Extension: install `lite-deploy.mcpb` (one file for all systems). Expected: it works with the installed `lite-ui`; after updating `lite-ui` in step 1 you do nothing to the extension.
+
 ## 7. Clean-up (only if you want to start over)
 
 **server**: `sudo liteup uninstall --everything`. Expected: the server is bare, `ssh` login still works, and `curl -fsSL https://lite-deploy.prozorov.me/install.sh | sudo sh` followed by `sudo liteup install` works again.
