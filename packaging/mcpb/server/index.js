@@ -33,19 +33,70 @@ function run(cmd, args, what) {
   child.on('exit', (code, signal) => { say(what + ' stopped (code ' + code + (signal ? ', signal ' + signal : '') + ')'); process.exit(code === null ? 1 : code); });
 }
 
-if (found) {
+const INSTALL_TEXT =
+  'Lite Deploy is not installed on this workstation, so there is nothing to manage servers with yet.\n' +
+  'Tell the person to install it once, then restart Claude Desktop:\n' +
+  '  Windows (PowerShell):  irm https://lite-deploy.prozorov.me/install-ui.ps1 | iex\n' +
+  '  macOS / Linux / WSL:   curl -fsSL https://lite-deploy.prozorov.me/install-ui.sh | sh\n' +
+  'Details: https://lite-deploy.prozorov.me/quickstart.html';
+
+// Without lite-ui the extension still starts and says what to do, in the chat: a tiny MCP server with one tool.
+function stub(why) {
+  say(why);
+  const send = (o) => process.stdout.write(JSON.stringify(o) + '\n');
+  const tool = {
+    name: 'install_lite_ui', description: 'Lite Deploy is not installed on this workstation. Call this to see how to install it.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true },
+  };
+  let buf = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => {
+    buf += chunk;
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (!line) continue;
+      let m;
+      try { m = JSON.parse(line); } catch (e) { continue; }
+      if (m.id === undefined) continue; // notifications
+      if (m.method === 'initialize') {
+        send({ jsonrpc: '2.0', id: m.id, result: { protocolVersion: (m.params && m.params.protocolVersion) || '2024-11-05', capabilities: { tools: {} },
+          serverInfo: { name: 'lite-deploy', version: 'not-installed' }, instructions: INSTALL_TEXT } });
+      } else if (m.method === 'tools/list') {
+        send({ jsonrpc: '2.0', id: m.id, result: { tools: [tool] } });
+      } else if (m.method === 'tools/call') {
+        send({ jsonrpc: '2.0', id: m.id, result: { content: [{ type: 'text', text: INSTALL_TEXT }] } });
+      } else if (m.method === 'ping') {
+        send({ jsonrpc: '2.0', id: m.id, result: {} });
+      } else {
+        send({ jsonrpc: '2.0', id: m.id, error: { code: -32601, message: 'method not found' } });
+      }
+    }
+  });
+  process.stdin.on('end', () => process.exit(0));
+}
+
+// Is lite-ui inside WSL? Asked without blocking, with a time limit.
+function probeWsl(wsl, cb) {
+  let done = false;
+  const finish = (ok) => { if (!done) { done = true; cb(ok); } };
+  const p = spawn(wsl, ['-e', 'sh', '-c', 'test -x "$HOME/.local/bin/lite-ui" || command -v lite-ui >/dev/null 2>&1'], { windowsHide: true, stdio: 'ignore' });
+  const timer = setTimeout(() => { try { p.kill(); } catch (e) { /* gone */ } finish(false); }, 20000);
+  p.on('error', () => { clearTimeout(timer); finish(false); });
+  p.on('exit', (code) => { clearTimeout(timer); finish(code === 0); });
+}
+
+if (found && !process.env.LITE_UI_NONE) {
   run(found, server ? ['mcp', '--server', server] : ['mcp'], found);
 } else if (isWin) {
-  // Not on Windows: try WSL. The script says clearly if lite-ui is not there either.
   const root = process.env.SystemRoot || 'C:\\Windows';
   const wsl = [path.join(root, 'System32', 'wsl.exe')].find((p) => fs.existsSync(p)) || 'wsl.exe';
-  const script =
-    'p=$(command -v lite-ui || echo "$HOME/.local/bin/lite-ui"); ' +
-    '[ -x "$p" ] || { echo "lite-ui is not installed in WSL either" >&2; exit 127; }; ' +
-    'exec "$p" mcp ${1:+--server "$1"}';
-  run(wsl, ['-e', 'sh', '-c', script, 'sh', server], 'lite-ui in WSL');
+  probeWsl(wsl, (ok) => {
+    if (!ok || process.env.LITE_UI_NONE) { stub('lite-ui was not found on Windows or in WSL'); return; }
+    const script = 'p=$(command -v lite-ui || echo "$HOME/.local/bin/lite-ui"); exec "$p" mcp ${1:+--server "$1"}';
+    run(wsl, ['-e', 'sh', '-c', script, 'sh', server], 'lite-ui in WSL');
+  });
 } else {
-  say('lite-ui is not installed. Install it once, then restart Claude Desktop:');
-  say('  curl -fsSL https://lite-deploy.prozorov.me/install-ui.sh | sh');
-  process.exit(1);
+  stub('lite-ui was not found');
 }
