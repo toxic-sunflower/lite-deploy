@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/toxic-sunflower/lite-deploy/internal/cfaccess"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/uiupdate"
 )
@@ -701,5 +703,54 @@ func TestUIUpdateEndpoints(t *testing.T) {
 	case <-done:
 	case <-time.After(3 * time.Second):
 		t.Fatal("the program was not asked to restart")
+	}
+}
+
+func TestCloudflareAccessGoesToCloudflareNotToTheServer(t *testing.T) {
+	var got []string
+	cf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.Path+" "+r.Header.Get("Authorization")+" "+string(b))
+		switch {
+		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/access/apps"):
+			_, _ = w.Write([]byte(`{"success":true,"result":[]}`))
+		case r.URL.Path == "/accounts":
+			_, _ = w.Write([]byte(`{"success":true,"result":[{"id":"0123456789abcdef0123456789abcdef","name":"Acme"}]}`))
+		default:
+			_, _ = w.Write([]byte(`{"success":true,"result":{"id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","name":"n","domain":"shop.example.com/admin*"}}`))
+		}
+	}))
+	defer cf.Close()
+	s, r := newServer("")
+	s.CFBase = cf.URL
+	s.CF = &cfaccess.Store{Path: filepath.Join(t.TempDir(), "cf.json")}
+	h := s.Handler()
+	body := `{"action":"protect","token":"secret-token-value","remember":true,"host":"shop.example.com","path":"/admin*","who":["me@example.com"]}`
+	w := do(h, "POST", "/api/cf-access", body, s.Token)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"ok":true`) {
+		t.Fatalf("protect: %d %s", w.Code, w.Body)
+	}
+	if len(got) < 2 || !strings.Contains(got[len(got)-1], "Bearer secret-token-value") || !strings.Contains(got[len(got)-1], "shop.example.com/admin*") {
+		t.Fatalf("Cloudflare did not get the request: %v", got)
+	}
+	if len(r.Calls) != 0 {
+		t.Errorf("the token must never go to the server: %v", r.Calls)
+	}
+	if v, ok := s.CF.Get("default"); !ok || v.Token != "secret-token-value" {
+		t.Errorf("the token was asked to be remembered: %+v", v)
+	}
+	// the saved token is used when the form sends none, and the labels never reveal it
+	w = do(h, "POST", "/api/cf-access", `{"action":"labels"}`, s.Token)
+	if strings.Contains(w.Body.String(), "secret-token-value") || !strings.Contains(w.Body.String(), "default") {
+		t.Errorf("labels: %s", w.Body)
+	}
+	if w := do(h, "POST", "/api/cf-access", `{"action":"list"}`, s.Token); w.Code != 200 {
+		t.Errorf("a saved token must be enough: %d %s", w.Code, w.Body)
+	}
+	if w := do(h, "POST", "/api/cf-access", `{"action":"protect","token":"x","host":"bad host","who":["me@example.com"]}`, s.Token); w.Code != 400 {
+		t.Errorf("a bad domain must be refused: %d", w.Code)
+	}
+	if w := do(h, "POST", "/api/cf-access", `{"action":"list"}`, ""); w.Code != 401 {
+		t.Errorf("a token is required: %d", w.Code)
 	}
 }

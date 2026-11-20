@@ -38,7 +38,7 @@ case "$path" in
       *'"plugin":"pg"'*'"command":"status"'*) echo '{"ok":true,"data":{"version":"psql (PostgreSQL) 16.4","active":true,"scheduled":true}}' ;;
       *'"command":"databases"'*) echo '{"ok":true,"data":{"databases":["blog","postgres","shop"]}}' ;;
       *'"command":"backups"'*) echo '{"ok":true,"data":{"backups":[{"database":"shop","file":"shop-20261120T030000Z.dump.age","at":"2026-11-20T03:00:00Z"},{"database":"blog","file":"blog-20261120T030000Z.dump.age","at":"2026-11-20T03:00:00Z"}]}}' ;;
-      *'"plugin":"cloudflare"'*) echo '{"ok":true,"data":{"installed":true,"running":true,"token":true}}' ;;
+      *'"plugin":"cloudflare"'*) echo '{"ok":true,"data":{"installed":true,"tunnels":[{"name":"default","running":true},{"name":"acme","running":true}]}}' ;;
       *'"plugin":"backup"'*'"command":"status"'*) echo '{"ok":true,"data":{"configured":true,"scheduled":true,"count":14,"last":"2026-11-20T03:05:00Z","stores":["backblaze"],"server_items":["caddy","lite"],"project_items":["settings","secrets","database","data"],"targets":[
         {"name":"server","kind":"server","enabled":true,"items":["caddy","lite"],"stores":[],"at":"","last":"2026-11-20T03:05:00Z"},
         {"name":"shop","kind":"project","enabled":true,"items":["settings","secrets","database","data"],"stores":["backblaze"],"at":"02:30","last":"2026-11-20T02:35:00Z"},

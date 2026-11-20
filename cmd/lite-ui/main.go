@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/toxic-sunflower/lite-deploy/internal/cfaccess"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/mcp"
 	"github.com/toxic-sunflower/lite-deploy/internal/ui"
@@ -84,6 +85,7 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 	upd := uiupdate.New(Version)
 	upd.Cleanup()
 	srv.Updater = upd
+	srv.CF = &cfaccess.Store{Path: cfTokenPath()}
 	if err := srv.Validate(); err != nil {
 		_, _ = fmt.Fprintln(errw, "ERROR:", err)
 		return 2
@@ -230,4 +232,13 @@ func runMCP(args []string, in io.Reader, out, errw io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// cfTokenPath is where Cloudflare API tokens are kept if the person asks to remember them (next to the list of servers).
+func cfTokenPath() string {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "lite-ui", "cloudflare.json")
 }

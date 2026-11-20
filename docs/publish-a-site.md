@@ -119,6 +119,12 @@ lite fallback-auth shop main off
 
 Caddy asks for the password (HTTP Basic, which is safe because the direct mode always uses HTTPS). Only a bcrypt hash is stored on the server, and an exported project does not carry it. Choose a long password: this is the lock that remains when Cloudflare is not in front.
 
+### Close it with Cloudflare Access from the interface
+
+In **Ingress**, press “Close with Cloudflare Access…” under the domain: the e-mail addresses (or `@example.com` for a whole mail domain) that may enter, and an optional path. Lite Deploy creates the Access application in your Cloudflare account; “Show what is closed” lists the applications of the domain and “Open it again” removes one.
+
+This needs a Cloudflare **API token** with only the permission “Access: Apps and Policies, Edit”. The token is used by `lite-ui` on your workstation and goes to Cloudflare only: it is never sent to the server. By default it is forgotten after use; tick “Remember it on this workstation” to keep it in a file in your settings that only you can read (`Forget the saved token` removes it). With several Cloudflare accounts, give each token its own name.
+
 ## When Cloudflare is down: switch to direct
 
 A tunnel is one more thing that can fail. To be able to move quickly:

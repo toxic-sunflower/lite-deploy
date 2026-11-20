@@ -66,7 +66,8 @@ Do this on a domain you can afford to touch for a few minutes.
 
 1. **Ingress**, under a domain: “Set a password…”, paths `/admin*`, a login and a password of 12+ characters, **Save**. Expected: the line “When served directly, /admin* asks for a password”. In tunnel mode nothing changes: open the site through Cloudflare, no password question.
 2. Switch the domain to “Directly” (the “Cloudflare is down” case) and open `https://your-domain/admin`. Expected: the browser asks for the login and password; a wrong one is refused; the rest of the site is open. Switch back to the tunnel.
-3. If you have a second Cloudflare account: in **Ingress** type a name and its tunnel token, **Add tunnel**. Expected: both tunnels listed as “connected and running”.
+3. **Ingress**, under a domain: “Close with Cloudflare Access…”. Create an API token in Cloudflare (My Profile, API Tokens) with only “Access: Apps and Policies, Edit”, paste it, give your e-mail, path `/admin*`, **Close it**. Expected: “is now closed”, and in the Cloudflare dashboard (Zero Trust, Access, Applications) an application appears; open the address in a private window: a Cloudflare login page asks for a code sent to your e-mail. This was written against the Cloudflare API description and has not run against a real account: send me the exact error if Cloudflare refuses. “Open it again” removes the application.
+4. If you have a second Cloudflare account: in **Ingress** type a name and its tunnel token, **Add tunnel**. Expected: both tunnels listed as “connected and running”.
 
 ## 3. Backups
 

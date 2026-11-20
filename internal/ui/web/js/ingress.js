@@ -2,7 +2,7 @@
   // Ingress is how traffic reaches this server: the web server (Caddy), the web ports, and every domain with the way
   // visitors reach it.
   LU.components.Ingress = {
-    data: function () { return { info: null, error: '', pick: {}, cf: null, token: '', tname: '', open: '', fa: { user: '', password: '', paths: '' } }; },
+    data: function () { return { caNew: '', info: null, error: '', pick: {}, cf: null, token: '', tname: '', open: '', fa: { user: '', password: '', paths: '' }, cfOpen: '', labels: [], ca: { label: 'default', token: '', remember: false, who: '', path: '', account: '' }, caApps: null, caAccounts: null }; },
     template: '\
 <div>\
   <h1>Ingress</h1>\
@@ -39,7 +39,24 @@
       <tr><td colspan="4" class="help">\
         <span v-if="s.protected">When served directly, {{ where(s) }} asks for a password (logins: {{ s.protected.users.join(", ") }}).</span>\
         <span v-else>When served directly, this site has no password.</span>\
-        <button class="link" @click="toggle(s)">{{ open === s.project + s.site ? "Close" : "Set a password…" }}</button>\
+        <button class="link" @click="toggle(s)">{{ open === s.project + s.site ? "Hide" : "Set a password…" }}</button> ·\
+        <button class="link" @click="toggleCf(s)">{{ cfOpen === s.project + s.site ? "Hide" : "Close with Cloudflare Access…" }}</button>\
+        <div v-if="cfOpen === s.project + s.site" class="box">\
+          <div class="help">Cloudflare Access puts a Cloudflare login page in front of {{ s.host }} (it works while the site is reached through Cloudflare). It is set up with a Cloudflare API token that stays on THIS workstation and is never sent to the server. Create one in Cloudflare (My Profile, API Tokens) with only the permission “Access: Apps and Policies, Edit”.</div>\
+          <div class="row"><div class="grow"><label>Cloudflare account</label>\
+            <select v-model="ca.label"><option v-for="l in labelChoices" :key="l" :value="l">{{ l }}{{ labels.indexOf(l) >= 0 ? " (token saved)" : "" }}</option></select></div>\
+            <div class="grow"><label>Or a new name</label><input type="text" v-model="caNew" placeholder="e.g. acme" autocomplete="off"></div></div>\
+          <div v-if="!hasSaved"><label>API token</label><input type="password" v-model="ca.token" autocomplete="off" spellcheck="false">\
+            <label class="check"><input type="checkbox" v-model="ca.remember"> Remember it on this workstation (otherwise it is forgotten after use)</label></div>\
+          <div v-if="caAccounts"><label>Which Cloudflare account?</label><select v-model="ca.account"><option v-for="a in caAccounts" :key="a.id" :value="a.id">{{ a.name }}</option></select></div>\
+          <label>Who may enter: e-mail addresses, or @example.com for a whole mail domain (separated by spaces)</label><input type="text" v-model="ca.who" placeholder="me@example.com" autocomplete="off">\
+          <label>Path to close (empty: the whole domain)</label><input type="text" v-model="ca.path" placeholder="/admin*" autocomplete="off" spellcheck="false">\
+          <div class="row" style="margin-top:10px"><button class="primary" @click="caProtect(s)" :disabled="$root.state.busy">Close it</button>\
+            <button @click="caList(s)" :disabled="$root.state.busy">Show what is closed</button>\
+            <button v-if="hasSaved" class="link" @click="caForget">Forget the saved token</button></div>\
+          <table v-if="caApps" style="margin-top:8px"><tr v-for="a in caAppsFor(s)" :key="a.id"><td>{{ a.domain }}</td><td style="text-align:right"><button @click="caRemove(s, a)" :disabled="$root.state.busy">Open it again</button></td></tr></table>\
+          <div v-if="caApps && !caAppsFor(s).length" class="help">Nothing of {{ s.host }} is closed with Cloudflare Access.</div>\
+        </div>\
         <div v-if="open === s.project + s.site" class="box">\
           <div class="help">A fallback for when Cloudflare is not in front of the site: it is asked for only in the “Directly” mode, never in the tunnel mode. Only a hash of the password is kept on the server.</div>\
           <label>Paths to close, separated by spaces (empty: the whole site)</label><input type="text" v-model="fa.paths" placeholder="/admin*" autocomplete="off" spellcheck="false">\
@@ -62,9 +79,55 @@
         if (!this.cf.tunnels.length) return 'is installed; paste the tunnel token to connect it';
         return this.cf.tunnels.length + (this.cf.tunnels.length === 1 ? ' tunnel' : ' tunnels');
       },
+      labelChoices: function () { var l = this.labels.slice(); if (l.indexOf('default') < 0) l.unshift('default'); return l; },
+      hasSaved: function () { return !this.caNew.trim() && this.labels.indexOf(this.ca.label) >= 0; },
       needsPorts: function () { return this.info && this.info.web_ports_open === false && this.info.sites.some(function (s) { return s.publish === 'direct'; }); }
     },
     methods: {
+      caReq: function (extra) {
+        var label = (this.caNew.trim().toLowerCase() || this.ca.label);
+        var body = { label: label, token: this.hasSaved ? '' : this.ca.token.trim(), remember: this.ca.remember, account: this.ca.account };
+        for (var k in extra) body[k] = extra[k];
+        return body;
+      },
+      caAppsFor: function (s) { return (this.caApps || []).filter(function (a) { return a.domain === s.host || a.domain.indexOf(s.host + '/') === 0; }); },
+      caCall: function (wait, body, ok) {
+        var self = this;
+        return LU.run(wait, '/api/cf-access', this.caReq(body), ok).then(function (r) {
+          if (r.ok && r.data.need_account) { self.caAccounts = r.data.accounts; self.ca.account = r.data.accounts[0] ? r.data.accounts[0].id : ''; LU.say('ok', 'This token sees several Cloudflare accounts: choose one above and press the button again.'); }
+          else if (r.ok) { self.caAccounts = null; self.loadLabels(); }
+          return r;
+        });
+      },
+      caProtect: function (s) {
+        var self = this, who = this.ca.who.split(/[\s,]+/).filter(Boolean);
+        if (!who.length) { LU.say('err', 'Give at least one e-mail address.'); return; }
+        if (!confirm('Close ' + s.host + (this.ca.path || '') + ' with Cloudflare Access? Only the listed people will get in.')) return;
+        this.caCall('Closing…', { action: 'protect', host: s.host, path: this.ca.path.trim(), who: who }, function () { return s.host + (self.ca.path || '') + ' is now closed with Cloudflare Access.'; })
+          .then(function (r) { if (r.ok && !r.data.need_account) { self.ca.token = ''; self.caList(s); } });
+      },
+      caList: function (s) {
+        var self = this;
+        this.caCall('Asking Cloudflare…', { action: 'list' }, function () { return 'Done.'; }).then(function (r) { if (r.ok && r.data.apps) self.caApps = r.data.apps; });
+      },
+      caRemove: function (s, a) {
+        var self = this;
+        if (!confirm('Open ' + a.domain + ' again? It will no longer ask for a Cloudflare login.')) return;
+        this.caCall('Removing…', { action: 'remove', app_id: a.id }, function () { return a.domain + ' is open again.'; }).then(function (r) { if (r.ok) self.caList(s); });
+      },
+      caForget: function () {
+        var self = this;
+        LU.api('/api/cf-access', { action: 'forget', label: this.ca.label }).then(function () { self.loadLabels(); LU.say('ok', 'The saved token is forgotten.'); });
+      },
+      loadLabels: function () {
+        var self = this;
+        LU.api('/api/cf-access', { action: 'labels' }).then(function (r) { if (r.ok) { self.labels = r.data.labels; if (self.labels.length && self.labels.indexOf(self.ca.label) < 0) self.ca.label = self.labels[0]; } });
+      },
+      toggleCf: function (s) {
+        var k = s.project + s.site;
+        this.cfOpen = this.cfOpen === k ? '' : k;
+        this.caApps = null; this.caAccounts = null;
+      },
       where: function (s) { return s.protected.paths && s.protected.paths.length ? s.protected.paths.join(' ') : 'the whole site'; },
       toggle: function (s) {
         var k = s.project + s.site;
@@ -129,6 +192,6 @@
         LU.run('Installing Caddy…', '/api/plugin', { plugin: 'caddy', command: 'install', args: [] }, function () { return 'Caddy is installed.'; }).then(function () { LU.loadPlugins(); self.load(); });
       }
     },
-    mounted: function () { this.load(); }
+    mounted: function () { this.load(); this.loadLabels(); }
   };
 })();

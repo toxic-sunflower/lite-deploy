@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/toxic-sunflower/lite-deploy/internal/cfaccess"
 	"github.com/toxic-sunflower/lite-deploy/internal/firewall"
 	"github.com/toxic-sunflower/lite-deploy/internal/host"
 	"github.com/toxic-sunflower/lite-deploy/internal/plugin"
@@ -64,6 +65,10 @@ type Server struct {
 	// the answer is sent: the program is expected to restart.
 	Updater   UIUpdater
 	OnUpdated func()
+	// CF keeps Cloudflare API tokens the person chose to remember on this workstation (nil: nothing is kept); CFBase is the
+	// API address, changed in tests only.
+	CF     *cfaccess.Store
+	CFBase string
 
 	mu     sync.Mutex
 	ssh    map[string]*sshState
@@ -364,6 +369,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		return s.call(r.Context(), "POST", "/v1/fallback-auth", map[string]any{"project": in.Project, "site": in.Site, "action": in.Action, "user": in.User, "password": in.Password, "paths": in.Paths}), 200
 	}))
+	s.registerCFAccess(mux)
 	mux.HandleFunc("/api/ui-update", s.api(http.MethodGet, func(r *http.Request) ([]byte, int) {
 		if s.Updater == nil {
 			return okBody(uiupdate.Info{}), 200
