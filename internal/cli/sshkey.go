@@ -3,6 +3,7 @@ package cli
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io/fs"
 	"strings"
@@ -128,5 +129,5 @@ func cmdSSHKey(args []string, env Env) result {
 }
 
 func isNotExist(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "no such file") || err == fs.ErrNotExist
+	return errors.Is(err, fs.ErrNotExist) || (err != nil && strings.Contains(err.Error(), "no such file"))
 }
