@@ -258,6 +258,11 @@ func reloadCaddy(ctx context.Context, r *run, _ any) (outcome, error) {
 		return outcome{changed: r.sitesChanged}, nil
 	}
 	res, err := r.Runner.Run(ctx, hostCmd("runuser", "-u", "caddy", "--", "caddy", "validate", "--config", CaddyfilePth))
+	if err == nil && res.ExitCode != 0 && strings.Contains(string(res.Stderr), "cannot set user id") {
+		// This server does not let the executor switch to user caddy (seen on a VPS). The syntax check does not need that
+		// user, so it is repeated as root; only the check that caddy can read its files is lost.
+		res, err = r.Runner.Run(ctx, hostCmd("caddy", "validate", "--config", CaddyfilePth))
+	}
 	if err == nil && res.ExitCode != 0 {
 		err = fmt.Errorf("caddy validate: code %d: %s", res.ExitCode, trimErr(res))
 	}
