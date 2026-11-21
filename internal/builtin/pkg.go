@@ -22,11 +22,11 @@ func (Pkg) Description() string {
 }
 func (Pkg) Commands() []plugin.Command {
 	return []plugin.Command{
-		{Name: "list", Help: "packages installed through lite"},
+		{Name: "list", Args: "[--all]", Help: "packages installed through lite (--all: every installed package), with the newer version where one is available"},
 		{Name: "search", Help: "find packages by name or description (reads only)", Args: "WORDS"},
 		{Name: "check", Help: "whether a package is installed and its version", Args: "PACKAGE"},
 		{Name: "install", Help: "install packages", Args: "PACKAGE…", Confirm: true},
-		{Name: "update", Help: "update packages", Args: "PACKAGE…", Confirm: true},
+		{Name: "update", Help: "update packages (--all: every installed package)", Args: "PACKAGE…|--all", Confirm: true},
 		{Name: "remove", Help: "remove packages (the ssh server, sudo, systemd and the shell cannot be removed)", Args: "PACKAGE…", Confirm: true},
 	}
 }
@@ -47,24 +47,54 @@ func (Pkg) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (
 	m := manager(env)
 	switch cmd {
 	case "list":
-		if len(args) != 0 {
-			return plugin.Output{}, plugin.Errorf("usage", "package list: takes no arguments")
+		all := len(args) == 1 && args[0] == "--all"
+		if len(args) != 0 && !all {
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite package list [--all]")
 		}
 		es, err := m.List()
 		if err != nil {
 			return plugin.Output{}, pkgErr(err)
 		}
-		if es == nil {
-			es = []pkgmgr.Entry{}
+		upd, uerr := m.Upgradable(ctx)
+		if uerr != nil {
+			upd = map[string]string{} // the list is still useful without the marks
+		}
+		type row struct {
+			Name        string `json:"name"`
+			Version     string `json:"version"`
+			InstalledAt string `json:"installed_at,omitempty"`
+			Lite        bool   `json:"lite"`
+			Update      string `json:"update,omitempty"`
+		}
+		rows := []row{}
+		byLite := map[string]bool{}
+		for _, e := range es {
+			byLite[e.Name] = true
+			if !all {
+				rows = append(rows, row{Name: e.Name, Version: e.Version, InstalledAt: e.InstalledAt, Lite: true, Update: upd[e.Name]})
+			}
+		}
+		if all {
+			every, err := m.ListAll(ctx)
+			if err != nil {
+				return plugin.Output{}, pkgErr(err)
+			}
+			for _, p := range every {
+				rows = append(rows, row{Name: p.Name, Version: p.Version, Lite: byLite[p.Name], Update: upd[p.Name]})
+			}
 		}
 		var sb strings.Builder
-		if len(es) == 0 {
+		if len(rows) == 0 {
 			sb.WriteString("No packages have been installed through lite yet.\n")
 		}
-		for _, e := range es {
-			fmt.Fprintf(&sb, "%-30s %-20s %s\n", e.Name, e.Version, e.InstalledAt)
+		for _, r := range rows {
+			note := ""
+			if r.Update != "" {
+				note = "  update: " + r.Update
+			}
+			fmt.Fprintf(&sb, "%-30s %-20s%s\n", r.Name, r.Version, note)
 		}
-		return plugin.Output{Text: sb.String(), Data: map[string]any{"packages": es}}, nil
+		return plugin.Output{Text: sb.String(), Data: map[string]any{"packages": rows}}, nil
 	case "search":
 		if len(args) == 0 {
 			return plugin.Output{}, plugin.Errorf("usage", "usage: lite package search WORDS")
@@ -99,6 +129,12 @@ func (Pkg) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (
 		}
 		return plugin.Output{Text: text, Data: in}, nil
 	case "install", "update", "remove":
+		if cmd == "update" && len(args) == 1 && args[0] == "--all" {
+			if err := m.UpdateAll(ctx); err != nil {
+				return plugin.Output{}, pkgErr(err)
+			}
+			return textOut("Every package is updated.\n"), nil
+		}
 		if len(args) == 0 {
 			return plugin.Output{}, plugin.Errorf("usage", "usage: lite package %s PACKAGE…", cmd)
 		}

@@ -441,3 +441,137 @@ func (m *Manager) Search(ctx context.Context, query string) ([]Found, error) {
 	}
 	return out, nil
 }
+
+// Installed is a package that is on the system, however it got there.
+type Installed struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+// ListAll returns every package that is installed on the system (not only those installed through lite).
+func (m *Manager) ListAll(ctx context.Context) ([]Installed, error) {
+	mgr, err := m.Detect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var c host.Cmd
+	switch mgr {
+	case "apt":
+		c = host.Cmd{Name: "dpkg-query", Args: []string{"-W", "-f=${Package}\t${Version}\t${Status}\n"}}
+	case "dnf", "zypper":
+		c = host.Cmd{Name: "rpm", Args: []string{"-qa", "--qf", "%{NAME}\t%{VERSION}-%{RELEASE}\n"}}
+	default:
+		c = host.Cmd{Name: "pacman", Args: []string{"-Q"}}
+	}
+	res, err := m.Runner.Run(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	if res.ExitCode != 0 {
+		return nil, fail("step_failed", "could not list the packages: %s", strings.TrimSpace(string(res.Stderr)))
+	}
+	out := []Installed{}
+	for _, line := range strings.Split(string(res.Stdout), "\n") {
+		var name, ver string
+		switch mgr {
+		case "apt":
+			f := strings.Split(line, "\t")
+			if len(f) < 3 || !strings.HasSuffix(f[2], " installed") || strings.HasPrefix(f[2], "deinstall") {
+				continue
+			}
+			name, ver = f[0], f[1]
+		case "pacman":
+			name, ver, _ = strings.Cut(line, " ")
+		default:
+			name, ver, _ = strings.Cut(line, "\t")
+		}
+		if name = strings.TrimSpace(name); nameRe.MatchString(name) {
+			out = append(out, Installed{Name: name, Version: strings.TrimSpace(ver)})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+var aptInstRe = regexp.MustCompile(`^Inst (\S+) (?:\[[^\]]*\] )?\((\S+)`)
+
+// Upgradable returns the packages for which a newer version is available: name → the new version. It reads the lists of
+// packages the system already has (run an update of the lists to learn about the newest ones) and changes nothing.
+func (m *Manager) Upgradable(ctx context.Context) (map[string]string, error) {
+	mgr, err := m.Detect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	switch mgr {
+	case "apt":
+		res, err := m.Runner.Run(ctx, host.Cmd{Name: "apt-get", Args: []string{"-s", "upgrade"}})
+		if err != nil {
+			return nil, err
+		}
+		for _, line := range strings.Split(string(res.Stdout), "\n") {
+			if mm := aptInstRe.FindStringSubmatch(strings.TrimSpace(line)); mm != nil {
+				out[mm[1]] = mm[2]
+			}
+		}
+	case "dnf":
+		res, err := m.Runner.Run(ctx, host.Cmd{Name: "dnf", Args: []string{"-q", "check-update"}})
+		if err != nil {
+			return nil, err
+		}
+		for _, line := range strings.Split(string(res.Stdout), "\n") {
+			f := strings.Fields(line)
+			if len(f) == 3 {
+				name, _, _ := strings.Cut(f[0], ".")
+				out[name] = f[1]
+			}
+		}
+	}
+	return out, nil
+}
+
+// UpdateAll brings every installed package to the newest version the repositories have.
+func (m *Manager) UpdateAll(ctx context.Context) error {
+	mgr, err := m.Detect(ctx)
+	if err != nil {
+		return err
+	}
+	env := []string{"DEBIAN_FRONTEND=noninteractive"}
+	var cmds []host.Cmd
+	switch mgr {
+	case "apt":
+		cmds = []host.Cmd{{Name: "apt-get", Args: []string{"update", "-qq"}}, {Name: "apt-get", Args: []string{"upgrade", "-y", "-qq"}, Env: env}}
+	case "dnf":
+		cmds = []host.Cmd{{Name: "dnf", Args: []string{"upgrade", "-y", "-q"}}}
+	case "zypper":
+		cmds = []host.Cmd{{Name: "zypper", Args: []string{"--non-interactive", "update"}}}
+	default:
+		cmds = []host.Cmd{{Name: "pacman", Args: []string{"-Syu", "--noconfirm"}}}
+	}
+	for _, c := range cmds {
+		res, err := m.run(ctx, c)
+		if err != nil {
+			return fail("step_failed", "%s: %v", c.Name, err)
+		}
+		if res.ExitCode != 0 && c.Name == "apt-get" && aptSandboxDenied(res) {
+			c.Args = append([]string{"-o", "APT::Sandbox::User=root"}, c.Args...)
+			if res, err = m.run(ctx, c); err != nil {
+				return fail("step_failed", "%s: %v", c.Name, err)
+			}
+		}
+		if res.ExitCode != 0 {
+			return fail("step_failed", "%s %s: %s", c.Name, strings.Join(c.Args, " "), strings.TrimSpace(string(res.Stderr)))
+		}
+	}
+	// the versions kept in the journal of lite follow
+	es, err := m.loadJournal()
+	if err != nil {
+		return err
+	}
+	for i := range es {
+		if v, ok, _ := m.Query(ctx, mgr, es[i].Name); ok {
+			es[i].Version = v
+		}
+	}
+	return m.saveJournal(es)
+}

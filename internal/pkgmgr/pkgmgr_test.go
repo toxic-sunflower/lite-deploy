@@ -269,3 +269,41 @@ func TestAptRetriesWithoutTheSandboxUser(t *testing.T) {
 		t.Errorf("a real failure must be reported: %v", err)
 	}
 }
+
+func TestListAllAndUpgradable(t *testing.T) {
+	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		switch c.Name {
+		case "dpkg-query":
+			return host.Result{Stdout: []byte("bash\t5.2-1\tinstall ok installed\nold\t1.0\tdeinstall ok config-files\nredis-server\t7.0-1\tinstall ok installed\n")}, nil
+		case "apt-get":
+			if len(c.Args) > 0 && c.Args[0] == "-s" {
+				return host.Result{Stdout: []byte("Reading package lists...\nInst redis-server [7.0-1] (7.0-2 Ubuntu:24.04/noble-updates [amd64])\nConf redis-server (7.0-2 Ubuntu:24.04/noble-updates [amd64])\n")}, nil
+			}
+		}
+		return host.Result{}, nil
+	}}
+	m := &Manager{Runner: r, FS: host.NewMemFS()}
+	all, err := m.ListAll(context.Background())
+	if err != nil || len(all) != 2 || all[0].Name != "bash" || all[1].Version != "7.0-1" {
+		t.Fatalf("a removed package must not be listed: %+v %v", all, err)
+	}
+	up, err := m.Upgradable(context.Background())
+	if err != nil || up["redis-server"] != "7.0-2" || len(up) != 1 {
+		t.Fatalf("%+v %v", up, err)
+	}
+}
+
+func TestUpdateAll(t *testing.T) {
+	var calls []string
+	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
+		calls = append(calls, c.Name+" "+strings.Join(c.Args, " "))
+		return host.Result{}, nil
+	}}
+	m := &Manager{Runner: r, FS: host.NewMemFS(), Now: time.Now}
+	if err := m.UpdateAll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if j := strings.Join(calls, "\n"); !strings.Contains(j, "apt-get update -qq") || !strings.Contains(j, "apt-get upgrade -y -qq") {
+		t.Errorf("%s", j)
+	}
+}
