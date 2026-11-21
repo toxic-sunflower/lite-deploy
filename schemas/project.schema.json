@@ -245,6 +245,14 @@
             },
             "type": "object"
           },
+          "sockets": {
+            "description": "for quadlet: directories of sockets on the host that the container may use (under /run or /var/run), for example /var/run/postgresql for a database on this server",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "type": "array"
+          },
           "stop": {
             "description": "for unit: stop command (ExecStop), for example podman compose down",
             "items": {

@@ -176,3 +176,22 @@ func TestCaddySiteFallbackAuth(t *testing.T) {
 		t.Errorf("no paths means the whole site:\n%s", pub)
 	}
 }
+
+// A container reaches a host socket (for example the one of PostgreSQL) through the setting `sockets`, with no field about
+// databases in the core.
+func TestQuadletSockets(t *testing.T) {
+	a := apiQuadlet("blue", 18081)
+	a.DatabaseSocket = false
+	a.Sockets = []string{"/var/run/postgresql", "/run/redis"}
+	got := Quadlet(a)
+	for _, want := range []string{"Volume=/var/run/postgresql:/var/run/postgresql\n", "Volume=/run/redis:/run/redis\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q:\n%s", want, got)
+		}
+	}
+	// the older setting and the new one together do not mount the same directory twice
+	a.DatabaseSocket = true
+	if n := strings.Count(Quadlet(a), "Volume=/var/run/postgresql:/var/run/postgresql"); n != 1 {
+		t.Errorf("the socket is mounted %d times", n)
+	}
+}

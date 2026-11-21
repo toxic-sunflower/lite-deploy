@@ -173,7 +173,7 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 			}
 			b.add(actions.InstallQuadletName, actions.InstallQuadlet{
 				Project: name, Service: sn, Slot: slot, HostPort: ports.Services[sn][i], ContainerPort: s.ContainerPort,
-				Memory: s.Limits.Memory, Pids: s.Limits.Pids, DatabaseSocket: s.DatabaseEnv != "" && d.Database.IsLocal(), Data: s.Data,
+				Memory: s.Limits.Memory, Pids: s.Limits.Pids, DatabaseSocket: s.DatabaseEnv != "" && d.Database.IsLocal(), Sockets: s.Sockets, Data: s.Data,
 			}, fmt.Sprintf("Quadlet unit %s-%s-%s, port 127.0.0.1:%d", name, sn, slot, ports.Services[sn][i]))
 		}
 	}

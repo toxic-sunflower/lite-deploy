@@ -136,6 +136,8 @@ func TestValidateRules(t *testing.T) {
 		{"max_body without a unit", func(p *Project) { p.Sites[0].MaxBody = "5" }, "/sites/0/max_body", "pattern"},
 		{"a path with a curly brace", func(p *Project) { p.Sites[0].Routes[0].Path = "/a{b}" }, "/sites/0/routes/0/path", "pattern"},
 		{"a path with a space", func(p *Project) { p.Sites[0].Routes[0].Path = "/a b" }, "/sites/0/routes/0/path", "pattern"},
+		{"a socket outside /run", func(p *Project) { s := p.Services["api"]; s.Sockets = []string{"/etc"}; p.Services["api"] = s }, "/services/api/sockets/0", "pattern"},
+		{"a socket path with ..", func(p *Project) { s := p.Services["api"]; s.Sockets = []string{"/run/../etc"}; p.Services["api"] = s }, "/services/api/sockets/0", "pattern"},
 		{"the key is not ed25519", func(p *Project) { p.DeployKey.PublicKey = "ssh-rsa AAAAB3NzaC1yc2E x" }, "/deploy_key/public_key", "pattern"},
 		{"a key with options", func(p *Project) {
 			p.DeployKey.PublicKey = `command="x" ` + p.DeployKey.PublicKey

@@ -115,7 +115,15 @@ func Validate(p *Project) []schema.Issue {
 			if s.Release != nil {
 				add(base+"/release", "not_applicable", "release is only allowed for kind unit")
 			}
+			for i, sk := range s.Sockets {
+				if !socketDirRe.MatchString(sk) || strings.Contains(sk, "..") {
+					add(base+"/sockets/"+strconv.Itoa(i), "pattern", "a directory under /run or /var/run, for example /var/run/postgresql")
+				}
+			}
 		case KindUnit:
+			if len(s.Sockets) > 0 {
+				add(base+"/sockets", "not_applicable", "sockets is only for containers: a process on the host reaches them directly")
+			}
 			if len(s.Exec) == 0 {
 				add(base+"/exec", "required", "kind unit needs a start command exec")
 			}
@@ -221,6 +229,8 @@ func Validate(p *Project) []schema.Issue {
 	}
 	return issues
 }
+
+var socketDirRe = regexp.MustCompile(`^/(run|var/run)/[a-z0-9_.-]+(/[a-z0-9_.-]+)*$`)
 
 var authPathRe = regexp.MustCompile(`^/[^\s{}]*$`)
 

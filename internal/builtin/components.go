@@ -149,7 +149,7 @@ func (PG) Commands() []plugin.Command {
 		{Name: "status", Help: "version and service state"},
 		{Name: "databases", Root: true, Help: "list of databases"},
 		{Name: "roles", Root: true, Help: "list of roles"},
-		{Name: "create-db", Confirm: true, Args: "DATABASE [ROLE] [--password-stdin]", Help: "create a database and a role (password in /etc/lite-deploy/secrets/pg-ROLE, root only; or your own password from stdin)"},
+		{Name: "create-db", Confirm: true, Args: "DATABASE [ROLE] [--password-stdin] [--project P --secret NAME [--template TEXT]]", Help: "create a database and a role (password in /etc/lite-deploy/secrets/pg-ROLE, root only; or your own password from stdin); with --project and --secret also let the role log in over the socket and store the ready connection string as that secret of the project (--template: your own notation with {host} {port} {user} {password} {db})"},
 		{Name: "drop-db", Confirm: true, Args: "DATABASE", Help: "delete a database (the role stays)"},
 		{Name: "backup", Root: true, Args: "[DATABASE]", Help: "back up a database (or all databases) into /var/backups/lite-deploy/pg, the latest 7 are kept"},
 		{Name: "backups", Root: true, Help: "list of backups"},
@@ -304,8 +304,30 @@ func (PG) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (p
 		return textOut("Password of role " + rest[0] + " changed.\n"), nil
 	case "create-db":
 		args, stdin := extractPasswordFlag(args)
-		if len(args) < 1 || len(args) > 2 {
-			return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg create-db DATABASE [ROLE] [--password-stdin]")
+		var project, secret, template string
+		var rest []string
+		for i := 0; i < len(args); i++ {
+			switch args[i] {
+			case "--project", "--secret", "--template":
+				if i+1 >= len(args) {
+					return plugin.Output{}, plugin.Errorf("usage", "%s needs a value", args[i])
+				}
+				switch args[i] {
+				case "--project":
+					project = args[i+1]
+				case "--secret":
+					secret = args[i+1]
+				default:
+					template = args[i+1]
+				}
+				i++
+			default:
+				rest = append(rest, args[i])
+			}
+		}
+		args = rest
+		if len(args) < 1 || len(args) > 2 || (secret != "") != (project != "") {
+			return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg create-db DATABASE [ROLE] [--password-stdin] [--project PROJECT --secret NAME [--template TEXT]]")
 		}
 		role := args[0]
 		if len(args) == 2 {
@@ -321,8 +343,27 @@ func (PG) Run(ctx context.Context, env plugin.Env, cmd string, args []string) (p
 		if err := t.createDB(args[0], role, given); err != nil {
 			return plugin.Output{}, err
 		}
-		return plugin.Output{Text: fmt.Sprintf("Database %s and role %s are ready; password: %s/pg-%s\n", args[0], role, pgSecretDir, role),
-			Data: map[string]any{"database": args[0], "role": role, "secret": pgSecretDir + "/pg-" + role}}, nil
+		if secret == "" {
+			return plugin.Output{Text: fmt.Sprintf("Database %s and role %s are ready; password: %s/pg-%s\n", args[0], role, pgSecretDir, role),
+				Data: map[string]any{"database": args[0], "role": role, "secret": pgSecretDir + "/pg-" + role}}, nil
+		}
+		// for a project: the role may log in over the socket, and the ready connection string becomes a secret of the project
+		pw, err := env.FS.ReadFile(pgSecretDir + "/pg-" + role)
+		if err != nil {
+			return plugin.Output{}, plugin.Errorf("io_error", "%v", err)
+		}
+		conn, err := pgConnection(template, role, args[0], strings.TrimSpace(string(pw)))
+		if err != nil {
+			return plugin.Output{}, err
+		}
+		if err := t.ensureHba(role); err != nil {
+			return plugin.Output{}, err
+		}
+		if err := t.storeConnection(project, secret, conn); err != nil {
+			return plugin.Output{}, err
+		}
+		return plugin.Output{Text: fmt.Sprintf("Database %s and role %s are ready. The connection is the secret %s of project %s (secret://%s); a container shares %s.\n", args[0], role, secret, project, secret, pgSocketDir),
+			Data: map[string]any{"database": args[0], "role": role, "project": project, "secret": secret, "socket": pgSocketDir}}, nil
 	case "drop-db":
 		if len(args) != 1 || !pgNameRe.MatchString(args[0]) {
 			return plugin.Output{}, plugin.Errorf("usage", "usage: lite pg drop-db DATABASE")

@@ -40,6 +40,11 @@ func Quadlet(a actions.InstallQuadlet) string {
 	if a.DatabaseSocket {
 		b.WriteString("Volume=/var/run/postgresql:/var/run/postgresql\n")
 	}
+	for _, s := range a.Sockets {
+		if !(a.DatabaseSocket && s == "/var/run/postgresql") { // the older setting already mounts it
+			fmt.Fprintf(&b, "Volume=%s:%s\n", s, s)
+		}
+	}
 	for _, d := range a.Data {
 		fmt.Fprintf(&b, "Volume=%%h/%s:/data/%s:U\n", DataDir(d), d)
 	}

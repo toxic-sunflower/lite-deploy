@@ -327,3 +327,47 @@ func TestHBAWideRules(t *testing.T) {
 		t.Errorf("one wide rule and one trust rule are expected: %v %v", w, tr)
 	}
 }
+
+// A database for a project: the connection becomes an ordinary secret of the project, in the notation the person wants.
+func TestPGCreateDBStoresTheConnectionAsASecret(t *testing.T) {
+	mem := host.NewMemFS()
+	const hba = "/etc/postgresql/16/main/pg_hba.conf"
+	_ = mem.MkdirAll("/etc/postgresql/16/main", 0o755)
+	_ = mem.WriteFile(hba, []byte("# TYPE DATABASE USER METHOD\nlocal   all   postgres   peer\nlocal   all   all   peer\nhost all all 127.0.0.1/32 scram-sha-256\n"), 0o640)
+	var calls []string
+	r := fn(func(c host.Cmd) (host.Result, error) {
+		calls = append(calls, c.Name+" "+strings.Join(c.Args, " "))
+		if c.Name == "runuser" && strings.Contains(strings.Join(c.Args, " "), "SHOW hba_file") {
+			return host.Result{Stdout: []byte(hba + "\n")}, nil
+		}
+		return host.Result{}, nil
+	})
+	env := plugin.Env{Runner: r, FS: mem}
+	if _, err := (PG{}).Run(context.Background(), env, "create-db", []string{"shop", "shopapp", "--project", "shop", "--secret", "database_url"}); err != nil {
+		t.Fatal(err)
+	}
+	pass, _ := mem.ReadFile(pgSecretDir + "/pg-shopapp")
+	got, err := mem.ReadFile("/var/lib/lite-deploy/secrets/shop/database_url")
+	want := "postgresql://shopapp:" + strings.TrimSpace(string(pass)) + "@/shop?host=/var/run/postgresql"
+	if err != nil || string(got) != want {
+		t.Fatalf("the secret is %q (%v), want %q", got, err, want)
+	}
+	if h, _ := mem.ReadFile(hba); !strings.Contains(string(h), "local   shopapp   shopapp   scram-sha-256") || strings.Index(string(h), "shopapp") > strings.Index(string(h), "local   all   all") {
+		t.Errorf("the rule of the role must come before the general one:\n%s", h)
+	}
+	if !strings.Contains(strings.Join(calls, "\n"), "systemctl reload postgresql") {
+		t.Error("PostgreSQL must reload its rules")
+	}
+	// the person's own notation, nothing listed in the code
+	if _, err := (PG{}).Run(context.Background(), env, "create-db", []string{"shop", "shopapp", "--project", "shop", "--secret", "dotnet", "--template", "Host={host};Database={db};Username={user};Password={password}"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := mem.ReadFile("/var/lib/lite-deploy/secrets/shop/dotnet"); string(got) != "Host=/var/run/postgresql;Database=shop;Username=shopapp;Password="+strings.TrimSpace(string(pass)) {
+		t.Errorf("template: %q", got)
+	}
+	for _, bad := range [][]string{{"shop", "--project", "shop"}, {"shop", "--secret", "x"}, {"shop", "--project", "shop", "--secret", "x", "--template", "{nope}"}, {"shop", "--project", "Bad Name", "--secret", "x"}} {
+		if _, err := (PG{}).Run(context.Background(), env, "create-db", bad); err == nil {
+			t.Errorf("%v must be refused", bad)
+		}
+	}
+}

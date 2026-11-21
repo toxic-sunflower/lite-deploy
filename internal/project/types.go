@@ -67,6 +67,7 @@ type Service struct {
 	Limits        *Limits           `json:"limits,omitempty"`
 	Env           map[string]string `json:"env,omitempty" keypattern:"^[A-Za-z_][A-Za-z0-9_]*$" valpattern:"^[^\\r\\n]*$" valMaxLen:"1024" maxProps:"128"`
 	Secrets       map[string]string `json:"secrets,omitempty" keypattern:"^[A-Za-z_][A-Za-z0-9_]*$" valpattern:"^secret://(shared/)?[a-z][a-z0-9_]{1,63}$" maxProps:"128"`
+	Sockets       []string          `json:"sockets,omitempty" maxItems:"4" doc:"for quadlet: directories of sockets on the host that the container may use (under /run or /var/run), for example /var/run/postgresql for a database on this server"`
 	DatabaseEnv   string            `json:"database_env,omitempty" pattern:"^[A-Za-z_][A-Za-z0-9_]*$" doc:"variable holding the database connection string"`
 }
 

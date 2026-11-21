@@ -155,6 +155,7 @@ type InstallQuadlet struct {
 	Memory         string   `json:"memory" pattern:"^[1-9][0-9]*[mg]$"`
 	Pids           int      `json:"pids" min:"16" max:"4096"`
 	DatabaseSocket bool     `json:"database_socket"`
+	Sockets        []string `json:"sockets,omitempty" maxItems:"4" doc:"directories of host sockets shared with the container"`
 	Data           []string `json:"data,omitempty" maxItems:"8" pattern:"^[a-z][a-z0-9-]{0,15}$" doc:"persistent directories, mounted at /data/<name>"`
 }
 
