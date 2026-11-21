@@ -25,7 +25,7 @@
     <input type="file" accept=".json,application/json" @change="importFile" style="width:auto"></div>\
   <p v-if="imported" class="help">Imported. Secret values are never in the file: fill in the ones shown with an empty value (secret settings, registry token, database password), then press “Show what will happen”.</p>\
   <div v-if="!podman" class="notice warn"><div class="t">Container components need podman, which is not on this server yet. Add it in <b>Server</b> first.</div></div>\
-  <div class="row"><div class="grow"><label>Project name (Latin letters, digits and “-”)</label><input type="text" v-model="name" placeholder="shop" autocomplete="off" spellcheck="false"></div>\
+  <div class="row"><div class="grow"><label>Project name (Latin letters, digits and “-”) <tip text="The name of the project. It is also the name of the system user that owns it on the server."></tip></label><input type="text" v-model="name" placeholder="shop" autocomplete="off" spellcheck="false"></div>\
     <div class="grow"><label>Description (optional)</label><input type="text" v-model="desc" autocomplete="off"></div></div>\
   <p v-if="!pgHere" class="help">A database is just a secret: install the program in <b>Packages</b>, then add a secret setting to the component below, for example <code>DATABASE_URL=postgres://user:password@host/name</code>.</p>\
   <label v-if="pgHere" class="check"><input type="checkbox" v-model="dbOn"> Make a PostgreSQL database for this project on this server</label>\
@@ -46,8 +46,8 @@
     <div class="row"><div class="grow"><label>Name</label><input type="text" v-model="s.name" autocomplete="off"></div>\
       <div class="grow"><label>How it runs</label><select v-model="s.kind"><option value="quadlet">Container (podman)</option><option value="unit">Program on the server</option></select></div></div>\
     <div v-if="s.kind === \'quadlet\'" class="row">\
-      <div class="grow"><label>Container image, without the version</label><input type="text" v-model="s.image" placeholder="ghcr.io/you/app" autocomplete="off" spellcheck="false"></div>\
-      <div class="grow"><label>Port the application listens on</label><input type="text" v-model="s.cport"></div></div>\
+      <div class="grow"><label>Container image, without the version <tip text="The address of the image in a registry, without :version. The version is chosen when you deploy."></tip></label><input type="text" v-model="s.image" placeholder="ghcr.io/you/app" autocomplete="off" spellcheck="false"></div>\
+      <div class="grow"><label>Port the application listens on <tip text="The port your application listens on inside the container. Lite Deploy connects the site to it."></tip></label><input type="text" v-model="s.cport"></div></div>\
     <template v-else>\
       <label>Command to start it (arguments separated by spaces)</label><input type="text" v-model="s.exec" placeholder="./bin/app" autocomplete="off">\
       <label>Where the build is downloaded from (a .tar.gz link; {sha} becomes the version)</label><input type="text" v-model="s.rurl" placeholder="https://example.com/app-{sha}.tar.gz" autocomplete="off">\
@@ -70,8 +70,8 @@
   <div class="box" v-for="(s, i) in sites" :key="i">\
     <div class="row"><div class="grow"><label>Name</label><input type="text" v-model="s.name" autocomplete="off"></div>\
       <div class="grow"><label>Domain</label><input type="text" v-model="s.host" placeholder="shop.example.com" autocomplete="off"></div>\
-      <div class="grow"><label>Which component answers</label><input type="text" v-model="s.service" autocomplete="off"></div></div>\
-    <div class="row"><div class="grow"><label>How visitors reach it</label><select v-model="s.publish"><option value="tunnel">Through a Cloudflare Tunnel</option><option value="direct">Directly (Caddy gets the certificate itself)</option></select></div>\
+      <div class="grow"><label>Which component answers <tip text="A web address is served by one component of the project. Write its name from the list above."></tip></label><input type="text" v-model="s.service" autocomplete="off"></div></div>\
+    <div class="row"><div class="grow"><label>How visitors reach it <tip text="Through Cloudflare: nothing on the server is open. Directly: the server answers on ports 80 and 443 and gets the certificate itself."></tip></label><select v-model="s.publish"><option value="tunnel">Through a Cloudflare Tunnel</option><option value="direct">Directly (Caddy gets the certificate itself)</option></select></div>\
     </div>\
     <details style="margin-top:8px"><summary class="help">Advanced: upload limit, real visitor address</summary>\
     <div class="row">\

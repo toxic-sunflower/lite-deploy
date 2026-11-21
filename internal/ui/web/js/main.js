@@ -71,6 +71,7 @@
   var app = Vue.createApp(Root);
   var C = LU.components;
   app.component('icon', C.Icon);
+  app.component('tip', C.Tip);
   app.component('overview', C.Overview);
   app.component('projects', C.Projects);
   app.component('ingress', C.Ingress);

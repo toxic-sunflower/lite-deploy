@@ -7,7 +7,7 @@
 <div>\
   <h1>Packages</h1>\
   <p class="sub">Programs installed on this server: find and install one, see which have an update, update or remove the ones you choose.</p>\
-  <h3>Find and install</h3>\
+  <h3>Find and install <tip text="Search the repositories of the system by name or by what the program does, then install it."></tip></h3>\
   <form class="row" @submit.prevent="search">\
     <input class="grow" type="text" v-model="query" placeholder="What do you need? For example: redis, git, ffmpeg" autocomplete="off" spellcheck="false">\
     <button class="primary" type="submit" :disabled="$root.state.busy"><icon name="plus"></icon>Search</button></form>\
@@ -15,7 +15,7 @@
     <tr v-for="f in found" :key="f.name"><td><code>{{ f.name }}</code></td><td>{{ f.summary }}</td>\
       <td style="text-align:right"><button @click="install(f.name)" :disabled="$root.state.busy">Install</button></td></tr></table>\
   <p v-else-if="found" class="empty">Nothing found. Try another word.</p>\
-  <h3>Installed</h3>\
+  <h3>Installed <tip text="Programs on the server. A yellow line means a newer version is available."></tip></h3>\
   <div class="row" style="margin-bottom:8px">\
     <label class="check" style="margin:0"><input type="checkbox" v-model="all" @change="load"> Show all installed packages (not only those installed here)</label>\
     <label class="check" style="margin:0"><input type="checkbox" v-model="onlyUpd"> Only those with an update</label>\

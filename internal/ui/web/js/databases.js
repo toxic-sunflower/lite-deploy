@@ -4,7 +4,7 @@
     data: function () { return { st: null, dbs: null, backups: null, error: '', more: false, askKey: null, key: '' }; },
     template: '\
 <div>\
-  <h1>Databases</h1>\
+  <h1>Databases <tip text="PostgreSQL databases on this server. The database of a project is made from the New project form."></tip></h1>\
   <p class="sub">PostgreSQL on this server: the databases of your projects and their backups.</p>\
   <p v-if="error" class="down">{{ error }}</p>\
   <div v-if="st" class="card row spread">\

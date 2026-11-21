@@ -7,7 +7,7 @@
 <div>\
   <h1>Protection</h1>\
   <p class="sub">The checks of this server, and which ports are open to the internet.</p>\
-  <h3>Server check</h3>\
+  <h3>Server check <tip text="A quick look at the server: is login by key only, is the firewall on, are security updates on. Green means fine; the line under a problem says what to do."></tip></h3>\
   <div class="row"><button class="primary" @click="check" :disabled="$root.state.busy">Check now</button>\
     <button v-if="needsFix" @click="fix" :disabled="$root.state.busy">Fix what can be fixed automatically</button></div>\
   <p v-if="error" class="down">{{ error }}</p>\
@@ -17,7 +17,7 @@
       <td>{{ f.message }}<div class="help" v-if="f.fix && f.level !== \'ok\'">{{ f.fix }}</div></td></tr>\
   </table>\
   <div class="notice" v-if="verify"><icon name="info"></icon><div class="t">{{ nextText }}</div></div>\
-  <h3>Confirm with my key</h3>\
+  <h3>Confirm with my key <tip text="An extra lock for dangerous changes (ports, SSH, backups, publishing). When it is on, they work only if they are signed by a key that stays on this workstation, so even someone who breaks into the server cannot change them. Deploying and rolling back are not affected. It is optional: turn it on after everything is set up."></tip></h3>\
   <div class="card" v-if="own">\
     <div v-if="!own.supported" class="muted">This server is older and cannot do this yet. Update Lite Deploy on the server first.</div>\
     <template v-else>\
@@ -30,7 +30,7 @@
       <div class="help" style="margin-top:8px">Commands typed in a terminal on the server for such changes are refused while this is on. If this workstation is lost, a person with root on the server removes <code>/etc/lite-deploy/owner-keys</code>.</div>\
     </template>\
   </div>\
-  <h3>Banned addresses</h3>\
+  <h3>Banned addresses <tip text="The server blocks an address for an hour after many wrong passwords. If you locked yourself out, release the address here."></tip></h3>\
   <div class="card">\
     <div class="help">The server bans an address for an hour after repeated wrong SSH logins or wrong site passwords. If you locked yourself out, release the ban here.</div>\
     <div class="row" style="margin-top:8px"><button @click="showBans" :disabled="$root.state.busy">Show who is banned</button>\
@@ -40,7 +40,7 @@
       <input class="grow" type="text" v-model="banIp" placeholder="address to release, e.g. 203.0.113.9" autocomplete="off" spellcheck="false">\
       <button type="submit" :disabled="$root.state.busy">Release this address</button></form>\
   </div>\
-  <h3>Open ports</h3>\
+  <h3>Open ports <tip text="A port is a door of the server. Only the doors listed here are open to the internet. The door for logging in (SSH) and the web doors are always kept safe."></tip></h3>\
   <p v-if="fwErr" class="down">{{ fwErr }}</p>\
   <div class="card" v-if="fw">\
     <div class="muted">The firewall is {{ fw.active ? "on" : "off" }}. SSH port: {{ fw.ssh_port }}.</div>\

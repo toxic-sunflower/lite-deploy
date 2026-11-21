@@ -10,13 +10,13 @@
   <p v-if="error" class="down">{{ error }}</p>\
   <template v-if="info">\
     <div class="card row spread">\
-      <div><b>Web server (Caddy)</b> <span class="muted">{{ info.caddy.installed ? (info.caddy.running ? "is running" : "is installed but not running") : "is not installed" }}</span></div>\
+      <div><b>Web server (Caddy)</b> <tip text="Caddy is the program that receives visitors and hands them to your applications. It also gets the HTTPS certificates."></tip> <span class="muted">{{ info.caddy.installed ? (info.caddy.running ? "is running" : "is installed but not running") : "is not installed" }}</span></div>\
       <button v-if="!info.caddy.installed" class="primary" @click="installCaddy" :disabled="$root.state.busy">Install</button>\
     </div>\
     <div v-if="needsPorts" class="notice warn"><div class="t">Some domains are reached directly, but the web ports 80 and 443 are closed, so visitors cannot get in and no certificate can be issued.</div>\
       <button class="primary" @click="openPorts" :disabled="$root.state.busy">Open the web ports</button></div>\
     <div class="card">\
-      <div><b>Cloudflare</b> <span class="muted">{{ cfText }}</span></div>\
+      <div><b>Cloudflare</b> <tip text="Cloudflare can stand in front of your site: visitors reach it through a tunnel, so no port of the server is open. One button under a domain sets it all up."></tip> <span class="muted">{{ cfText }}</span></div>\
       <div class="help">Connect a domain through Cloudflare with one button: the server creates the tunnel, the route and the DNS record in the Cloudflare account that owns the domain. Press the button under a domain below and paste a Cloudflare API token there (the owner of the account creates it in Cloudflare: My Profile, API Tokens, Create Custom Token, with <b>Account: Cloudflare Tunnel: Edit</b>, <b>Zone: DNS: Edit</b>, <b>Zone: Zone: Read</b>). Each domain can use its own token, even from a different Cloudflare account. The token is used once on the server and is not saved anywhere.</div>\
       <table v-if="cf && cf.tunnels.length" style="margin-top:8px">\
         <tr v-for="x in cf.tunnels" :key="x.name"><td>Tunnel {{ x.name }}</td><td :class="x.running ? \'up\' : \'down\'">{{ x.running ? "connected and running" : "connected but not running" }}</td>\
@@ -28,7 +28,7 @@
           <input class="grow" type="password" v-model="token" placeholder="Tunnel token" autocomplete="off" spellcheck="false">\
           <button type="submit" :disabled="$root.state.busy">Connect the tunnel</button></form></details>\
     </div>\
-    <h3>Domains</h3>\
+    <h3>Domains <tip text="Each row is a web address of a project. Choose how visitors reach it: through Cloudflare (safer, nothing is open) or directly (the server answers on ports 80 and 443)."></tip></h3>\
     <p v-if="!info.sites.length" class="empty">No domains yet. A domain is added when you create a project.</p>\
     <table v-else>\
       <template v-for="s in info.sites" :key="s.project + s.site">\

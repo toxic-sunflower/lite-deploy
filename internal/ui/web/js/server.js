@@ -6,23 +6,23 @@
 <div>\
   <h1>Server</h1>\
   <p class="sub">What is installed on this server and what you can add.</p>\
-  <h3>lite</h3>\
+  <h3>Lite Deploy <tip text="Lite Deploy itself on the server. Update installs the newest version; the page waits about a minute."></tip></h3>\
   <div class="notice"><icon name="refresh"></icon><div class="t" v-if="$root.state.update">Version {{ $root.state.update.current }}.\
       {{ $root.state.update.available ? "A new version is available: " + $root.state.update.latest + "." : "This is the latest version." }}</div>\
     <div class="t muted" v-else>Checking for updates…</div>\
     <button v-if="$root.state.update && $root.state.update.available" class="primary" @click="$root.applyUpdate" :disabled="$root.state.busy">Update</button>\
     <button v-else @click="$root.checkUpdate">Check again</button></div>\
-  <h3>Server configuration</h3>\
+  <h3>Server configuration <tip text="Save the setup of this server as a file, to set up another server the same way."></tip></h3>\
   <div class="card"><div class="row spread"><div><b>Save this server as a file</b><div class="help">Who may log in (with public keys), the firewall, the programs, protection and backups. No passwords or secrets. Give the file to <code>lite init --config</code> on a new server.</div></div>\
     <button @click="saveConfig" :disabled="$root.state.busy"><icon name="backup"></icon>Save configuration</button></div></div>\
-  <h3>Installed</h3>\
+  <h3>Installed <tip text="Plugins add abilities to the server (backups, a database, Cloudflare). Installed ones can be opened."></tip></h3>\
   <div v-for="p in installed" :key="p.name">\
     <div class="notice"><icon name="check"></icon><div class="t"><b>{{ p.name }}</b> <span class="muted">{{ p.description }}</span></div>\
       <button v-if="home(p)" @click="$root.go(home(p).id)">Open {{ home(p).title }}</button>\
       <button @click="open = open === p.name ? \'\' : p.name">{{ open === p.name ? "Hide" : "Manage" }}</button></div>\
     <plugin-panel v-if="open === p.name" :plugin="p" @done="reload"></plugin-panel>\
   </div>\
-  <h3>Can be added</h3>\
+  <h3>Can be added <tip text="Plugins that are not installed yet. Press Install to add one."></tip></h3>\
   <p v-if="!available.length" class="muted">Everything available is already installed.</p>\
   <div v-for="p in available" :key="p.name" class="notice"><icon name="plus"></icon>\
     <div class="t"><b>{{ p.name }}</b> <span class="muted">{{ p.description }}</span></div>\

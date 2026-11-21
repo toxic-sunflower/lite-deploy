@@ -13,8 +13,8 @@
     </div>\
     <div class="metrics">\
       <div class="metric"><div class="l">Projects</div><div class="v">{{ projects ? projects.length : 0 }}</div></div>\
-      <div class="metric"><div class="l">Checks passed</div><div class="v">{{ verify.ok }} of {{ verify.ok + verify.warnings + verify.failures }}</div></div>\
-      <div class="metric"><div class="l">Protection</div><div class="v">{{ protectionOn ? "On" : "Needs work" }}</div></div>\
+      <div class="metric"><div class="l">Checks passed <tip text="How many of the checks of the server are green. The ones that are not are listed below and on the Protection page."></tip></div><div class="v">{{ verify.ok }} of {{ verify.ok + verify.warnings + verify.failures }}</div></div>\
+      <div class="metric"><div class="l">Protection <tip text="On means the basic protection is set: login by key, firewall, automatic security updates."></tip></div><div class="v">{{ protectionOn ? "On" : "Needs work" }}</div></div>\
     </div>\
     <div v-if="$root.state.uiUpdate" class="notice warn">\
       <icon name="refresh"></icon><div class="t">A new version of Lite Deploy UI is available: {{ $root.state.uiUpdate.latest }} (you have {{ $root.state.uiUpdate.current }}).</div>\
@@ -24,7 +24,7 @@
       <icon name="refresh"></icon><div class="t">A new version of Lite Deploy on the server is available: {{ $root.state.update.latest }} (you have {{ $root.state.update.current }}).</div>\
       <button class="primary" @click="$root.applyUpdate" :disabled="$root.state.busy">Update</button>\
     </div>\
-    <h3>Needs your attention</h3>\
+    <h3>Needs your attention <tip text="Things worth doing. Press the button next to a line to do it."></tip></h3>\
     <div v-for="f in attention" :key="f.key" class="notice" :class="f.level === \'fail\' ? \'bad\' : \'warn\'">\
       <icon name="alert"></icon><div class="t">{{ f.text }}</div>\
       <button v-if="f.action" class="primary" @click="act(f)" :disabled="$root.state.busy">{{ f.action.label }}</button>\
@@ -36,7 +36,7 @@
     </div>\
     <template v-if="notes.length"><h3>For your information</h3>\
       <div v-for="f in notes" :key="f.key" class="notice"><icon name="info"></icon><div class="t muted">{{ f.text }}</div></div></template>\
-    <h3>Projects</h3>\
+    <h3>Projects <tip text="Your applications on this server. Open one to deploy a new version or roll back."></tip></h3>\
     <div v-if="projects && !projects.length" class="empty">No projects yet.</div>\
     <div v-for="p in projects" :key="p.project" class="notice">\
       <div class="t"><span class="dot" :class="running(p) ? \'ok\' : \'bad\'"></span><b>{{ p.project }}</b>\

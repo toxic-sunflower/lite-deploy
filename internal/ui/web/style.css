@@ -77,3 +77,7 @@ h1 { font-size:24px; letter-spacing:-.01em; }
 .theme { width:100%; margin:6px 0 14px; display:flex; align-items:center; justify-content:center; gap:6px; }
 .brand { display:flex; align-items:center; gap:8px; }
 .brand img { width:24px; height:24px; }
+.tip { position:relative; display:inline-block; margin-left:6px; vertical-align:middle; text-transform:none; letter-spacing:0; font-weight:400; }
+.tipbtn { width:18px; height:18px; padding:0; border-radius:50%; font-size:12px; line-height:16px; color:var(--muted); background:transparent; cursor:pointer; }
+.tipbtn:hover { color:var(--fg); border-color:var(--muted); }
+.tippop { position:absolute; z-index:30; left:-6px; top:26px; width:min(340px,72vw); background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:13px; line-height:1.45; box-shadow:0 8px 24px rgba(0,0,0,.18); white-space:normal; text-align:left; }

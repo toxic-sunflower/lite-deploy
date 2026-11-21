@@ -62,7 +62,7 @@
     <div class="card row spread"><div><b>Backups are set up</b><div class="help">Daily backup: {{ st.scheduled ? "on, around 03:00" : "off" }}. {{ st.count }} settings backup(s){{ st.last ? ", the last one " + when(st.last) : "" }}.</div></div>\
       <div class="row"><button @click="toggle" :disabled="$root.state.busy">{{ st.scheduled ? "Turn daily backup off" : "Turn daily backup on" }}</button>\
         <button class="primary" @click="runNow" :disabled="$root.state.busy">Back up now</button></div></div>\
-    <h3>What is backed up</h3>\
+    <h3>What is backed up <tip text="Choose what is copied for the server and for each project, and when. Backups are encrypted with your key, so a stolen copy is useless."></tip></h3>\
     <p class="help">Choose for the server itself and for each project what is copied, where, and when. The server means the web server (Caddy) and the settings of lite. A project means its settings, secrets, database and files.</p>\
     <template v-for="tg in (st.targets || [])" :key="tg.name"><div class="card" v-if="edit[tg.name]">\
       <div class="row spread"><h2><icon :name="tg.kind === \'server\' ? \'server\' : \'apps\'"></icon> {{ tg.kind === "server" ? "The server" : tg.name }}</h2>\
@@ -82,7 +82,7 @@
     <h3>Settings and secrets backups</h3>\
     <p v-if="!list.length" class="empty">No backups yet. Press “Back up now”.</p>\
     <table v-else><tr><th>File</th></tr><tr v-for="f in list" :key="f"><td><code>{{ f }}</code></td></tr></table>\
-    <h3>Copies outside this server (optional)</h3>\
+    <h3>Copies outside this server (optional) <tip text="A copy that stays on the same server is lost with it. Send copies to another place: Backblaze, S3 or another server."></tip></h3>\
     <p class="help">A backup that lives only on the server is lost with the server. Add a place outside it.</p>\
     <div v-for="n in stores" :key="n" class="notice"><icon name="backup"></icon><div class="t"><b>{{ title(n) }}</b>\
       <span class="muted"> {{ configured(n) ? "is connected" : "" }}</span></div>\
