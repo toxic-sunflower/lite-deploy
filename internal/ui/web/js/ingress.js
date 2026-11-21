@@ -2,7 +2,7 @@
   // Ingress is how traffic reaches this server: the web server (Caddy), the web ports, and every domain with the way
   // visitors reach it.
   LU.components.Ingress = {
-    data: function () { return { cfa: { token: '', name: '', account: '', accounts: '' }, acc: { who: '', path: '' }, apps: null, info: null, error: '', pick: {}, cf: null, token: '', tname: '', open: '', fa: { user: '', password: '', paths: '' }, cfOpen: '', pickT: {} }; },
+    data: function () { return { cfa: { token: '', name: '', account: '', accounts: '' }, acc: { who: '', path: '' }, apps: null, info: null, error: '', pick: {}, cf: null, token: '', tname: '', open: '', fa: { user: '', password: '', paths: '' }, cfOpen: '', connOpen: '', pickT: {} }; },
     template: '\
 <div>\
   <h1>Ingress</h1>\
@@ -17,10 +17,7 @@
       <button class="primary" @click="openPorts" :disabled="$root.state.busy">Open the web ports</button></div>\
     <div class="card">\
       <div><b>Cloudflare</b> <span class="muted">{{ cfText }}</span></div>\
-      <div class="help">Connect a domain through Cloudflare with one button: the server creates the tunnel, the route and the DNS record in the Cloudflare account that owns the domain. Paste a Cloudflare API token (the owner of the account creates it in Cloudflare: My Profile, API Tokens, Create Custom Token, with <b>Account: Cloudflare Tunnel: Edit</b>, <b>Zone: DNS: Edit</b>, <b>Zone: Zone: Read</b>). It is used once on the server and is not saved anywhere.</div>\
-      <div class="row"><div class="grow"><label>API token</label><input type="password" v-model="cfa.token" autocomplete="off" spellcheck="false"></div>\
-        <div class="grow"><label>Tunnel name (any, e.g. the project or a friend). Domains with the same name share one tunnel, different names make different tunnels</label><input type="text" v-model="cfa.name" placeholder="default" autocomplete="off" spellcheck="false"></div></div>\
-      <div v-if="cfa.accounts" class="help warntxt">This token sees several Cloudflare accounts: {{ cfa.accounts }}. Put the id of the right one here and press the button again: <input type="text" v-model="cfa.account" style="width:260px" autocomplete="off"></div>\
+      <div class="help">Connect a domain through Cloudflare with one button: the server creates the tunnel, the route and the DNS record in the Cloudflare account that owns the domain. Press the button under a domain below and paste a Cloudflare API token there (the owner of the account creates it in Cloudflare: My Profile, API Tokens, Create Custom Token, with <b>Account: Cloudflare Tunnel: Edit</b>, <b>Zone: DNS: Edit</b>, <b>Zone: Zone: Read</b>). Each domain can use its own token, even from a different Cloudflare account. The token is used once on the server and is not saved anywhere.</div>\
       <table v-if="cf && cf.tunnels.length" style="margin-top:8px">\
         <tr v-for="x in cf.tunnels" :key="x.name"><td>Tunnel {{ x.name }}</td><td :class="x.running ? \'up\' : \'down\'">{{ x.running ? "connected and running" : "connected but not running" }}</td>\
           <td style="text-align:right"><button @click="cfRemove(x.name)" :disabled="$root.state.busy">Disconnect</button></td></tr>\
@@ -46,10 +43,17 @@
         <span v-if="s.protected">When served directly, {{ where(s) }} asks for a password (logins: {{ s.protected.users.join(", ") }}).</span>\
         <span v-else>When served directly, this site has no password.</span>\
         <button class="link" @click="toggle(s)">{{ open === s.project + s.site ? "Hide" : "Set a password…" }}</button> ·\
-        <button class="primary" @click="cfaConnect(s)" :disabled="$root.state.busy">Connect through Cloudflare</button> ·\
+        <button class="primary" @click="toggleConnect(s)">{{ connOpen === s.project + s.site ? "Hide" : "Connect through Cloudflare" }}</button> ·\
         <button class="link" @click="toggleCf(s)">{{ cfOpen === s.project + s.site ? "Hide" : "Close with a Cloudflare login…" }}</button>\
+        <div v-if="connOpen === s.project + s.site" class="box">\
+          <div class="row"><div class="grow"><label>Cloudflare API token for {{ s.host }}</label><input type="password" v-model="cfa.token" autocomplete="off" spellcheck="false"></div>\
+            <div class="grow"><label>Tunnel name (any; domains with the same name share one tunnel)</label><input type="text" v-model="cfa.name" placeholder="default" autocomplete="off" spellcheck="false"></div></div>\
+          <div v-if="cfa.accounts" class="help warntxt">This token sees several Cloudflare accounts: {{ cfa.accounts }}. Put the id of the right one here and press the button again: <input type="text" v-model="cfa.account" style="width:260px" autocomplete="off"></div>\
+          <div class="row" style="margin-top:10px"><button class="primary" @click="cfaConnect(s)" :disabled="$root.state.busy">Connect {{ s.host }}</button></div>\
+        </div>\
         <div v-if="cfOpen === s.project + s.site" class="box">\
           <div class="help">A Cloudflare login page in front of {{ s.host }}, with the token above (Access also needs the permission <b>Account: Access: Apps and Policies: Edit</b>).</div>\
+          <label>Cloudflare API token</label><input type="password" v-model="cfa.token" autocomplete="off" spellcheck="false">\
           <label>Who may enter (e-mail addresses, or @example.com for a whole mail domain, separated by spaces)</label><input type="text" v-model="acc.who" placeholder="me@example.com" autocomplete="off">\
           <label>Path to close (empty: the whole domain)</label><input type="text" v-model="acc.path" placeholder="/admin*" autocomplete="off" spellcheck="false">\
           <div class="row" style="margin-top:10px"><button class="primary" @click="cfaProtect(s)" :disabled="$root.state.busy">Close it</button>\
@@ -122,6 +126,7 @@
         this.cfaCall('Removing…', ['access-remove', '--app', a.id], function () { return a.domain + ' is open again.'; }).then(function (r) { if (r.ok) self.cfaList(s); });
       },
       appsFor: function (s) { return (this.apps || []).filter(function (a) { return a.domain === s.host || a.domain.indexOf(s.host + '/') === 0; }); },
+      toggleConnect: function (s) { var k = s.project + s.site; this.connOpen = this.connOpen === k ? '' : k; this.cfa.accounts = ''; this.cfa.account = ''; },
       toggleCf: function (s) { var k = s.project + s.site; this.cfOpen = this.cfOpen === k ? '' : k; this.apps = null; },
       where: function (s) { return s.protected.paths && s.protected.paths.length ? s.protected.paths.join(' ') : 'the whole site'; },
       toggle: function (s) {

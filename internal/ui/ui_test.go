@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -772,4 +773,22 @@ func TestMCPToolsMatchThePage(t *testing.T) {
 type mcpTool struct {
 	run      func(context.Context, map[string]any) (string, error)
 	readOnly bool
+}
+
+// A single missing comma in a script of the page makes the browser skip the whole file without a word, and the part of the
+// page that lives in it silently does nothing. Every script is parsed here (needs node; skipped where it is not installed).
+func TestWebScriptsParse(t *testing.T) {
+	if _, err := (host.ExecRunner{}).Run(context.Background(), host.Cmd{Name: "node", Args: []string{"--version"}}); err != nil {
+		t.Skip("node is not installed")
+	}
+	files, _ := filepath.Glob("web/js/*.js")
+	if len(files) == 0 {
+		t.Fatal("no scripts found")
+	}
+	for _, f := range files {
+		res, err := host.ExecRunner{}.Run(context.Background(), host.Cmd{Name: "node", Args: []string{"--check", f}})
+		if err != nil || res.ExitCode != 0 {
+			t.Errorf("%s does not parse: %s", f, strings.TrimSpace(string(res.Stderr)))
+		}
+	}
 }

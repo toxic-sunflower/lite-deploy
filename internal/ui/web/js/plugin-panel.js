@@ -12,7 +12,7 @@
 
   LU.components.PluginPanel = {
     props: ['plugin'],
-    data: function () { return { args: {}, out: {} }; }
+    data: function () { return { args: {}, out: {} }; },
     template: '\
 <div class="card">\
   <h2>{{ plugin.name }}</h2>\

@@ -18,6 +18,7 @@
   <h3>Installed</h3>\
   <div v-for="p in installed" :key="p.name">\
     <div class="notice"><icon name="check"></icon><div class="t"><b>{{ p.name }}</b> <span class="muted">{{ p.description }}</span></div>\
+      <button v-if="home(p)" @click="$root.go(home(p).id)">Open {{ home(p).title }}</button>\
       <button @click="open = open === p.name ? \'\' : p.name">{{ open === p.name ? "Hide" : "Manage" }}</button></div>\
     <plugin-panel v-if="open === p.name" :plugin="p" @done="reload"></plugin-panel>\
   </div>\
@@ -36,6 +37,12 @@
       available: function () { return LU.state.plugins.filter(function (p) { return p.installed === false; }); }
     },
     methods: {
+      // plugins that have a page of their own: the page is the way to manage them
+      home: function (p) {
+        var m = { backup: ['backups', 'Backups'], firewall: ['security', 'Protection'], security: ['security', 'Protection'], package: ['packages', 'Packages'],
+          caddy: ['ingress', 'Ingress'], cloudflare: ['ingress', 'Ingress'], pg: ['databases', 'Databases'] }[p.name];
+        return m ? { id: m[0], title: m[1] } : null;
+      },
       hasInstall: function (p) { return (p.commands || []).some(function (c) { return c.name === 'install' && !c.args; }); },
       reload: function () { LU.loadPlugins(); },
       saveConfig: function () {
