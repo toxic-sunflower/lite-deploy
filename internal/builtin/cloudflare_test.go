@@ -160,3 +160,63 @@ func TestCloudflareConnectDoesTheWholeJobOnTheServer(t *testing.T) {
 		t.Error("the port must be the port of a site")
 	}
 }
+
+func TestCloudflareUnderAttack(t *testing.T) {
+	zone := "fedcba9876543210fedcba9876543210"
+	level := "medium"
+	var patches []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		switch {
+		case r.URL.Path == "/zones" && r.URL.Query().Get("name") == "example.com":
+			_, _ = w.Write([]byte(`{"success":true,"result":[{"id":"` + zone + `","name":"example.com"}]}`))
+		case r.URL.Path == "/zones":
+			_, _ = w.Write([]byte(`{"success":true,"result":[]}`))
+		case r.Method == "PATCH" && r.URL.Path == "/zones/"+zone+"/settings/security_level":
+			patches = append(patches, string(b))
+			level = "under_attack"
+			if strings.Contains(string(b), `"medium"`) {
+				level = "medium"
+			}
+			_, _ = w.Write([]byte(`{"success":true,"result":{"value":"` + level + `"}}`))
+		case r.Method == "GET" && r.URL.Path == "/zones/"+zone+"/settings/security_level":
+			_, _ = w.Write([]byte(`{"success":true,"result":{"value":"` + level + `"}}`))
+		default:
+			_, _ = w.Write([]byte(`{"success":true,"result":{}}`))
+		}
+	}))
+	defer srv.Close()
+	old := cfAPIBase
+	cfAPIBase = srv.URL
+	defer func() { cfAPIBase = old }()
+	const apiToken = "the-cloudflare-api-token-value"
+	run := func(domain, mode string) (plugin.Output, error) {
+		mem := host.NewMemFS()
+		env := plugin.Env{Runner: &host.FakeRunner{}, FS: mem, Stdin: strings.NewReader(apiToken + "\n")}
+		out, err := Cloudflare{}.Run(context.Background(), env, "under-attack", []string{"--token-stdin", "--domain", domain, "--mode", mode, "--account", "0123456789abcdef0123456789abcdef"})
+		for name, body := range mem.Files {
+			if strings.Contains(string(body), apiToken) {
+				t.Errorf("the API token was written to %s", name)
+			}
+		}
+		return out, err
+	}
+	if out, err := run("app.example.com", "status"); err != nil || out.Data.(map[string]any)["under_attack"] != false {
+		t.Fatalf("status: %+v %v", out, err)
+	}
+	if out, err := run("app.example.com", "on"); err != nil || out.Data.(map[string]any)["under_attack"] != true || len(patches) != 1 || !strings.Contains(patches[0], `"under_attack"`) {
+		t.Fatalf("on: %+v %v %v", out, err, patches)
+	}
+	if _, err := run("app.example.com", "on"); err != nil || len(patches) != 1 {
+		t.Fatalf("turning it on twice must change nothing: %v %v", err, patches)
+	}
+	if out, err := run("app.example.com", "off"); err != nil || out.Data.(map[string]any)["under_attack"] != false || len(patches) != 2 || !strings.Contains(patches[1], `"medium"`) {
+		t.Fatalf("off: %+v %v %v", out, err, patches)
+	}
+	if _, err := run("app.other.org", "on"); err == nil {
+		t.Error("a domain of no account must be refused")
+	}
+	if _, err := run("app.example.com", "maybe"); err == nil {
+		t.Error("the mode must be on, off or status")
+	}
+}

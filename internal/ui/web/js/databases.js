@@ -4,6 +4,9 @@
     data: function () { return { st: null, dbs: null, backups: null, error: '', more: false, askKey: null, key: '' }; },
     template: '\
 <div>\
+  <div v-if="!here"><h1>Databases</h1><p class="sub">There is no database on this server yet.</p>\
+    <button class="primary" @click="install" :disabled="$root.state.busy">Install PostgreSQL</button></div>\
+  <div v-else>\
   <h1>Databases <tip text="PostgreSQL databases on this server. The database of a project is made from the New project form."></tip></h1>\
   <p class="sub">PostgreSQL on this server: the databases of your projects and their backups.</p>\
   <p v-if="error" class="down">{{ error }}</p>\
@@ -27,9 +30,16 @@
   <h3>More</h3>\
   <button @click="more = !more">{{ more ? "Hide" : "Show all database commands" }}</button>\
   <plugin-panel v-if="more && plugin" :plugin="plugin" @done="load"></plugin-panel>\
+  </div>\
 </div>',
-    computed: { plugin: function () { return LU.state.plugins.filter(function (p) { return p.name === 'pg'; })[0]; } },
+    computed: { here: function () { return LU.present('pg'); }, plugin: function () { return LU.state.plugins.filter(function (p) { return p.name === 'pg'; })[0]; } },
     methods: {
+      install: function () {
+        if (!confirm('Install PostgreSQL on this server?')) return;
+        var self = this;
+        LU.run('Installing PostgreSQL…', '/api/plugin', { plugin: 'pg', command: 'install', args: [] }, function () { return 'PostgreSQL is installed.'; })
+          .then(function () { return LU.loadPlugins(); }).then(function () { self.load(); });
+      },
       when: function (iso) { var d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(); },
       call: function (command, args, stdin) {
         var body = { plugin: 'pg', command: command, args: args };
@@ -69,6 +79,6 @@
         this.run('Restoring…', 'restore', [b.database, b.file, '--identity-stdin'], 'The database ' + b.database + ' was restored.', k + '\n').then(function () { self.askKey = null; self.key = ''; });
       }
     },
-    mounted: function () { this.load(); }
+    mounted: function () { if (this.here) this.load(); }
   };
 })();

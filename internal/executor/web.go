@@ -45,14 +45,15 @@ func installQuadlet(_ context.Context, r *run, v any) (outcome, error) {
 		return outcome{}, err
 	}
 	path := home(p.Project) + "/.config/containers/systemd/" + render.UnitName(p.Project, p.Service, p.Slot) + ".container"
-	changed, bak, err := r.ensureFile(fileSpec{path: path, data: []byte(render.Quadlet(*p)), perm: 0o600, owner: p.Project, group: p.Project})
+	text := render.Quadlet(*p)
+	changed, bak, err := r.ensureFile(fileSpec{path: path, data: []byte(text), perm: 0o600, owner: p.Project, group: p.Project})
 	if err != nil {
 		return outcome{}, err
 	}
 	if changed {
 		r.unitsChanged = true
 	}
-	return outcome{changed: changed, detail: bakNote(bak)}, nil
+	return outcome{changed: changed, detail: bakNote(bak), path: path, content: text}, nil
 }
 
 func installUnit(_ context.Context, r *run, v any) (outcome, error) {
@@ -61,14 +62,15 @@ func installUnit(_ context.Context, r *run, v any) (outcome, error) {
 		return outcome{}, err
 	}
 	path := home(p.Project) + "/.config/systemd/user/" + render.UnitName(p.Project, p.Service, p.Slot) + ".service"
-	changed, bak, err := r.ensureFile(fileSpec{path: path, data: []byte(render.Unit(*p)), perm: 0o600, owner: p.Project, group: p.Project})
+	text := render.Unit(*p)
+	changed, bak, err := r.ensureFile(fileSpec{path: path, data: []byte(text), perm: 0o600, owner: p.Project, group: p.Project})
 	if err != nil {
 		return outcome{}, err
 	}
 	if changed {
 		r.unitsChanged = true
 	}
-	return outcome{changed: changed, detail: bakNote(bak)}, nil
+	return outcome{changed: changed, detail: bakNote(bak), path: path, content: text}, nil
 }
 
 // reloadUserUnits: daemon-reload in the user session, then a check that the units are visible.
@@ -204,7 +206,7 @@ func installCaddySite(_ context.Context, r *run, v any) (outcome, error) {
 	if r.dry && changedAny {
 		r.sitesChanged = true
 	}
-	return outcome{changed: changedAny, detail: joinDetail(notes...)}, nil
+	return outcome{changed: changedAny, detail: joinDetail(notes...), path: site, content: string(data)}, nil
 }
 
 func (r *run) managedProjects() []string {

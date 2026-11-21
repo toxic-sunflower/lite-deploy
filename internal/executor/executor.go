@@ -70,6 +70,9 @@ type StepResult struct {
 	State  string `json:"state"`
 	Detail string `json:"detail,omitempty"`
 	Error  string `json:"error,omitempty"`
+	// Path and Content are the file this step writes and its text; only in dry-run (the preview), so a person can read the result.
+	Path    string `json:"path,omitempty"`
+	Content string `json:"content,omitempty"`
 }
 
 // Report is the outcome of applying.
@@ -86,6 +89,8 @@ type Report struct {
 type outcome struct {
 	changed bool
 	detail  string
+	path    string // the file written and its text, shown in the preview
+	content string
 }
 
 // run is the state of one apply: what the earlier steps have already done.
@@ -188,6 +193,9 @@ func Apply(ctx context.Context, e Env, pl *plan.Plan, dry bool) (*Report, error)
 			out, err = h(ctx, r, params)
 		}
 		res.Detail = out.detail
+		if dry {
+			res.Path, res.Content = out.path, out.content
+		}
 		switch {
 		case err != nil && dry:
 			res.State, res.Error = StateWouldFail, err.Error()

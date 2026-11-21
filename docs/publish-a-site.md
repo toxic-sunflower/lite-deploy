@@ -141,6 +141,8 @@ In **Ingress**, press “Close with a Cloudflare login…” under the domain: t
 
 It uses the same API token as above, with one more permission for this: **Account: Access: Apps and Policies: Edit**. As before, it is used once on the server and not saved.
 
+**Under attack.** In the same panel there is “I’m Under Attack!” mode: Cloudflare shows every visitor a short check page before the site, which stops most bots. Turn it on while the site is being attacked and off afterwards. It applies to the **whole domain**, not to one address. The token needs **Zone: Zone Settings: Edit** besides **Zone: Zone: Read**. In a terminal: `echo TOKEN | lite cloudflare under-attack --token-stdin --domain app.example.com --mode on|off|status`. “Off” sets the normal level (`medium`), whatever it was before. Cloudflare already filters ordinary DDoS traffic for every domain behind its proxy (so for a tunnel); this mode is the extra step for an attack that gets through.
+
 ## When Cloudflare is down: switch to direct
 
 A tunnel is one more thing that can fail. To be able to move quickly:

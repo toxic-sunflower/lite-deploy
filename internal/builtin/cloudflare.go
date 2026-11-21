@@ -86,6 +86,7 @@ func (Cloudflare) Commands() []plugin.Command {
 		{Name: "access-list", Confirm: true, Args: "--token-stdin [--account ID]", Help: "what is closed with Cloudflare Access in the account (API token from standard input, never kept)"},
 		{Name: "access-protect", Confirm: true, Args: "--token-stdin --domain DOMAIN [--path /admin*] --who NAME@EXAMPLE.COM[,@EXAMPLE.COM] [--account ID]", Help: "close a domain or a path with a Cloudflare login page"},
 		{Name: "access-remove", Confirm: true, Args: "--token-stdin --app ID [--account ID]", Help: "open a closed address again"},
+		{Name: "under-attack", Confirm: true, Args: "--token-stdin --domain DOMAIN --mode on|off|status", Help: "Cloudflare \"I'm Under Attack!\" mode: every visitor passes a short check page first (an attack on the site: turn it on, afterwards off). It applies to the whole domain, not to one address. API token from standard input, never kept"},
 		{Name: "status", Args: "[--name NAME]", Help: "is cloudflared installed, and which tunnels run"},
 		{Name: "remove", Confirm: true, Args: "[--name NAME]", Help: "stop a tunnel and delete its token"},
 	}
@@ -298,6 +299,8 @@ func (Cloudflare) Run(ctx context.Context, env plugin.Env, cmd string, args []st
 		return textOut("The tunnel " + name + " is connected and running.\nNext: in the Cloudflare dashboard of that account route your domain to http://127.0.0.1:PORT (the port of the site), and keep the site set to “through a Cloudflare Tunnel” in Ingress.\n"), nil
 	case "connect":
 		return Cloudflare{}.connect(ctx, env, args)
+	case "under-attack":
+		return Cloudflare{}.underAttack(ctx, env, args)
 	case "access-list", "access-protect", "access-remove":
 		return Cloudflare{}.access(ctx, env, cmd, args)
 	case "status":
@@ -479,5 +482,80 @@ func (Cloudflare) access(ctx context.Context, env plugin.Env, cmd string, args [
 			return plugin.Output{}, plugin.Errorf("step_failed", "%v", err)
 		}
 		return plugin.Output{Text: "The application is removed: the address is open again.\n"}, nil
+	}
+}
+
+// underAttack switches the Cloudflare security level of the domain to "I'm Under Attack!" and back. The token is read from
+// standard input, used once and never kept; it needs Zone: Zone Settings: Edit and Zone: Zone: Read.
+func (Cloudflare) underAttack(ctx context.Context, env plugin.Env, args []string) (plugin.Output, error) {
+	usage := plugin.Errorf("usage", "usage: echo APITOKEN | lite cloudflare under-attack --token-stdin --domain DOMAIN --mode on|off|status")
+	var domain, mode string
+	stdin := false
+	for i := 0; i < len(args); i++ {
+		next := func() string {
+			if i+1 >= len(args) {
+				return ""
+			}
+			i++
+			return args[i]
+		}
+		switch args[i] {
+		case "--token-stdin":
+			stdin = true
+		case "--domain":
+			domain = next()
+		case "--mode":
+			mode = next()
+		case "--account": // sent by the page for every Cloudflare command; the zone is found by the domain
+			next()
+		default:
+			return plugin.Output{}, usage
+		}
+	}
+	if !stdin || env.Stdin == nil || domain == "" || (mode != "on" && mode != "off" && mode != "status") {
+		return plugin.Output{}, usage
+	}
+	b, _ := io.ReadAll(io.LimitReader(env.Stdin, 4096))
+	apiToken := strings.TrimSpace(string(b))
+	if len(apiToken) < 20 {
+		return plugin.Output{}, plugin.Errorf("usage", "the Cloudflare API token is read from standard input")
+	}
+	c := cfaccess.New(apiToken)
+	c.Base = cfAPIBase
+	z, err := c.ZoneFor(ctx, domain)
+	if err != nil {
+		return plugin.Output{}, plugin.Errorf("step_failed", "%v", err)
+	}
+	before, err := c.SecurityLevel(ctx, z.ID)
+	if err != nil {
+		return plugin.Output{}, plugin.Errorf("step_failed", "%v", err)
+	}
+	data := map[string]any{"zone": z.Name, "before": before, "level": before, "under_attack": before == cfaccess.UnderAttack}
+	switch mode {
+	case "status":
+		text := "The domain " + z.Name + " is in the normal mode (security level " + before + ").\n"
+		if before == cfaccess.UnderAttack {
+			text = "The domain " + z.Name + " is in the \"I'm Under Attack!\" mode.\n"
+		}
+		return plugin.Output{Text: text, Data: data}, nil
+	case "on":
+		if before != cfaccess.UnderAttack {
+			if err := c.SetSecurityLevel(ctx, z.ID, cfaccess.UnderAttack); err != nil {
+				return plugin.Output{}, plugin.Errorf("step_failed", "%v", err)
+			}
+		}
+		data["level"], data["under_attack"] = cfaccess.UnderAttack, true
+		return plugin.Output{Text: "\"I'm Under Attack!\" is on for the whole domain " + z.Name + ": every visitor passes a short check first. Turn it off when the attack is over.\n", Data: data}, nil
+	default: // off
+		if before == cfaccess.UnderAttack {
+			if err := c.SetSecurityLevel(ctx, z.ID, cfaccess.NormalLevel); err != nil {
+				return plugin.Output{}, plugin.Errorf("step_failed", "%v", err)
+			}
+		}
+		data["level"], data["under_attack"] = cfaccess.NormalLevel, false
+		if before != cfaccess.UnderAttack {
+			data["level"] = before
+		}
+		return plugin.Output{Text: "\"I'm Under Attack!\" is off for " + z.Name + " (the security level is back to the normal one).\n", Data: data}, nil
 	}
 }

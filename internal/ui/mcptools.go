@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/mcp"
+	"github.com/toxic-sunflower/lite-deploy/internal/project"
+	"github.com/toxic-sunflower/lite-deploy/internal/schema"
 )
 
 // MCPTools are the tools of the MCP mode of lite-ui. They read the state and do the things that are safe to leave to an
@@ -25,6 +27,7 @@ func (s *Server) MCPTools() []mcp.Tool {
 		}
 		return m
 	}
+	projectSchema := schema.Reflect(project.Project{}, project.SchemaID, "The project description.")
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 	target := func(args map[string]any) (string, error) {
 		if v, _ := args["server"].(string); v != "" {
@@ -48,34 +51,7 @@ func (s *Server) MCPTools() []mcp.Tool {
 		if err != nil {
 			return "", err
 		}
-		raw := s.Request(ctx, t, method, path, body)
-		var env struct {
-			OK    bool            `json:"ok"`
-			Data  json.RawMessage `json:"data"`
-			Error *struct {
-				Code, Message, Hint string
-			} `json:"error"`
-		}
-		if json.Unmarshal(raw, &env) != nil {
-			return "", errors.New("the server returned something that is not JSON")
-		}
-		if !env.OK {
-			if env.Error == nil {
-				return "", errors.New("the request failed")
-			}
-			msg := env.Error.Message
-			if env.Error.Hint != "" {
-				msg += "\n" + env.Error.Hint
-			}
-			return "", errors.New(msg)
-		}
-		var pretty strings.Builder
-		var v any
-		if json.Unmarshal(env.Data, &v) == nil {
-			b, _ := json.MarshalIndent(v, "", "  ")
-			pretty.Write(b)
-		}
-		return pretty.String(), nil
+		return renderEnvelope(s.Request(ctx, t, method, path, body))
 	}
 	// api runs one request of the page in this same process, with the same checks as in the page, and shows the answer.
 	api := func(ctx context.Context, args map[string]any, method, path string, body any) (string, error) {
@@ -150,10 +126,10 @@ func (s *Server) MCPTools() []mcp.Tool {
 			Schema: obj(map[string]any{"server": serverArg, "project": str("The project."), "site": str("The site."), "action": map[string]any{"type": "string", "enum": []string{"set", "remove-user", "off"}}, "user": str("The login."), "password": str("The password (set only)."), "paths": arr}, "project", "site", "action"),
 			Run:    post("/api/fallback-auth")},
 		{Name: "project_preview", ReadOnly: true, Description: "Show what creating or changing a project would do, without changing anything. project is the project description (see project_export for an example); secrets maps secret names to values (they are encrypted on this workstation).",
-			Schema: obj(map[string]any{"server": serverArg, "project": map[string]any{"type": "object", "description": "The project description."}, "secrets": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}}}, "project"),
+			Schema: obj(map[string]any{"server": serverArg, "project": projectSchema, "secrets": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}}}, "project"),
 			Run:    post("/api/project/preview")},
 		{Name: "project_create", Description: "Create or change a project from its description (run project_preview first and show the person the steps). Secret values go encrypted to the server. Ask the person first.",
-			Schema: obj(map[string]any{"server": serverArg, "project": map[string]any{"type": "object", "description": "The project description."}, "secrets": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}}, "expect_project_hash": str("project_hash from the preview.")}, "project"),
+			Schema: obj(map[string]any{"server": serverArg, "project": projectSchema, "secrets": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}}, "expect_project_hash": str("project_hash from the preview.")}, "project"),
 			Run:    post("/api/project/create")},
 		{Name: "secret_set", Description: "Set a secret of a project (project shared: a secret shared by projects). The value passes through this chat: prefer typing it in the page. Ask the person first.",
 			Schema: obj(map[string]any{"server": serverArg, "project": str("The project, or shared."), "name": str("The secret name (lowercase letters, digits, _)."), "value": str("The value.")}, "project", "name", "value"),
@@ -265,6 +241,7 @@ func renderEnvelope(raw []byte) (string, error) {
 		Data  json.RawMessage `json:"data"`
 		Error *struct {
 			Code, Message, Hint string
+			Details             []struct{ Path, Code, Message string }
 		} `json:"error"`
 	}
 	if json.Unmarshal(raw, &env) != nil {
@@ -275,6 +252,9 @@ func renderEnvelope(raw []byte) (string, error) {
 			return "", errors.New("the request failed")
 		}
 		msg := env.Error.Message
+		for _, d := range env.Error.Details {
+			msg += "\n- " + d.Path + ": " + d.Message
+		}
 		if env.Error.Hint != "" {
 			msg += "\n" + env.Error.Hint
 		}

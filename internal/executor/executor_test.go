@@ -245,6 +245,25 @@ func TestApplyFromScratchThenIdempotent(t *testing.T) {
 	if n := states(dry)[StateWouldChange]; n < 10 {
 		t.Fatalf("dry-run must promise changes: %v", states(dry))
 	}
+	// the preview shows the text of the files it will write
+	var quadlets, sites int
+	for _, st := range dry.Steps {
+		switch st.Action {
+		case "install_quadlet":
+			if st.Path == "" || !strings.Contains(st.Content, "[Container]") {
+				t.Fatalf("the preview of %s has no file text: %+v", st.ID, st)
+			}
+			quadlets++
+		case "install_caddy_site":
+			if st.Path == "" || st.Content == "" {
+				t.Fatalf("the preview of %s has no file text: %+v", st.ID, st)
+			}
+			sites++
+		}
+	}
+	if quadlets == 0 || sites == 0 {
+		t.Fatalf("the preview shows no files: quadlets %d, sites %d", quadlets, sites)
+	}
 	if w.users["shop"] || w.role || len(w.fsys.Files) != filesBefore || len(w.fsys.Dirs) != dirsBefore {
 		t.Fatal("dry-run changed the system")
 	}

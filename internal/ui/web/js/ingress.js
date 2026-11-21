@@ -60,6 +60,11 @@
             <button @click="cfaList(s)" :disabled="$root.state.busy">Show what is closed</button></div>\
           <table v-if="apps" style="margin-top:8px"><tr v-for="a in appsFor(s)" :key="a.id"><td>{{ a.domain }}</td><td style="text-align:right"><button @click="cfaRemove(s, a)" :disabled="$root.state.busy">Open it again</button></td></tr></table>\
           <div v-if="apps && !appsFor(s).length" class="help">Nothing of {{ s.host }} is closed.</div>\
+          <h4 style="margin:16px 0 4px">“I’m Under Attack!” mode</h4>\
+          <div class="help">While the site is being attacked (many strange requests, it is slow): Cloudflare shows every visitor a short check page before the site, which stops most bots. Turn it off when the attack is over. It applies to the <b>whole domain</b>, not to one address. The token above also needs <b>Zone: Zone Settings: Edit</b>.</div>\
+          <div class="row" style="margin-top:8px"><button class="primary" @click="cfaAttack(s, \'on\')" :disabled="$root.state.busy">Turn on</button>\
+            <button @click="cfaAttack(s, \'off\')" :disabled="$root.state.busy">Turn off</button>\
+            <button @click="cfaAttack(s, \'status\')" :disabled="$root.state.busy">Is it on now?</button></div>\
         </div>\
         <div v-if="open === s.project + s.site" class="box">\
           <div class="help">A fallback for when Cloudflare is not in front of the site: it is asked for only in the “Directly” mode, never in the tunnel mode. Only a hash of the password is kept on the server.</div>\
@@ -115,6 +120,11 @@
         var args = ['access-protect', '--domain', s.host, '--who', who.join(',')];
         if (this.acc.path.trim()) args = args.concat(['--path', this.acc.path.trim()]);
         this.cfaCall('Closing…', args, function () { return s.host + ' is closed with a Cloudflare login.'; });
+      },
+      cfaAttack: function (s, mode) {
+        if (mode === 'on' && !confirm('Turn on “I’m Under Attack!” for the whole domain of ' + s.host + '? Every visitor will first pass a short check.')) return;
+        var msg = { on: 'The mode is on.', off: 'The mode is off.', status: 'Done.' }[mode];
+        this.cfaCall('Asking Cloudflare…', ['under-attack', '--domain', s.host, '--mode', mode], function (d) { return d && d.zone ? (d.under_attack ? 'On' : 'Off') + ' for ' + d.zone + ' (security level ' + d.level + ').' : msg; });
       },
       cfaList: function (s) {
         var self = this;

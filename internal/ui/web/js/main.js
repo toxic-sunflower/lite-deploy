@@ -40,7 +40,7 @@
     data: function () { return { state: S }; },
     computed: {
       isDark: function () { return S.theme === 'dark' || (S.theme === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); },
-      menu: function () { return ALL.filter(function (m) { return !m.plugin || LU.present(m.plugin) || m.plugin === 'backup'; }); },
+      menu: function () { return ALL.filter(function (m) { return !m.plugin || LU.present(m.plugin) || m.plugin === 'backup' || m.plugin === 'pg'; }); },
       current: function () { return ALL.filter(function (m) { return m.id === S.page; })[0] || ALL[0]; },
       pluginObj: function () { var n = this.current.plugin; return S.plugins.filter(function (p) { return p.name === n && p.installed !== false; })[0]; }
     },
