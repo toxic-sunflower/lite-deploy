@@ -36,7 +36,7 @@ In brief: what was decided, why, the status. Details and schemes: `ARCHITECTURE.
 
 **D-14. The order of introducing plugins.** Version 1: all plugins are built into the binary. Version 2: a sandbox for community plugins (tentatively WASM, a permission manifest, a signature, trust levels). Status: accepted.
 
-**D-15. The default set of plugins.** Caddy, Postgres, Podman, Cloudflare Tunnel (the default publishing provider), `base` (server protection). Status: accepted. (Docker was dropped from the set by R-11, 2026-11-19.)
+**D-15. The default set of plugins.** Caddy, Postgres, Podman, Cloudflare Tunnel (the default publishing provider), `base` (server protection). Status: accepted. Cloudflare as a whole: D-85. (Docker was dropped from the set by R-11, 2026-11-19.)
 
 **D-16. Describing containers: compose and Quadlet, can be mixed in one project.** Quadlet is for Podman and systemd only. A single project model; the engine plugin generates the needed format from it. Status: accepted.
 
@@ -199,7 +199,7 @@ Taken from the documentation of the projects themselves, 2026-10-29:
 - Kamal: SSH as root by default, the config in the repository, no daemon and no panel ([Installation](https://kamal-deploy.org/docs/installation/)).
 - Not checked: the Dokploy AI Assistant and API, Dokku, CapRover, Podman in the full text of the documentation, real memory use.
 
-**D-71. Two publishing modes, one loopback listener.** `tunnel` and `direct` differ only by an extra public Caddy site block (`host { … }`, automatic HTTPS) that imports the same upstream file as the 127.0.0.1 block, so deploys, rollback and the upstream switch are unchanged and a tunnel keeps working in `direct` mode. On the public block `CF-Connecting-IP` is overwritten with the real peer address when `trusted_proxy` is `cloudflare`. Status: accepted by the owner (2026-11-20).
+**D-71. Two publishing modes, one loopback listener.** `tunnel` and `direct` differ only by an extra public Caddy site block (`host { … }`, automatic HTTPS) that imports the same upstream file as the 127.0.0.1 block, so deploys, rollback and the upstream switch are unchanged and a tunnel keeps working in `direct` mode. Cloudflare as a whole: D-85. On the public block `CF-Connecting-IP` is overwritten with the real peer address when `trusted_proxy` is `cloudflare`. Status: accepted by the owner (2026-11-20).
 
 
 
@@ -222,7 +222,7 @@ Taken from the documentation of the projects themselves, 2026-10-29:
 
 ## D-80 (2026-11-20). No logic on the client
 
-`lite-ui`, the CLI and MCP are thin: every action is one command of the agent or a plugin (`lite PLUGIN COMMAND`), so the page, the terminal and an AI assistant do exactly the same thing. The Cloudflare side of a domain is `lite cloudflare connect` (and `access-*`), run on the server; the Cloudflare API token is read from standard input, used once and never stored. An earlier version had this logic in `lite-ui` (D-79 era) and it was removed. Client-only things stay client-only: updating `lite-ui`, running it in the background, encrypting a secret with the server key.
+`lite-ui`, the CLI and MCP are thin: every action is one command of the agent or a plugin (`lite PLUGIN COMMAND`), so the page, the terminal and an AI assistant do exactly the same thing. The Cloudflare side of a domain is `lite cloudflare connect` (and `access-*`), run on the server (the whole Cloudflare picture: D-85); the Cloudflare API token is read from standard input, used once and never stored. An earlier version had this logic in `lite-ui` (D-79 era) and it was removed. Client-only things stay client-only: updating `lite-ui`, running it in the background, encrypting a secret with the server key.
 
 ## D-81 (2026-11-20). A database is a secret
 
@@ -377,3 +377,38 @@ Replaces the step "2. Database" of the new-project form (T24). A list; the butto
 * Place 4: do the blue/green application containers join the project network, and does the loopback publishing stay.
 * The delivery of the infra secrets to the application: for now `secret://` references as in D-81; when lite-vault (D-82 about lite-vault, T26) exists the same secrets can be delivered as tmpfs files; the infra commands must write them through the same secret path, so that move is free.
 * MinIO: package or signed binary, and where the data lives (a `data` directory of the system user, or `/var/lib`).
+
+## D-85 (2026-11-22). Cloudflare: what we do, where it lives, with what token
+
+One place for what is scattered over D-11, D-15, D-20, D-71 and D-80 and over T21 and T25 of `PLAN.md`. Nothing here changes those decisions; it adds the one new thing (the Under Attack mode, below).
+
+**What Cloudflare is for us.**
+1. **Tunnel** is the default way to publish a site (D-15, D-71): the server connects out to Cloudflare, so no port of the server is open. `direct` mode (Caddy answers on 80 and 443 and gets the certificate itself) is the way out when Cloudflare has a problem, and a tunnel keeps working in it (D-71).
+2. **Access** closes a domain or a path with a Cloudflare login (e-mail or a whole mail domain). It is also one of the confirmation methods of D-11 and the way to put the server UI behind a login (D-20).
+3. **Under Attack** (new): the zone security level `under_attack`, a short check page for every visitor. Accepted by the owner (2026-11-21).
+4. **Ordinary DDoS filtering** is not ours to switch on: Cloudflare does it for every domain behind its proxy, so for a tunnel. In `direct` mode there is none.
+
+**Where the logic lives (D-80).** Everything is a command of the `cloudflare` plugin run on the server: `connect` (tunnel, route and DNS record in one step), `access-list`, `access-protect`, `access-remove`, `under-attack --mode on|off|status`, `status`, `remove`. The page, the terminal and MCP only call them. The Cloudflare API token is read from standard input, used once and never stored; only the token of the tunnel is kept, in a closed file for `cloudflared` (mode 600, root).
+
+**The token and what it needs.** The owner of the Cloudflare account creates it; each domain can use its own token, even from another account (so several tunnels, `--name`).
+
+| For | Permissions |
+|---|---|
+| `connect` | Account: Cloudflare Tunnel: Edit; Zone: DNS: Edit; Zone: Zone: Read |
+| `access-*` | Account: Access: Apps and Policies: Edit |
+| `under-attack` | Zone: Zone Settings: Edit (tentative: not yet checked against the real Cloudflare) |
+
+**Under Attack, the rules.**
+- It applies to the **whole domain (zone)**, never to one address. This is a limit of Cloudflare, and the page says it.
+- `on` sets `under_attack`; `off` sets the normal level `medium`, whatever the level was before (the program keeps no state about it).
+- Turning it on twice changes nothing. It is an action that confirms with the owner's key like the other changing actions of the plugin (`Confirm: true`, D-78).
+- It is switched by hand. Switching on load or on a signal is not done.
+
+**Limits to remember.**
+- A DNS record of the same name from an earlier tunnel is not overwritten by a new route: error 1033 while the tunnel is Healthy (`DEPLOY-PATTERN.md`). `connect` replaces a record of this name and the page asks first.
+- Uploads through the free plan are limited to 100 MB.
+- A fallback Basic-auth password exists only in `direct` mode and never in tunnel mode.
+
+**Not done.** Deleting a tunnel together with its route and DNS record; WAF rules, rate limiting, Bot Fight Mode; automatic switching of Under Attack. Live check of all Cloudflare calls: `TESTING.md` (T20).
+
+Status: a summary of accepted decisions; Under Attack accepted by the owner (2026-11-21), its token permission to be confirmed live.
