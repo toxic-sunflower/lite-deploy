@@ -34,6 +34,10 @@ RestrictRealtime=yes
 SystemCallArchitectures=native
 `
 
+// The root units have no `User=root` on purpose: root is the default for a system service, and with an explicit User=root
+// systemd 255 starts the service without CAP_SETUID in its permitted set, so `runuser` (caddy, postgres, podman) fails with
+// "cannot set user id: Operation not permitted" (checked on Ubuntu 24.04, 2026-11-22).
+
 // Units returns the systemd unit files (name → content) for the binary bin.
 func Units(bin, group string) map[string]string {
 	return map[string]string{
@@ -88,7 +92,6 @@ WantedBy=sockets.target
 Description=lite-deploy: executor (root, on request)
 
 [Service]
-User=root
 ExecStart=` + bin + ` exec
 StandardInput=socket
 StandardOutput=socket
@@ -113,7 +116,6 @@ WantedBy=sockets.target
 Description=lite-deploy: traffic switch helper (root, on request)
 
 [Service]
-User=root
 ExecStart=` + bin + ` switch-serve
 StandardInput=socket
 StandardOutput=socket

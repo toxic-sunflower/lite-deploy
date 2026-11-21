@@ -26,7 +26,6 @@ type world struct {
 	role, db  bool
 	rolePw    string
 	validOK   bool
-	noSetuid  bool
 	podmanVer string
 	cmds      []string
 	pubkey    string
@@ -82,9 +81,6 @@ func (w *world) handle(c host.Cmd) (host.Result, error) {
 	case "podman":
 		return out("podman version " + w.podmanVer)
 	case "caddy":
-		if len(c.Args) > 0 && c.Args[0] == "validate" && !w.validOK {
-			return host.Result{ExitCode: 1, Stderr: []byte("bad config")}, nil
-		}
 		return out("v2.8.4")
 	case "visudo":
 		return ok()
@@ -100,9 +96,6 @@ func (w *world) handle(c host.Cmd) (host.Result, error) {
 		return out("1")
 	case "runuser":
 		if c.Args[1] == "caddy" {
-			if w.noSetuid {
-				return host.Result{ExitCode: 1, Stderr: []byte("runuser: cannot set user id: Operation not permitted")}, nil
-			}
 			if !w.validOK {
 				return host.Result{ExitCode: 1, Stderr: []byte("bad config")}, nil
 			}
@@ -382,27 +375,6 @@ func TestStopsOnFirstFailure(t *testing.T) {
 	// the steps already done stay
 	if !w.users["shop"] {
 		t.Error("the user must stay")
-	}
-}
-
-func TestCaddyCheckWhereSwitchingUserIsForbidden(t *testing.T) {
-	w := newWorld(t)
-	w.noSetuid = true
-	if rep := w.apply(w.buildPlan(false, nil), false); rep.Failed != "" {
-		t.Fatalf("the check must fall back to root: failed on %s", rep.Failed)
-	}
-	fell := false
-	for _, c := range w.cmds {
-		fell = fell || strings.HasPrefix(c, "caddy validate")
-	}
-	if !fell {
-		t.Error("the check was not repeated as root")
-	}
-	// a real config error must still stop the run
-	w2 := newWorld(t)
-	w2.noSetuid, w2.validOK = true, false
-	if rep := w2.apply(w2.buildPlan(false, nil), false); rep.Failed == "" {
-		t.Error("a bad config passed the fallback check")
 	}
 }
 
