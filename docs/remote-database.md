@@ -1,6 +1,6 @@
 # A database on another server
 
-By default a project's PostgreSQL runs on the same server and is reached over a unix socket. When the database should live on a different server, you describe it in the project and open access on the database server. This tutorial uses two servers:
+By default a project's PostgreSQL runs on the same server and is reached over a unix socket. When the database should live on a different server, you give the project its connection as a secret and open access on the database server. This tutorial uses two servers:
 
 - `app1` runs the project `shop` (the address on your internal network is `10.0.0.5`);
 - `db1` runs PostgreSQL (`10.0.0.2`).
@@ -11,16 +11,7 @@ Use a private network between the servers. The database port is opened only for 
 
 ![The Databases page.](img/databases.png)
 
-## 1. Register the database server on `app1`
-
-```sh
-lite server add db1 10.0.0.2 --yes
-lite server list
-```
-
-The registry maps a name to an address on the internal network.
-
-## 2. Create the database and the role on `db1`
+## 1. Create the database and the role on `db1`
 
 Pick a password for the role (16 to 128 characters from `A-Za-z0-9_.~-`) and give it on standard input, so it does not land in shell history:
 
@@ -30,7 +21,7 @@ echo 'a-long-random-password' | lite pg create-db shop shop --password-stdin --y
 
 The role and the database are named after the project; hyphens in the project name become underscores.
 
-## 3. Open access on `db1`
+## 2. Open access on `db1`
 
 ```sh
 lite pg listen 10.0.0.2 --yes                      # also listen on this server's internal address
@@ -40,7 +31,7 @@ lite pg access                                     # who has access now
 
 `allow` edits a separate block of `pg_hba.conf` (an error in the file restores the previous content), requires `ssl` and a password, and opens port `5432` in the firewall **only for `10.0.0.5`**. Addresses like `0.0.0.0/0` are refused. `PostgreSQL` is restarted by `listen`.
 
-## 4. Point the project at it, on `app1`
+## 3. Point the project at it, on `app1`
 
 A database on another server is just a secret of the project: the connection string. Put it in the form of the project (a secret setting `DATABASE_URL=...`), or in the description:
 

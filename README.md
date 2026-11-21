@@ -200,14 +200,9 @@ The rules live in a separate block of `pg_hba.conf`; on an error in the file the
 
 ## Several servers
 
-A project lives on one server and each server has its own `lite`. Foreign resources are connected by an address from the server registry (addresses on the internal network):
+A project lives on one server and each server has its own `lite`. A resource on another server (a database, for example) is just a secret of the project, the connection string:
 
-```sh
-sudo lite server add db1 10.0.0.2       # on the project server: the name and address of the database server
-lite server list
-```
-
-A database on another server is a secret of the project, the connection string (see [A database on another server](docs/remote-database.md)):
+See [A database on another server](docs/remote-database.md):
 
 ```json
 "secrets": { "DATABASE_URL": "secret://database_url" }
