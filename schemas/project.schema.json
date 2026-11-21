@@ -7,46 +7,6 @@
       "description": "take over a project that was set up by hand",
       "type": "boolean"
     },
-    "database": {
-      "additionalProperties": false,
-      "properties": {
-        "connection_format": {
-          "description": "connection string format, url by default",
-          "enum": [
-            "npgsql",
-            "url",
-            "libpq"
-          ],
-          "type": "string"
-        },
-        "engine": {
-          "enum": [
-            "postgres"
-          ],
-          "type": "string"
-        },
-        "password_secret": {
-          "description": "for a database on another server: the secret with the role password (the role and database are named after the project, hyphens replaced by _)",
-          "pattern": "^secret://(shared/)?[a-z][a-z0-9_]{1,63}$",
-          "type": "string"
-        },
-        "port": {
-          "description": "PostgreSQL port on another server; 5432 by default",
-          "maximum": 65535,
-          "minimum": 1,
-          "type": "integer"
-        },
-        "server": {
-          "description": "server from the registry (lite server add) where PostgreSQL runs; local by default",
-          "pattern": "^[a-z][a-z0-9-]{0,30}$",
-          "type": "string"
-        }
-      },
-      "required": [
-        "engine"
-      ],
-      "type": "object"
-    },
     "deploy_key": {
       "additionalProperties": false,
       "properties": {
@@ -120,11 +80,6 @@
             },
             "maxItems": 8,
             "type": "array"
-          },
-          "database_env": {
-            "description": "variable holding the database connection string",
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-            "type": "string"
           },
           "env": {
             "additionalProperties": {

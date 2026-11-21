@@ -21,20 +21,10 @@ type Project struct {
 	Name        string             `json:"name" pattern:"^[a-z][a-z0-9-]{1,30}$" doc:"project name; the same as the system user name"`
 	Description string             `json:"description,omitempty" maxLen:"200"`
 	Adopt       bool               `json:"adopt,omitempty" doc:"take over a project that was set up by hand"`
-	Database    *Database          `json:"database,omitempty"`
 	Registry    *Registry          `json:"registry,omitempty"`
 	Services    map[string]Service `json:"services" keypattern:"^[a-z][a-z0-9-]{0,15}$" minProps:"1" maxProps:"8"`
 	Sites       []Site             `json:"sites" minItems:"1" maxItems:"8"`
 	DeployKey   *DeployKey         `json:"deploy_key,omitempty"`
-}
-
-// Database is a project database on the host PostgreSQL.
-type Database struct {
-	Engine           string `json:"engine" enum:"postgres"`
-	Server           string `json:"server,omitempty" pattern:"^[a-z][a-z0-9-]{0,30}$" doc:"server from the registry (lite server add) where PostgreSQL runs; local by default"`
-	Port             int    `json:"port,omitempty" min:"1" max:"65535" doc:"PostgreSQL port on another server; 5432 by default"`
-	PasswordSecret   string `json:"password_secret,omitempty" pattern:"^secret://(shared/)?[a-z][a-z0-9_]{1,63}$" doc:"for a database on another server: the secret with the role password (the role and database are named after the project, hyphens replaced by _)"`
-	ConnectionFormat string `json:"connection_format,omitempty" enum:"npgsql,url,libpq" doc:"connection string format, url by default"`
 }
 
 // Registry is a login to an image registry.
@@ -49,9 +39,6 @@ const (
 	KindQuadlet = "quadlet" // a podman container under systemd (the default)
 	KindUnit    = "unit"    // a process on the host under systemd: a binary, Node, .NET and so on
 )
-
-// ServerLocal is the server lite runs on; the others come from the server registry (R-26).
-const ServerLocal = "local"
 
 // Service is a project component: a container or a process on the host (the kind field).
 type Service struct {
@@ -68,7 +55,6 @@ type Service struct {
 	Env           map[string]string `json:"env,omitempty" keypattern:"^[A-Za-z_][A-Za-z0-9_]*$" valpattern:"^[^\\r\\n]*$" valMaxLen:"1024" maxProps:"128"`
 	Secrets       map[string]string `json:"secrets,omitempty" keypattern:"^[A-Za-z_][A-Za-z0-9_]*$" valpattern:"^secret://(shared/)?[a-z][a-z0-9_]{1,63}$" maxProps:"128"`
 	Sockets       []string          `json:"sockets,omitempty" maxItems:"4" doc:"for quadlet: directories of sockets on the host that the container may use (under /run or /var/run), for example /var/run/postgresql for a database on this server"`
-	DatabaseEnv   string            `json:"database_env,omitempty" pattern:"^[A-Za-z_][A-Za-z0-9_]*$" doc:"variable holding the database connection string"`
 }
 
 // Release is where the release of a kind unit component comes from: a tar.gz archive unpacked into the slot directory.
@@ -146,9 +132,6 @@ func Requires(p *Project) []string {
 			need["podman"] = true
 		}
 	}
-	if p.Database != nil && p.Database.IsLocal() {
-		need["pg"] = true
-	}
 	if len(p.Sites) > 0 {
 		need["caddy"] = true
 	}
@@ -159,6 +142,3 @@ func Requires(p *Project) []string {
 	sort.Strings(out)
 	return out
 }
-
-// IsLocal is true if the database is on this same server.
-func (d Database) IsLocal() bool { return d.Server == "" || d.Server == ServerLocal }

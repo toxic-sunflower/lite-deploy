@@ -13,7 +13,7 @@
   LU.components.NewProject = {
     data: function () {
       return {
-        name: '', desc: '', dbOn: false, legacy: null, db: { tpl: '' },
+        name: '', desc: '', dbOn: false, db: { tpl: '' }, note: '',
         regOn: false, reg: { host: 'ghcr.io', user: '', token: '' },
         services: [newService()], sites: [newSite()], key: '', hash: '', plan: null, planErr: null, imported: false
       };
@@ -28,14 +28,14 @@
   <div class="row"><div class="grow"><label>Project name (Latin letters, digits and “-”)</label><input type="text" v-model="name" placeholder="shop" autocomplete="off" spellcheck="false"></div>\
     <div class="grow"><label>Description (optional)</label><input type="text" v-model="desc" autocomplete="off"></div></div>\
   <p v-if="!pgHere" class="help">A database is just a secret: install the program in <b>Packages</b>, then add a secret setting to the component below, for example <code>DATABASE_URL=postgres://user:password@host/name</code>.</p>\
-  <label v-if="pgHere && !legacy" class="check"><input type="checkbox" v-model="dbOn"> Make a PostgreSQL database for this project on this server</label>\
-  <div class="box" v-if="dbOn && !legacy">\
+  <label v-if="pgHere" class="check"><input type="checkbox" v-model="dbOn"> Make a PostgreSQL database for this project on this server</label>\
+  <div class="box" v-if="dbOn">\
     <div class="help">The server makes the database and its user, and the connection becomes a secret of the project, <code>DATABASE_URL</code>, in the first component (or in the ones that name a setting below). To use a database somewhere else, leave the box unticked and add the secret setting yourself.</div>\
     <details style="margin-top:8px"><summary class="help">Advanced: another notation of the address</summary>\
       <label>Template (the parts are {host} {port} {user} {password} {db}; empty: a URL)</label><input type="text" v-model="db.tpl" placeholder="Host={host};Database={db};Username={user};Password={password}" autocomplete="off" spellcheck="false">\
     </details>\
   </div>\
-  <p v-if="legacy" class="help">This project uses the older database setting; it is kept as it is.</p>\
+  <p v-if="note" class="help warntxt">{{ note }}</p>\
   <label class="check"><input type="checkbox" v-model="regOn"> The container image is in a private registry</label>\
   <div class="box" v-if="regOn">\
     <div class="row"><div class="grow"><label>Registry</label><input type="text" v-model="reg.host"></div><div class="grow"><label>User</label><input type="text" v-model="reg.user" autocomplete="off"></div></div>\
@@ -56,7 +56,7 @@
     </template>\
     <label>Settings that are not secret (one per line: NAME=value)</label><textarea v-model="s.env" placeholder="ENVIRONMENT=Production" spellcheck="false"></textarea>\
     <label>Secret settings: passwords, keys (one per line: NAME=value; stored encrypted on the server; write NAME=shared:KEY to use a shared secret)</label><textarea v-model="s.sec" spellcheck="false"></textarea>\
-    <template v-if="dbOn || legacy">\
+    <template v-if="dbOn">\
     <label>Name of the setting that receives the database address (optional)</label><input type="text" v-model="s.dbenv" placeholder="DATABASE_URL" autocomplete="off">\
     </template>\
     <details style="margin-top:8px"><summary class="help">Advanced: memory limit, readiness address</summary>\
@@ -113,8 +113,11 @@
       fromProject: function (p) {
         var self = this;
         this.name = p.name || ''; this.desc = p.description || '';
-        // an older description has a database setting of its own: it is kept as it is, new projects use a secret (D-81)
-        this.legacy = p.database || null; this.dbOn = false; this.db = { tpl: '' };
+        // an older description has a database setting of its own, which no longer exists (a database is a secret, D-81): for a
+        // database on this server the form offers to make one, for any other the person adds the secret DATABASE_URL
+        this.db = { tpl: '' }; this.note = '';
+        this.dbOn = !!(p.database && !p.database.server);
+        if (p.database && p.database.server) this.note = 'This file used a database on another server. A database is a secret now: add the secret setting DATABASE_URL (the connection string) to the component.';
         this.regOn = !!p.registry;
         this.reg = { host: (p.registry && p.registry.host) || 'ghcr.io', user: (p.registry && p.registry.username) || '', token: '' };
         this.services = Object.keys(p.services || {}).map(function (n) {
@@ -140,7 +143,6 @@
       build: function () {
         var p = { schema: 'lite-deploy/project/v2', name: this.name.trim() }, sec = {}, errs = [];
         opt(p, 'description', this.desc.trim());
-        if (this.legacy) p.database = this.legacy; // an older project keeps its database setting unchanged
         if (this.regOn) {
           p.registry = { host: this.reg.host.trim(), username: this.reg.user.trim(), token_secret: 'secret://registry_token' };
           var rref = sharedRef(this.reg.token);
@@ -148,7 +150,7 @@
           else { if (!this.reg.token) errs.push('The registry token is needed (it is never in an exported file)'); sec.registry_token = this.reg.token; }
         }
         p.services = {};
-        var dbOn = this.dbOn && !this.legacy, anyDbenv = this.services.some(function (x) { return x.dbenv.trim(); }), dbIdx = 0;
+        var dbOn = this.dbOn, anyDbenv = this.services.some(function (x) { return x.dbenv.trim(); }), dbIdx = 0;
         this.services.forEach(function (s) {
           var n = s.name.trim(), o = {}, gets = dbOn && (s.dbenv.trim() || (!anyDbenv && dbIdx === 0));
           dbIdx++;
@@ -168,7 +170,6 @@
           if (gets) { sc[s.dbenv.trim() || 'DATABASE_URL'] = 'secret://database_url'; sec.database_url = 'set-by-pg-after-creation'; if (s.kind !== 'unit') o.sockets = ['/var/run/postgresql']; }
           else if (s.socks && s.socks.length) o.sockets = s.socks;
           if (Object.keys(sc).length) o.secrets = sc;
-          if (this.legacy) opt(o, 'database_env', s.dbenv.trim());
           p.services[n] = o;
         }, this);
         p.sites = this.sites.map(function (s) {
@@ -198,7 +199,7 @@
       create: function () {
         var self = this;
         if (!this.hash || !confirm('Create project ' + this.name.trim() + ' on the server with the steps shown?')) return;
-        var makeDb = this.dbOn && !this.legacy, name = this.name.trim(), tpl = this.db.tpl.trim();
+        var makeDb = this.dbOn, name = this.name.trim(), tpl = this.db.tpl.trim();
         this.send('/api/project/create', 'Creating the project, this can take a few minutes…').then(function (r) {
           if (!(r && r.ok)) return;
           var done = function () { LU.say('ok', 'Project created. Now deploy a version from its card.'); self.hash = ''; self.$emit('created'); };

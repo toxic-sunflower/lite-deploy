@@ -56,7 +56,7 @@ func ciphertextArgs(t *testing.T) []string {
 	t.Helper()
 	dir := t.TempDir()
 	var args []string
-	for _, n := range []string{"ghcr_read_token", "auth_session_secret", "webhook_secret", "admin_username", "admin_password", "_db_password"} {
+	for _, n := range []string{"ghcr_read_token", "auth_session_secret", "webhook_secret", "admin_username", "admin_password", "database_url"} {
 		p := filepath.Join(dir, n)
 		if err := os.WriteFile(p, []byte("-----BEGIN AGE ENCRYPTED FILE-----\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldY\n-----END AGE ENCRYPTED FILE-----\n"), 0o600); err != nil {
 			t.Fatal(err)

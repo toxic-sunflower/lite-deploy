@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/toxic-sunflower/lite-deploy/internal/servers"
 	"io/fs"
 	"strings"
 
@@ -64,10 +63,6 @@ func LoadState(fsys host.FS, p Paths) (State, error) {
 			return st, fmt.Errorf("the state of project %s is corrupt: %w", n, err)
 		}
 		st.Projects[strings.TrimSuffix(n, ".json")] = ps
-	}
-
-	if servers, err := servers.Load(fsys); err == nil {
-		st.Servers = servers
 	}
 
 	st.ExistingUsers = map[string]bool{}

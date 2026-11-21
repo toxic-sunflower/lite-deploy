@@ -42,7 +42,7 @@ func baseState() State {
 		Now:      testNow,
 		NewID:    func(now time.Time) (string, error) { return "01JC3Y8Q4N6R2T7V9K0M5B1XZA", nil },
 		Ciphertexts: ct("ghcr_read_token", "auth_session_secret", "webhook_secret",
-			"admin_username", "admin_password", "_db_password"),
+			"admin_username", "admin_password", "database_url"),
 	}
 }
 
@@ -67,9 +67,7 @@ func TestBuildExampleStepOrder(t *testing.T) {
 	pl := build(t, example(t), baseState())
 	want := []string{
 		"verify_host", "create_project_user",
-		"set_secret", // _db_password before provision_postgres (adopt)
-		"provision_postgres",
-		"set_secret", "set_secret", "set_secret", "set_secret", "set_secret", // admin_password, admin_username, auth_session_secret, webhook_secret, ghcr_read_token
+		"set_secret", "set_secret", "set_secret", "set_secret", "set_secret", "set_secret", // admin_password, admin_username, auth_session_secret, database_url, webhook_secret, ghcr_read_token
 		"registry_login",
 		"write_service_env", "write_service_env",
 		"install_quadlet", "install_quadlet", "install_quadlet", "install_quadlet",
@@ -90,8 +88,10 @@ func TestBuildExampleStepOrder(t *testing.T) {
 			t.Errorf("step %s: class %q, description %q", s.ID, s.Class, s.Summary)
 		}
 	}
-	if pl.Steps[2].ID != "s03" || !strings.Contains(string(pl.Steps[2].Params), "_db_password") {
-		t.Errorf("s03 must set _db_password: %s", pl.Steps[2].Params)
+	for _, a := range actionsOf(pl) {
+		if a == "provision_postgres" {
+			t.Error("the core knows no database: a database is a secret (D-81)")
+		}
 	}
 }
 
@@ -176,7 +176,6 @@ func TestAutoPortsAvoidOtherProjects(t *testing.T) {
 	p.Services["api"] = s
 	p.Sites[0].ListenPort = 0
 	st := baseState()
-	delete(st.Ciphertexts, "_db_password")
 	st.Projects = map[string]ProjectState{"other": {Ports: actions.Ports{
 		Services: map[string][]int{"web": {18000, 18001}}, Sites: map[string]int{"main": 18002}}}}
 	pl := build(t, p, st)
@@ -254,47 +253,21 @@ func TestUnusedCiphertextRejected(t *testing.T) {
 	}
 }
 
-func TestDBPasswordOnlyInAdopt(t *testing.T) {
-	p := example(t)
-	p.Adopt = false
-	if _, err := Build(p, baseState()); err == nil || err.Code != CodeInvalidProject {
-		t.Fatalf("_db_password without adopt must be rejected: %v", err)
-	}
-}
-
-func TestAdoptPasswordUnknown(t *testing.T) {
-	st := baseState()
-	delete(st.Ciphertexts, "_db_password")
-	st.ExistingUsers = map[string]bool{"shop": true}
-	if _, err := Build(example(t), st); err == nil || err.Code != CodeAdoptPassword {
-		t.Fatalf("expected adopt_password_unknown: %v", err)
-	}
-	st.RotatePassword = true
-	pl := build(t, example(t), st)
-	for _, s := range pl.Steps {
-		if s.Action == "provision_postgres" && !strings.Contains(string(s.Params), `"rotate_password":true`) {
-			t.Error("rotate_password must reach the step")
-		}
-	}
-}
-
 func TestUnmanagedExistingUser(t *testing.T) {
 	p := example(t)
 	p.Adopt = false
 	st := baseState()
-	delete(st.Ciphertexts, "_db_password")
 	st.ExistingUsers = map[string]bool{"shop": true}
 	if _, err := Build(p, st); err == nil || err.Code != CodeUnmanaged {
 		t.Fatalf("expected project_exists_unmanaged: %v", err)
 	}
 	p.Adopt = true
-	st.Ciphertexts["_db_password"] = ct("x")["x"]
 	build(t, p, st)
 }
 
 func TestProbeExpectFollowsState(t *testing.T) {
 	st := baseState()
-	st.Projects = map[string]ProjectState{"shop": {Deployed: true, Secrets: []string{"_db_password"}}}
+	st.Projects = map[string]ProjectState{"shop": {Deployed: true, Secrets: []string{"database_url"}}}
 	pl := build(t, example(t), st)
 	n := 0
 	for _, s := range pl.Steps {
@@ -328,33 +301,6 @@ func TestInvalidProjectRejected(t *testing.T) {
 	}
 }
 
-func TestNoDatabaseNoProvision(t *testing.T) {
-	p := example(t)
-	p.Database = nil
-	for n, s := range p.Services {
-		s.DatabaseEnv = ""
-		p.Services[n] = s
-	}
-	p.Adopt = false
-	st := baseState()
-	delete(st.Ciphertexts, "_db_password")
-	pl := build(t, p, st)
-	for _, a := range actionsOf(pl) {
-		if a == "provision_postgres" {
-			t.Fatal("without database there is no provision_postgres")
-		}
-	}
-}
-
-func TestDatabaseSocketOnlyWithDatabaseEnv(t *testing.T) {
-	pl := build(t, example(t), baseState())
-	for _, s := range pl.Steps {
-		if s.Action == "install_quadlet" && !strings.Contains(string(s.Params), `"database_socket":true`) {
-			t.Errorf("database_socket: %s", s.Params)
-		}
-	}
-}
-
 func TestInvalidCiphertextRejected(t *testing.T) {
 	for _, bad := range []string{"plain-text-value", "", "-----BEGIN AGE ENCRYPTED FILE-----\n!!!\n-----END AGE ENCRYPTED FILE-----"} {
 		st := baseState()
@@ -368,7 +314,6 @@ func TestInvalidCiphertextRejected(t *testing.T) {
 func TestBuildUnitProject(t *testing.T) {
 	p := example(t)
 	p.Registry = nil
-	p.Database = nil
 	svc := map[string]project.Service{}
 	for n, s := range p.Services {
 		svc[n] = project.Service{
@@ -393,35 +338,6 @@ func TestBuildUnitProject(t *testing.T) {
 	}
 	if !strings.Contains(string(pl.Steps[0].Params), `"no_podman":true`) {
 		t.Errorf("verify_host must skip podman: %s", pl.Steps[0].Params)
-	}
-}
-
-func TestRemoteDatabasePlan(t *testing.T) {
-	p := example(t)
-	p.Database.Server = "db1"
-	p.Database.PasswordSecret = "secret://db_password"
-	st := baseState()
-	st.Ciphertexts = ct("ghcr_read_token", "auth_session_secret", "webhook_secret", "admin_username", "admin_password", "db_password")
-	if _, err := Build(p, st); err == nil || err.Code != CodePrecondition || !strings.Contains(err.Hint, "lite server add db1") {
-		t.Fatalf("without a registry entry: %+v", err)
-	}
-	st.Servers = map[string]string{"db1": "10.0.0.2"}
-	pl := build(t, p, st)
-	got := strings.Join(actionsOf(pl), ",")
-	if strings.Contains(got, "provision_postgres") {
-		t.Errorf("a remote database is not created: %s", got)
-	}
-	found := false
-	for _, s := range pl.Steps {
-		if s.Action == "write_service_env" && strings.Contains(string(s.Params), `"host":"10.0.0.2"`) && strings.Contains(string(s.Params), `"secret":"db_password"`) {
-			found = true
-		}
-		if s.Action == "install_quadlet" && strings.Contains(string(s.Params), `"database_socket":true`) {
-			t.Error("the PostgreSQL socket is not needed for a remote database")
-		}
-	}
-	if !found {
-		t.Error("the env has no address and secret of the remote database")
 	}
 }
 

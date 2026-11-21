@@ -69,7 +69,7 @@ What matters:
 - `data` lists persistent directories. They are shared by both slots and survive deploys. A process finds them in `LITE_DATA_<NAME>` (for `uploads`: `LITE_DATA_UPLOADS`).
 - `health` works as for containers: `GET /health/ready` must return `200` and JSON with a `version` field equal to the commit hash.
 
-Settings work as in [Your first project](first-project.md): `env`, `secrets` and `database_env` are available to `unit` components too, as environment variables of the service.
+Settings work as in [Your first project](first-project.md): `env` and `secrets` are available to `unit` components too, as environment variables of the service.
 
 A private download location: add `"token_secret": "secret://release_token"` under `release`, and `lite` sends it as an `Authorization: Bearer` header.
 

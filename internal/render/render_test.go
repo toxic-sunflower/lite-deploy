@@ -32,11 +32,11 @@ func checkGolden(t *testing.T, name, got string) {
 }
 
 func apiQuadlet(slot string, port int) actions.InstallQuadlet {
-	return actions.InstallQuadlet{Project: "shop", Service: "api", Slot: slot, HostPort: port, ContainerPort: 8080, Memory: "768m", Pids: 512, DatabaseSocket: true}
+	return actions.InstallQuadlet{Project: "shop", Service: "api", Slot: slot, HostPort: port, ContainerPort: 8080, Memory: "768m", Pids: 512}
 }
 
 func adminQuadlet(slot string, port int) actions.InstallQuadlet {
-	return actions.InstallQuadlet{Project: "shop", Service: "admin", Slot: slot, HostPort: port, ContainerPort: 8080, Memory: "384m", Pids: 256, DatabaseSocket: true}
+	return actions.InstallQuadlet{Project: "shop", Service: "admin", Slot: slot, HostPort: port, ContainerPort: 8080, Memory: "384m", Pids: 256}
 }
 
 func mainSite() actions.InstallCaddySite {
@@ -62,14 +62,6 @@ func TestGoldenFiles(t *testing.T) {
 	checkGolden(t, "sudoers", Sudoers("shop"))
 	checkGolden(t, "authorized_keys", AuthorizedKey(actions.InstallDeployKey{Project: "shop",
 		PublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDtqJ7zOtqQtYqOo0CpvDXNlMhV3HeJDpjrASKGLWdop github-actions"}))
-}
-
-func TestQuadletWithoutDatabaseHasNoSocket(t *testing.T) {
-	a := apiQuadlet("blue", 18081)
-	a.DatabaseSocket = false
-	if strings.Contains(Quadlet(a), "postgresql") {
-		t.Error("without database_socket the volume is not needed")
-	}
 }
 
 func TestQuadletHardening(t *testing.T) {
@@ -105,23 +97,6 @@ func TestEnvFile(t *testing.T) {
 		if _, err := EnvFile([]EnvLine{{"A", v}}); err == nil {
 			t.Errorf("%q: expected a refusal", v)
 		}
-	}
-}
-
-func TestDatabaseURL(t *testing.T) {
-	cases := map[string]string{
-		"npgsql": "Host=/var/run/postgresql;Database=d;Username=r;Password=pw",
-		"url":    "postgresql://r:pw@/d?host=/var/run/postgresql",
-		"libpq":  "host=/var/run/postgresql dbname=d user=r password=pw",
-	}
-	for f, want := range cases {
-		got, err := DatabaseURL(f, "r", "d", "pw")
-		if err != nil || got != want {
-			t.Errorf("%s: %q %v", f, got, err)
-		}
-	}
-	if _, err := DatabaseURL("x", "r", "d", "pw"); err == nil {
-		t.Error("unknown format")
 	}
 }
 
@@ -181,7 +156,6 @@ func TestCaddySiteFallbackAuth(t *testing.T) {
 // databases in the core.
 func TestQuadletSockets(t *testing.T) {
 	a := apiQuadlet("blue", 18081)
-	a.DatabaseSocket = false
 	a.Sockets = []string{"/var/run/postgresql", "/run/redis"}
 	got := Quadlet(a)
 	for _, want := range []string{"Volume=/var/run/postgresql:/var/run/postgresql\n", "Volume=/run/redis:/run/redis\n"} {
@@ -189,9 +163,8 @@ func TestQuadletSockets(t *testing.T) {
 			t.Errorf("missing %q:\n%s", want, got)
 		}
 	}
-	// the older setting and the new one together do not mount the same directory twice
-	a.DatabaseSocket = true
-	if n := strings.Count(Quadlet(a), "Volume=/var/run/postgresql:/var/run/postgresql"); n != 1 {
-		t.Errorf("the socket is mounted %d times", n)
+	a.Sockets = nil
+	if strings.Contains(Quadlet(a), "Volume=/var/run") {
+		t.Error("without sockets nothing of the host is shared")
 	}
 }

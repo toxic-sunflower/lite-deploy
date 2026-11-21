@@ -14,10 +14,9 @@ import (
 // projectIn is what the page sends: the project description and the secret values in plain text.
 // The values are encrypted here, on the owner workstation, with the executor public key and go to the server only encrypted.
 type projectIn struct {
-	Project        json.RawMessage   `json:"project"`
-	Secrets        map[string]string `json:"secrets"`
-	RotatePassword bool              `json:"rotate_password"`
-	ExpectHash     string            `json:"expect_project_hash"`
+	Project    json.RawMessage   `json:"project"`
+	Secrets    map[string]string `json:"secrets"`
+	ExpectHash string            `json:"expect_project_hash"`
 }
 
 func readLarge(r *http.Request, v any) int {
@@ -72,7 +71,7 @@ func (s *Server) projectCall(action string) func(*http.Request) ([]byte, int) {
 			}
 			cts[name] = ct
 		}
-		bundle := map[string]any{"project": in.Project, "ciphertexts": cts, "rotate_password": in.RotatePassword}
+		bundle := map[string]any{"project": in.Project, "ciphertexts": cts}
 		if in.ExpectHash != "" {
 			bundle["expect_project_hash"] = in.ExpectHash
 		}

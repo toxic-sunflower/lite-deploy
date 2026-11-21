@@ -89,9 +89,6 @@ func TestValidateRules(t *testing.T) {
 			s.Release = &Release{MinisignKey: "RWQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", URL: "https://example.com/a-{sha}.tar.gz"}
 			p.Services["api"] = s
 		}, "/services/api/release", "not_applicable"},
-		{"a database on another server without a password", func(p *Project) { p.Database.Server = "db1" }, "/database/password_secret", "required"},
-		{"a port on a local database", func(p *Project) { p.Database.Port = 5432 }, "/database/port", "not_applicable"},
-		{"a password on a local database", func(p *Project) { p.Database.PasswordSecret = "secret://x_pw" }, "/database/password_secret", "not_applicable"},
 		{"unknown schema", func(p *Project) { p.Schema = "x" }, "/schema", "enum"},
 		{"container port 70000", func(p *Project) { s := p.Services["api"]; s.ContainerPort = 70000; p.Services["api"] = s }, "/services/api/container_port", "maximum"},
 		{"host_ports out of range", func(p *Project) { s := p.Services["api"]; s.HostPorts = []int{80, 18082}; p.Services["api"] = s }, "/services/api/host_ports/0", "minimum"},
@@ -125,7 +122,6 @@ func TestValidateRules(t *testing.T) {
 			s.Secrets = map[string]string{"X": "secret://x_value"}
 			p.Services["api"] = s
 		}, "/services/api/secrets/X", "duplicate_env"},
-		{"database_env without a database", func(p *Project) { p.Database = nil }, "/services/api/database_env", "no_database"},
 		{"a site for an unknown service", func(p *Project) { p.Sites[0].Service = "nope" }, "/sites/0/service", "unknown_service"},
 		{"a repeated site name", func(p *Project) { p.Sites[1].Name = "main" }, "/sites/1/name", "duplicate"},
 		{"a repeated host", func(p *Project) { p.Sites[1].Host = p.Sites[0].Host }, "/sites/1/host", "duplicate"},
@@ -142,8 +138,6 @@ func TestValidateRules(t *testing.T) {
 		{"a key with options", func(p *Project) {
 			p.DeployKey.PublicKey = `command="x" ` + p.DeployKey.PublicKey
 		}, "/deploy_key/public_key", "pattern"},
-		{"the engine is not postgres", func(p *Project) { p.Database.Engine = "mysql" }, "/database/engine", "enum"},
-		{"connection format", func(p *Project) { p.Database.ConnectionFormat = "x" }, "/database/connection_format", "enum"},
 		{"the registry token is not a reference", func(p *Project) { p.Registry.TokenSecret = "abc" }, "/registry/token_secret", "pattern"},
 	}
 	for _, c := range cases {
@@ -190,15 +184,11 @@ func TestParseStrict(t *testing.T) {
 
 func TestDefaults(t *testing.T) {
 	p := load(t)
-	p.Database.ConnectionFormat = ""
 	s := p.Services["admin"]
 	s.Limits, s.Health = nil, nil
 	p.Services["admin"] = s
 	p.Sites[1].MaxBody = ""
 	d := WithDefaults(p)
-	if d.Database.ConnectionFormat != "url" {
-		t.Error("the connection format is url by default")
-	}
 	a := d.Services["admin"]
 	if a.Limits.Memory != "512m" || a.Limits.Pids != 256 || a.Health.Path != "/health/ready" || a.Health.TimeoutSeconds != 90 || a.Health.VersionField != "version" {
 		t.Errorf("defaults: %+v %+v", a.Limits, a.Health)
@@ -220,16 +210,15 @@ func TestRoleName(t *testing.T) {
 func TestRequires(t *testing.T) {
 	p := load(t)
 	got := strings.Join(Requires(p), ",")
-	if got != "caddy,pg,podman" {
+	if got != "caddy,podman" {
 		t.Fatalf("Requires = %s", got)
 	}
-	p.Database = nil
 	for n, s := range p.Services {
 		s.Kind = KindUnit
 		p.Services[n] = s
 	}
 	if got := strings.Join(Requires(p), ","); got != "caddy" {
-		t.Fatalf("without a database and containers: %s", got)
+		t.Fatalf("without containers: %s", got)
 	}
 }
 
@@ -247,18 +236,6 @@ func TestUnitWithReleaseIsValid(t *testing.T) {
 		Release: &Release{MinisignKey: "RWQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", URL: "https://example.com/dl/app-{sha}.tar.gz", TokenSecret: "secret://rel_token"}}
 	if issues := Validate(p); len(issues) != 0 {
 		t.Fatal(issues)
-	}
-}
-
-func TestRemoteDatabaseIsValidAndNeedsNoLocalPG(t *testing.T) {
-	p := load(t)
-	p.Database.Server = "db1"
-	p.Database.PasswordSecret = "secret://db_password"
-	if issues := Validate(p); len(issues) != 0 {
-		t.Fatal(issues)
-	}
-	if got := strings.Join(Requires(p), ","); got != "caddy,podman" {
-		t.Fatalf("Requires = %s", got)
 	}
 }
 

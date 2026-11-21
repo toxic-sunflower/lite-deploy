@@ -172,7 +172,7 @@ func TestProjectRequirementsInVerify(t *testing.T) {
 		got[f.Check] = f.Level
 	}
 	// nothing is installed on the test server (the commands return 127)
-	for _, k := range []string{"shop/podman", "shop/pg", "shop/caddy"} {
+	for _, k := range []string{"shop/podman", "shop/caddy"} {
 		if got[k] != plugin.LevelFail {
 			t.Errorf("%s: %q, expected an error", k, got[k])
 		}

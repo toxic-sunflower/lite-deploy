@@ -14,10 +14,9 @@ import (
 
 // bundle is the package for creating a project from the interface: the description, the secret ciphertexts and the hash the person saw in the preview.
 type bundle struct {
-	Project        json.RawMessage   `json:"project"`
-	Ciphertexts    map[string]string `json:"ciphertexts"`
-	RotatePassword bool              `json:"rotate_password"`
-	ExpectHash     string            `json:"expect_project_hash"`
+	Project     json.RawMessage   `json:"project"`
+	Ciphertexts map[string]string `json:"ciphertexts"`
+	ExpectHash  string            `json:"expect_project_hash"`
 }
 
 const bundleUsage = "usage: lite-deploy project bundle --dry-run|--yes (a JSON bundle on standard input)"
@@ -63,7 +62,7 @@ func cmdProjectBundle(args []string, env Env) result {
 	if len(issues) > 0 {
 		return result{command: command, err: &ErrorBody{Code: plan.CodeInvalidProject, Message: "the project description did not pass validation", Details: issues, Hint: "fix the fields listed in details"}}
 	}
-	pr, badPlan := buildPlan(command, p, "", b.RotatePassword, b.Ciphertexts, env)
+	pr, badPlan := buildPlan(command, p, "", b.Ciphertexts, env)
 	if badPlan != nil {
 		return *badPlan
 	}

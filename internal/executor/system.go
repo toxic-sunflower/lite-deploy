@@ -34,9 +34,6 @@ func verifyHost(ctx context.Context, r *run, _ any) (outcome, error) {
 	if !r.noPodman {
 		tools = append([][]string{{"podman", "--version"}}, tools...)
 	}
-	if r.needPostgres {
-		tools = append(tools, []string{"psql", "--version"})
-	}
 	for _, t := range tools {
 		res, err := r.Runner.Run(ctx, hostCmd(t[0], t[1:]...))
 		if err != nil || res.ExitCode != 0 {

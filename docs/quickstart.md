@@ -58,12 +58,12 @@ Write a description of the project (`shop.json`):
 {
   "schema": "lite-deploy/project/v2",
   "name": "shop",
-  "database": { "engine": "postgres", "connection_format": "url" },
   "services": {
     "api": {
       "image": "ghcr.io/you/shop-api",
       "container_port": 8080,
-      "database_env": "DATABASE_URL"
+      "secrets": { "DATABASE_URL": "secret://database_url" },
+      "sockets": ["/var/run/postgresql"]
     }
   },
   "sites": [

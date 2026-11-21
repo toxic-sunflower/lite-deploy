@@ -25,15 +25,14 @@ Before you start, finish the [Quickstart](quickstart.md) up to "Check the server
   "schema": "lite-deploy/project/v2",
   "name": "shop",
   "registry": { "host": "ghcr.io", "username": "you", "token_secret": "secret://registry_token" },
-  "database": { "engine": "postgres", "connection_format": "url" },
   "services": {
     "api": {
       "image": "ghcr.io/you/shop-api",
       "container_port": 8080,
       "limits": { "memory": "512m", "pids": 256 },
       "env": { "APP_ENV": "production" },
-      "secrets": { "SESSION_SECRET": "secret://session_secret" },
-      "database_env": "DATABASE_URL"
+      "secrets": { "SESSION_SECRET": "secret://session_secret", "DATABASE_URL": "secret://database_url" },
+      "sockets": ["/var/run/postgresql"]
     }
   },
   "sites": [
@@ -44,10 +43,9 @@ Before you start, finish the [Quickstart](quickstart.md) up to "Check the server
 
 What each part means:
 
-- `name`: the project name. It is also the name of a system user `shop` that owns everything of the project, and the database role is `shop` too (hyphens become underscores).
+- `name`: the project name. It is also the name of a system user `shop` that owns everything of the project, and the database role made by the `pg` plugin is `shop` too (hyphens become underscores).
 - `registry`: only for private images. The token is a secret, so it is referenced as `secret://registry_token`, never written here.
 - **A database is a secret.** A project does not describe a database: the connection is a secret setting of a component, for example `DATABASE_URL`. To have PostgreSQL made for you, install the `pg` plugin (Server, Can be added) and tick “Make a PostgreSQL database for this project on this server” in the form: the server makes the database and its user and puts the connection in the secret `database_url` of the project; the component shares the socket with `"sockets": ["/var/run/postgresql"]` and gets `"secrets": { "DATABASE_URL": "secret://database_url" }`. On the command line: `lite pg create-db shop shop --project shop --secret database_url` (add `--template 'Host={host};Database={db};Username={user};Password={password}'` for another notation of the address; the parts are `{host} {port} {user} {password} {db}`). For any other database (MySQL, Redis, a database on another server) install the program (Packages) and add the secret yourself.
-- `database` (the older setting, kept for projects that have it): PostgreSQL on this server. `lite` creates a role and a database named after the project and a strong password. `database_env` is the variable that receives the connection string (`postgresql://shop:…@/shop?host=/var/run/postgresql`, a socket, no network).
 - `services.api`: one container. It listens on `container_port` inside the container; `lite` publishes it on `127.0.0.1` only.
 - `env` and `secrets`: plain variables and references to secrets. Values of secrets never appear in the description.
 - `sites`: a Caddy site. Caddy listens on `127.0.0.1:18080` for the name `shop.example.com` and passes traffic to whichever version is active.

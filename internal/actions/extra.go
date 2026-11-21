@@ -41,20 +41,6 @@ func checkEnv(v any) []schema.Issue {
 			if e.Value != "" {
 				bad(i, "/value", "unexpected", "secret takes no value")
 			}
-		case "database":
-			if e.Value != "npgsql" && e.Value != "url" && e.Value != "libpq" {
-				bad(i, "/value", "enum", "database needs a format: npgsql, url or libpq")
-			}
-			if e.Host != "" {
-				if e.Secret == "" {
-					bad(i, "/secret", "required", "a database on another server needs a secret with the password")
-				}
-			} else if e.Secret != "" || e.Port != 0 {
-				bad(i, "/host", "required", "secret and port are only allowed together with host")
-			}
-		}
-		if e.Kind != "database" && (e.Host != "" || e.Port != 0) {
-			bad(i, "/host", "unexpected", "host and port are only for database")
 		}
 	}
 	return out

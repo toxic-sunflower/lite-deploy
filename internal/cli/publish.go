@@ -121,7 +121,7 @@ func applySiteChange(command string, env Env, doc map[string]json.RawMessage, si
 	doc["sites"], _ = json.Marshal(sites)
 	data, _ := json.MarshalIndent(doc, "", "  ")
 	if !env.root() {
-		return forwardProjectData(env, command, data, yes, false, nil)
+		return forwardProjectData(env, command, data, yes, nil)
 	}
 	p, issues := project.Parse(data)
 	if len(issues) == 0 {
@@ -130,7 +130,7 @@ func applySiteChange(command string, env Env, doc map[string]json.RawMessage, si
 	if len(issues) > 0 {
 		return fail(command, CodeUsage, "the changed description is invalid: "+issues[0].Message)
 	}
-	pr, bad := buildPlan(command, p, "", false, nil, env)
+	pr, bad := buildPlan(command, p, "", nil, env)
 	if bad != nil {
 		return *bad
 	}

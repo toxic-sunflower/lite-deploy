@@ -198,7 +198,7 @@ func (w *world) buildPlan(adopt bool, extra map[string]string) *plan.Plan {
 	}
 	st.Now = now
 	st.Ciphertexts = map[string]string{}
-	vals := map[string]string{"ghcr_read_token": "ghp_token", "auth_session_secret": "sess", "webhook_secret": "hook", "admin_username": "root-admin", "admin_password": "pa$$word"}
+	vals := map[string]string{"ghcr_read_token": "ghp_token", "auth_session_secret": "sess", "webhook_secret": "hook", "admin_username": "root-admin", "admin_password": "pa$$word", "database_url": "postgresql://shop:pw@/shop?host=/var/run/postgresql"}
 	for k, v := range extra {
 		vals[k] = v
 	}
@@ -284,25 +284,18 @@ func TestApplyFromScratchThenIdempotent(t *testing.T) {
 		t.Error("no sudoers rule any more: the root helper switches traffic")
 	}
 	check("/home/shop/.ssh/authorized_keys", 0o600, "shop")
-	check("/var/lib/lite-deploy/secrets/shop/_db_password", 0o600, "root")
+	check("/var/lib/lite-deploy/secrets/shop/database_url", 0o600, "root")
 	check("/var/lib/lite-deploy/state/projects/shop.json", 0o644, "root")
 	if ok, _ := exists(w.fsys, "/etc/sudoers.d/lite-deploy-shop.tmp"); ok {
 		t.Error("the temporary sudoers file is left over")
 	}
 	env, _ := w.fsys.ReadFile("/home/shop/.config/lite-deploy/env/api.env")
-	if !strings.Contains(string(env), "ConnectionStrings__Default=Host=/var/run/postgresql;Database=shop;Username=shop;Password="+w.rolePw) {
-		t.Errorf("env without a connection string:\n%s", env)
-	}
-	hba, _ := w.fsys.ReadFile("/etc/postgresql/18/main/pg_hba.conf")
-	if i, j := strings.Index(string(hba), "lite-deploy:begin shop"), strings.Index(string(hba), "local   all   all"); i < 0 || i > j {
-		t.Errorf("the pg_hba rule is not above the general one:\n%s", hba)
-	}
-	if info, _ := w.fsys.Stat("/etc/postgresql/18/main/pg_hba.conf"); info.Owner != "postgres" || info.Mode != 0o640 {
-		t.Errorf("pg_hba lost its owner or mode: %+v", info)
+	if !strings.Contains(string(env), "ConnectionStrings__Default=postgresql://shop:pw@/shop?host=/var/run/postgresql") {
+		t.Errorf("a secret of the project (the connection of a database) must reach the env file:\n%s", env)
 	}
 	// secrets are neither in the journal nor in the output
 	j, _ := w.fsys.ReadFile(JournalPath)
-	for _, bad := range []string{"pa$$word", "ghp_token", w.rolePw} {
+	for _, bad := range []string{"pa$$word", "ghp_token", "shop:pw@"} {
 		if strings.Contains(string(j), bad) {
 			t.Fatalf("the secret value ended up in the journal: %s", bad)
 		}
@@ -311,12 +304,12 @@ func TestApplyFromScratchThenIdempotent(t *testing.T) {
 		t.Errorf("a read of a secret must be written to the journal (the name only):\n%s", j)
 	}
 	for _, s := range rep.Steps {
-		if strings.Contains(s.Detail+s.Error, "pa$$word") || strings.Contains(s.Detail+s.Error, w.rolePw) {
+		if strings.Contains(s.Detail+s.Error, "pa$$word") || strings.Contains(s.Detail+s.Error, "shop:pw@") {
 			t.Fatalf("the secret value is in the output of step %s", s.ID)
 		}
 	}
 	for _, c := range w.cmds {
-		if strings.Contains(c, w.rolePw) || strings.Contains(c, "ghp_token") {
+		if strings.Contains(c, "shop:pw@") || strings.Contains(c, "ghp_token") {
 			t.Fatalf("a secret in the command arguments: %s", c)
 		}
 	}
@@ -402,7 +395,7 @@ func TestAdoptKeepsExistingAndBacksUp(t *testing.T) {
 	_ = w.fsys.WriteFile("/home/shop/.config/lite-deploy/env/api.env", []byte("OLD=1\n"), 0o600)
 	_ = w.fsys.Chown("/home/shop/.config/lite-deploy/env/api.env", "shop", "shop")
 
-	pl := w.buildPlan(true, map[string]string{"_db_password": "oldpassword"})
+	pl := w.buildPlan(true, map[string]string{"database_url": "oldpassword"})
 	rep := w.apply(pl, false)
 	if rep.Failed != "" {
 		for _, s := range rep.Steps {
@@ -426,18 +419,6 @@ func TestAdoptKeepsExistingAndBacksUp(t *testing.T) {
 	}
 	if w.rolePw != "oldpassword" {
 		t.Error("the password of an existing role was changed without rotate_password")
-	}
-}
-
-func TestAdoptPasswordUnknown(t *testing.T) {
-	w := newWorld(t)
-	w.users["shop"] = true
-	w.role, w.db = true, true
-	pl := w.buildPlan(true, map[string]string{"_db_password": "x"})
-	// remove the step with the known password: the role exists, the secret does not
-	rep := w.apply(&plan.Plan{ID: pl.ID, Hash: pl.Hash, Project: pl.Project, Steps: stepsOnly(pl, "provision_postgres")}, false)
-	if rep.Failed == "" || !strings.Contains(rep.Steps[0].Error, "adopt_password_unknown") {
-		t.Fatalf("adopt_password_unknown was expected: %+v", rep.Steps)
 	}
 }
 

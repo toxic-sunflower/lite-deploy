@@ -117,7 +117,7 @@ func forwardFix(env Env) result {
 }
 
 // forwardProjectCreate creates a project without sudo: the plan preview and the creation go through the agent.
-func forwardProjectCreate(env Env, file string, yes, rotate bool, cts []string) result {
+func forwardProjectCreate(env Env, file string, yes bool, cts []string) result {
 	const command = "project.create"
 	data, err := readInput(env, file)
 	if err != nil {
@@ -135,12 +135,12 @@ func forwardProjectCreate(env Env, file string, yes, rotate bool, cts []string) 
 		}
 		ciphertexts[name] = strings.TrimSpace(string(b))
 	}
-	return forwardProjectData(env, command, data, yes, rotate, ciphertexts)
+	return forwardProjectData(env, command, data, yes, ciphertexts)
 }
 
 // forwardProjectData previews and applies a project description through the agent.
-func forwardProjectData(env Env, command string, data []byte, yes, rotate bool, ciphertexts map[string]string) result {
-	bundle := map[string]any{"project": json.RawMessage(data), "ciphertexts": ciphertexts, "rotate_password": rotate}
+func forwardProjectData(env Env, command string, data []byte, yes bool, ciphertexts map[string]string) result {
+	bundle := map[string]any{"project": json.RawMessage(data), "ciphertexts": ciphertexts}
 	raw, bad := callAgent(env, "POST", "/v1/project/preview", bundle)
 	if bad != nil {
 		return result{command: command, err: bad}

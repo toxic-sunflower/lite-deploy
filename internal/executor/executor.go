@@ -100,7 +100,6 @@ type run struct {
 	sitesChanged bool
 	undo         []siteUndo // to restore the site files when the Caddy check fails
 	expectUnits  map[string][]string
-	needPostgres bool
 	noPodman     bool
 }
 
@@ -139,8 +138,6 @@ func Apply(ctx context.Context, e Env, pl *plan.Plan, dry bool) (*Report, error)
 			if vh, ok := v.(*actions.VerifyHost); ok {
 				r.noPodman = vh.NoPodman
 			}
-		case actions.ProvisionPostgresName:
-			r.needPostgres = true
 		case actions.InstallUnitName:
 			v, _ := actions.Decode(s.Action, s.Params)
 			if q, ok := v.(*actions.InstallUnit); ok {

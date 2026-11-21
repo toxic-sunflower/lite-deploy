@@ -326,12 +326,11 @@ func cmdSchema(args []string) result {
 func loadProject(env Env, command string, args []string) (*project.Project, []string, *result) {
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	out := fs.String("out", "", "")
-	rotate := fs.Bool("rotate-password", false, "")
 	var cts listFlag
 	fs.Var(&cts, "ciphertext", "")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 1 {
-		r := fail(command, CodeUsage, "usage: lite-deploy "+strings.ReplaceAll(command, ".", " ")+" <project.json|-> [--out file] [--ciphertext name=file] [--rotate-password]")
+		r := fail(command, CodeUsage, "usage: lite-deploy "+strings.ReplaceAll(command, ".", " ")+" <project.json|-> [--out file] [--ciphertext name=file]")
 		return nil, nil, &r
 	}
 	data, err := readInput(env, pos[0])
@@ -357,7 +356,7 @@ func loadProject(env Env, command string, args []string) (*project.Project, []st
 		r := result{command: command, err: &ErrorBody{Code: plan.CodeInvalidProject, Message: "the project description did not pass validation", Details: issues, Hint: "fix the fields listed in details"}}
 		return nil, nil, &r
 	}
-	extra := append([]string{*out, fmt.Sprint(*rotate)}, cts...)
+	extra := append([]string{*out}, cts...)
 	return p, extra, nil
 }
 
@@ -391,7 +390,7 @@ func preparePlan(command string, args []string, env Env) (*prepared, *result) {
 	if bad != nil {
 		return nil, bad
 	}
-	out, rotate, cts := extra[0], extra[1] == "true", extra[2:]
+	out, cts := extra[0], extra[1:]
 	ciphertexts := map[string]string{}
 	for _, c := range cts {
 		name, path, ok := strings.Cut(c, "=")
@@ -406,11 +405,11 @@ func preparePlan(command string, args []string, env Env) (*prepared, *result) {
 		}
 		ciphertexts[name] = strings.TrimSpace(string(b))
 	}
-	return buildPlan(command, p, out, rotate, ciphertexts, env)
+	return buildPlan(command, p, out, ciphertexts, env)
 }
 
 // buildPlan builds a plan from a ready description and ciphertexts (the shared part of the file and bundle paths).
-func buildPlan(command string, p *project.Project, out string, rotate bool, ciphertexts map[string]string, env Env) (*prepared, *result) {
+func buildPlan(command string, p *project.Project, out string, ciphertexts map[string]string, env Env) (*prepared, *result) {
 	st, err := plan.LoadState(env.FS, env.Paths)
 	if err != nil {
 		r := fail(command, plan.CodePrecondition, err.Error())
@@ -424,7 +423,6 @@ func buildPlan(command string, p *project.Project, out string, rotate bool, ciph
 	st.TTL = time.Duration(cfg.Limits.PlanTTLHours) * time.Hour
 	st.PortRange = [2]int{cfg.Limits.PortRange[0], cfg.Limits.PortRange[1]}
 	st.MaxProjects = cfg.Limits.Projects
-	st.RotatePassword = rotate
 	st.Ciphertexts = ciphertexts
 
 	pl, berr := plan.Build(p, st)
@@ -582,15 +580,14 @@ func cmdProjectCreate(args []string, env Env) result {
 	fs := flag.NewFlagSet("project.create", flag.ContinueOnError)
 	yes := fs.Bool("yes", false, "")
 	fs.String("out", "", "")
-	rotate := fs.Bool("rotate-password", false, "")
 	var cts listFlag
 	fs.Var(&cts, "ciphertext", "")
 	pos, err := parseArgs(fs, args)
 	if err != nil || len(pos) != 1 {
-		return fail("project.create", CodeUsage, "usage: lite-deploy project create <project.json|-> [--yes] [--ciphertext name=file] [--rotate-password]")
+		return fail("project.create", CodeUsage, "usage: lite-deploy project create <project.json|-> [--yes] [--ciphertext name=file]")
 	}
 	if !env.root() {
-		return forwardProjectCreate(env, pos[0], *yes, *rotate, cts)
+		return forwardProjectCreate(env, pos[0], *yes, cts)
 	}
 	// stdin is read once: "-" cannot be used both for the description and for the confirmation
 	var rest []string

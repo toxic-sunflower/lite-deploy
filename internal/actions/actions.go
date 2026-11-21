@@ -80,7 +80,6 @@ func Decode(name string, raw json.RawMessage) (any, []schema.Issue) {
 const (
 	VerifyHostName        = "verify_host"
 	CreateProjectUserName = "create_project_user"
-	ProvisionPostgresName = "provision_postgres"
 	SetSecretName         = "set_secret"
 	RegistryLoginName     = "registry_login"
 	WriteServiceEnvName   = "write_service_env"
@@ -106,13 +105,6 @@ type CreateProjectUser struct {
 	Project string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
 }
 
-// ProvisionPostgres creates the project role and database.
-type ProvisionPostgres struct {
-	Project          string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
-	ConnectionFormat string `json:"connection_format" enum:"npgsql,url,libpq"`
-	RotatePassword   bool   `json:"rotate_password,omitempty"`
-}
-
 // SetSecret writes a secret value (ciphertext) to the store.
 type SetSecret struct {
 	Project    string `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
@@ -131,11 +123,9 @@ type RegistryLogin struct {
 // EnvVar is one line of a service env file.
 type EnvVar struct {
 	Name   string `json:"name" pattern:"^[A-Za-z_][A-Za-z0-9_]*$"`
-	Kind   string `json:"kind" enum:"literal,secret,database"`
-	Value  string `json:"value,omitempty" pattern:"^[^\\r\\n]*$" maxLen:"1024" doc:"value for literal; connection string format for database"`
-	Secret string `json:"secret,omitempty" pattern:"^(shared/)?[a-z][a-z0-9_]{1,63}$" doc:"secret name: for secret the variable value, for database with host the role password"`
-	Host   string `json:"host,omitempty" pattern:"^[A-Za-z0-9.:-]{1,253}$" doc:"database only: PostgreSQL address on another server; without it the database is on this server, over a socket"`
-	Port   int    `json:"port,omitempty" min:"1" max:"65535" doc:"database with host only"`
+	Kind   string `json:"kind" enum:"literal,secret"`
+	Value  string `json:"value,omitempty" pattern:"^[^\\r\\n]*$" maxLen:"1024" doc:"value for literal"`
+	Secret string `json:"secret,omitempty" pattern:"^(shared/)?[a-z][a-z0-9_]{1,63}$" doc:"secret name: the variable value"`
 }
 
 // WriteServiceEnv builds the service env file.
@@ -147,16 +137,15 @@ type WriteServiceEnv struct {
 
 // InstallQuadlet writes the Quadlet unit of one service slot.
 type InstallQuadlet struct {
-	Project        string   `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
-	Service        string   `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
-	Slot           string   `json:"slot" enum:"blue,green"`
-	HostPort       int      `json:"host_port" min:"18000" max:"18999"`
-	ContainerPort  int      `json:"container_port" min:"1" max:"65535"`
-	Memory         string   `json:"memory" pattern:"^[1-9][0-9]*[mg]$"`
-	Pids           int      `json:"pids" min:"16" max:"4096"`
-	DatabaseSocket bool     `json:"database_socket"`
-	Sockets        []string `json:"sockets,omitempty" maxItems:"4" doc:"directories of host sockets shared with the container"`
-	Data           []string `json:"data,omitempty" maxItems:"8" pattern:"^[a-z][a-z0-9-]{0,15}$" doc:"persistent directories, mounted at /data/<name>"`
+	Project       string   `json:"project" pattern:"^[a-z][a-z0-9-]{1,30}$"`
+	Service       string   `json:"service" pattern:"^[a-z][a-z0-9-]{0,15}$"`
+	Slot          string   `json:"slot" enum:"blue,green"`
+	HostPort      int      `json:"host_port" min:"18000" max:"18999"`
+	ContainerPort int      `json:"container_port" min:"1" max:"65535"`
+	Memory        string   `json:"memory" pattern:"^[1-9][0-9]*[mg]$"`
+	Pids          int      `json:"pids" min:"16" max:"4096"`
+	Sockets       []string `json:"sockets,omitempty" maxItems:"4" doc:"directories of host sockets shared with the container"`
+	Data          []string `json:"data,omitempty" maxItems:"8" pattern:"^[a-z][a-z0-9-]{0,15}$" doc:"persistent directories, mounted at /data/<name>"`
 }
 
 // InstallUnit writes the user systemd unit of one slot of a kind unit component (a process on the host).
@@ -248,7 +237,6 @@ type RecordProject struct {
 func init() {
 	register(Def{Name: VerifyHostName, Class: ClassNormal, New: func() any { return &VerifyHost{} }})
 	register(Def{Name: CreateProjectUserName, Class: ClassNormal, New: func() any { return &CreateProjectUser{} }, Extra: reservedProject})
-	register(Def{Name: ProvisionPostgresName, Class: ClassNormal, New: func() any { return &ProvisionPostgres{} }})
 	register(Def{Name: SetSecretName, Class: ClassNormal, New: func() any { return &SetSecret{} }})
 	register(Def{Name: RegistryLoginName, Class: ClassNormal, New: func() any { return &RegistryLogin{} }})
 	register(Def{Name: WriteServiceEnvName, Class: ClassNormal, New: func() any { return &WriteServiceEnv{} }, Extra: checkEnv})

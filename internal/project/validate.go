@@ -62,18 +62,6 @@ func Validate(p *Project) []schema.Issue {
 	if p.Schema != "" && p.Schema != SchemaID && p.Schema != SchemaIDv1 {
 		add("/schema", "enum", "unknown schema version %q", p.Schema)
 	}
-	if d := p.Database; d != nil {
-		if d.IsLocal() {
-			if d.Port != 0 {
-				add("/database/port", "not_applicable", "port is only for a database on another server")
-			}
-			if d.PasswordSecret != "" {
-				add("/database/password_secret", "not_applicable", "for a database on this server the password is generated automatically")
-			}
-		} else if d.PasswordSecret == "" {
-			add("/database/password_secret", "required", "a database on another server needs password_secret")
-		}
-	}
 	if p.Name != "" && Reserved(p.Name) {
 		add("/name", "reserved", "the name %q is reserved", p.Name)
 	}
@@ -164,9 +152,6 @@ func Validate(p *Project) []schema.Issue {
 		for i, hp := range s.HostPorts {
 			usePort(hp, base+"/host_ports/"+strconv.Itoa(i))
 		}
-		if s.DatabaseEnv != "" && p.Database == nil {
-			add(base+"/database_env", "no_database", "database_env is set but the project has no database")
-		}
 		if s.Limits != nil && s.Limits.Memory != "" {
 			if mb, ok := MemoryMB(s.Limits.Memory); !ok || mb > 16*1024 {
 				add(base+"/limits/memory", "maximum", "memory at most 16g")
@@ -175,13 +160,6 @@ func Validate(p *Project) []schema.Issue {
 		for env := range s.Env {
 			if _, dup := s.Secrets[env]; dup {
 				add(base+"/secrets/"+env, "duplicate_env", "variable %s is set in both env and secrets", env)
-			}
-		}
-		if s.DatabaseEnv != "" {
-			_, inEnv := s.Env[s.DatabaseEnv]
-			_, inSec := s.Secrets[s.DatabaseEnv]
-			if inEnv || inSec {
-				add(base+"/database_env", "duplicate_env", "variable %s is also set in env or secrets", s.DatabaseEnv)
 			}
 		}
 	}
@@ -272,13 +250,6 @@ func RoleName(project string) string { return strings.ReplaceAll(project, "-", "
 // WithDefaults returns a copy with the defaults filled in, except ports (the plan chooses those).
 func WithDefaults(p *Project) *Project {
 	c := *p
-	if c.Database != nil {
-		d := *c.Database
-		if d.ConnectionFormat == "" {
-			d.ConnectionFormat = "url"
-		}
-		c.Database = &d
-	}
 	c.Services = make(map[string]Service, len(p.Services))
 	for n, s := range p.Services {
 		h := Health{Path: "/health/ready", VersionField: "version", TimeoutSeconds: 90}

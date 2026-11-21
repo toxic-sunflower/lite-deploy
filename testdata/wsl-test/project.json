@@ -2,15 +2,14 @@
   "schema": "lite-deploy/project/v1",
   "name": "demo-app",
   "description": "A test project for checking S4 in WSL (no registry and no CI key)",
-  "database": { "engine": "postgres", "connection_format": "url" },
   "services": {
     "web": {
       "image": "localhost/demo-app-web",
       "container_port": 8080,
       "limits": { "memory": "256m", "pids": 128 },
       "env": { "APP_ENV": "test" },
-      "secrets": { "APP_SECRET": "secret://app_secret" },
-      "database_env": "DATABASE_URL"
+      "secrets": { "APP_SECRET": "secret://app_secret", "DATABASE_URL": "secret://database_url" },
+      "sockets": ["/var/run/postgresql"]
     }
   },
   "sites": [

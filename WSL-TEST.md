@@ -35,7 +35,8 @@ The secret value is read from standard input (it does not get into arguments or 
 
 ```bash
 printf 'any-test-value' | lite-deploy secret encrypt demo-app app_secret > /tmp/ct_app_secret
-lite-deploy project plan testdata/wsl-test/project.json --ciphertext app_secret=/tmp/ct_app_secret --out /tmp/plan.json
+printf 'postgresql://demo_app:test@/demo_app?host=/var/run/postgresql' | lite-deploy secret encrypt demo-app database_url > /tmp/ct_database_url
+lite-deploy project plan testdata/wsl-test/project.json --ciphertext app_secret=/tmp/ct_app_secret --ciphertext database_url=/tmp/ct_database_url --out /tmp/plan.json
 ```
 
 13 steps are expected (`s01 verify_host` … `s13 record_project`). Nothing on the server changes.

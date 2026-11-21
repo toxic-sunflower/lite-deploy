@@ -2,7 +2,6 @@
   "schema": "lite-deploy/project/v1",
   "name": "shop",
   "adopt": true,
-  "database": { "engine": "postgres", "connection_format": "npgsql" },
   "registry": { "host": "ghcr.io", "username": "toxic-sunflower", "token_secret": "secret://ghcr_read_token" },
   "services": {
     "api": {
@@ -13,9 +12,10 @@
       "env": { "ASPNETCORE_ENVIRONMENT": "Production", "Shop__UseMock": "false" },
       "secrets": {
         "Auth__SessionSecret": "secret://auth_session_secret",
-        "Shop__WebhookSecret": "secret://webhook_secret"
+        "Shop__WebhookSecret": "secret://webhook_secret",
+        "ConnectionStrings__Default": "secret://database_url"
       },
-      "database_env": "ConnectionStrings__Default"
+      "sockets": ["/var/run/postgresql"]
     },
     "admin": {
       "image": "ghcr.io/toxic-sunflower/shop-admin",
@@ -25,9 +25,10 @@
       "env": { "ASPNETCORE_ENVIRONMENT": "Production" },
       "secrets": {
         "Admin__Username": "secret://admin_username",
-        "Admin__Password": "secret://admin_password"
+        "Admin__Password": "secret://admin_password",
+        "ConnectionStrings__Default": "secret://database_url"
       },
-      "database_env": "ConnectionStrings__Default"
+      "sockets": ["/var/run/postgresql"]
     }
   },
   "sites": [

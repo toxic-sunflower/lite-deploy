@@ -42,24 +42,20 @@ lite pg access                                     # who has access now
 
 ## 4. Point the project at it, on `app1`
 
+A database on another server is just a secret of the project: the connection string. Put it in the form of the project (a secret setting `DATABASE_URL=...`), or in the description:
+
 ```json
-"database": {
-  "engine": "postgres",
-  "server": "db1",
-  "port": 5432,
-  "password_secret": "secret://db_password",
-  "connection_format": "url"
-}
+"secrets": { "DATABASE_URL": "secret://database_url" }
 ```
 
-Encrypt the same password as a secret and create the project:
+and encrypt the connection string as that secret (the password is the one you gave `lite pg create-db` on `db1`):
 
 ```sh
-echo 'a-long-random-password' | lite secret encrypt shop db_password > ct_db_password
-lite project create shop.json --ciphertext db_password=ct_db_password
+echo 'postgresql://shop:a-long-random-password@10.0.0.2:5432/shop?sslmode=require' | lite secret encrypt shop database_url > ct_database_url
+lite project create shop.json --ciphertext database_url=ct_database_url
 ```
 
-The service receives `DATABASE_URL` pointing at `db1`. The connection is always encrypted (`sslmode=require`). A project with a remote database does not need PostgreSQL installed on `app1`.
+The component receives `DATABASE_URL` pointing at `db1` (write another notation if the application needs one). Keep `sslmode=require` so that the connection is encrypted. Nothing about this database is known to `lite` on `app1`: it is a secret like any other, so PostgreSQL does not have to be installed there.
 
 ## Change the password later
 

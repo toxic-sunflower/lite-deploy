@@ -231,7 +231,7 @@ func TestEndToEndSecrets(t *testing.T) {
 	dir := t.TempDir()
 	var args []string
 	values := map[string]string{}
-	for _, n := range []string{"ghcr_read_token", "auth_session_secret", "webhook_secret", "admin_username", "admin_password", "_db_password"} {
+	for _, n := range []string{"ghcr_read_token", "auth_session_secret", "webhook_secret", "admin_username", "admin_password", "database_url"} {
 		values[n] = "value-of-" + n
 		e := env
 		e.Stdin = strings.NewReader(values[n])

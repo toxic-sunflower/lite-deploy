@@ -207,10 +207,10 @@ sudo lite server add db1 10.0.0.2       # on the project server: the name and ad
 lite server list
 ```
 
-A database on another server is described in the project like this:
+A database on another server is a secret of the project, the connection string (see [A database on another server](docs/remote-database.md)):
 
 ```json
-"database": { "engine": "postgres", "server": "db1", "port": 5432, "password_secret": "secret://db_password", "connection_format": "url" }
+"secrets": { "DATABASE_URL": "secret://database_url" }
 ```
 
 The role and the database are named after the project (hyphens replaced by `_`). On the database server the owner creates and opens them:

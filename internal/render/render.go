@@ -4,10 +4,7 @@ package render
 
 import (
 	"fmt"
-	"net"
-	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/toxic-sunflower/lite-deploy/internal/actions"
@@ -37,13 +34,8 @@ func Quadlet(a actions.InstallQuadlet) string {
 	fmt.Fprintf(&b, "[Container]\nContainerName=%s\nImage=localhost/%s-%s:%s\n", name, a.Project, a.Service, a.Slot)
 	fmt.Fprintf(&b, "PublishPort=127.0.0.1:%d:%d\n", a.HostPort, a.ContainerPort)
 	fmt.Fprintf(&b, "EnvironmentFile=%%h/.config/lite-deploy/env/%s.env\n", a.Service)
-	if a.DatabaseSocket {
-		b.WriteString("Volume=/var/run/postgresql:/var/run/postgresql\n")
-	}
 	for _, s := range a.Sockets {
-		if !(a.DatabaseSocket && s == "/var/run/postgresql") { // the older setting already mounts it
-			fmt.Fprintf(&b, "Volume=%s:%s\n", s, s)
-		}
+		fmt.Fprintf(&b, "Volume=%s:%s\n", s, s)
 	}
 	for _, d := range a.Data {
 		fmt.Fprintf(&b, "Volume=%%h/%s:/data/%s:U\n", DataDir(d), d)
@@ -208,45 +200,4 @@ func EnvFile(lines []EnvLine) (string, error) {
 		b.WriteString(l.Name + "=" + l.Value + "\n")
 	}
 	return b.String(), nil
-}
-
-// DatabaseURL is the connection string for the database over the PostgreSQL unix socket (SPEC-v0.md, 2.1).
-func DatabaseURL(format, role, db, password string) (string, error) {
-	switch format {
-	case "npgsql":
-		return fmt.Sprintf("Host=/var/run/postgresql;Database=%s;Username=%s;Password=%s", db, role, password), nil
-	case "url":
-		return fmt.Sprintf("postgresql://%s:%s@/%s?host=/var/run/postgresql", role, password, db), nil
-	case "libpq":
-		return fmt.Sprintf("host=/var/run/postgresql dbname=%s user=%s password=%s", db, role, password), nil
-	}
-	return "", fmt.Errorf("unknown connection string format %q", format)
-}
-
-// RemoteDatabaseURL is a connection string for PostgreSQL on another server: over the network and only encrypted (sslmode=require).
-func RemoteDatabaseURL(format, host string, port int, role, db, password string) (string, error) {
-	if port == 0 {
-		port = 5432
-	}
-	switch format {
-	case "npgsql":
-		return fmt.Sprintf("Host=%s;Port=%d;Database=%s;Username=%s;Password=%s;SSL Mode=Require", host, port, db, role, npgsqlValue(password)), nil
-	case "url":
-		u := url.URL{Scheme: "postgresql", User: url.UserPassword(role, password), Host: net.JoinHostPort(host, strconv.Itoa(port)), Path: "/" + db, RawQuery: "sslmode=require"}
-		return u.String(), nil
-	case "libpq":
-		return fmt.Sprintf("host=%s port=%d dbname=%s user=%s password=%s sslmode=require", host, port, db, role, libpqValue(password)), nil
-	}
-	return "", fmt.Errorf("unknown connection string format %q", format)
-}
-
-func npgsqlValue(s string) string {
-	if strings.ContainsAny(s, ";\"' ") || s == "" {
-		return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
-	}
-	return s
-}
-
-func libpqValue(s string) string {
-	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
 }

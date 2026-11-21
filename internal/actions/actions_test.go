@@ -14,11 +14,10 @@ const goodKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDtqJ7zOtqQtYqOo0CpvDXNlMhV
 var goodParams = map[string]string{
 	"verify_host":         `{}`,
 	"create_project_user": `{"project":"shop"}`,
-	"provision_postgres":  `{"project":"shop","connection_format":"url"}`,
 	"set_secret":          `{"project":"shop","name":"api_key","ciphertext":"-----BEGIN AGE ENCRYPTED FILE-----\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldY\n-----END AGE ENCRYPTED FILE-----"}`,
 	"registry_login":      `{"project":"shop","registry":"ghcr.io","username":"me","secret":"tok"}`,
-	"write_service_env":   `{"project":"shop","service":"api","env":[{"name":"A","kind":"literal","value":"1"},{"name":"B","kind":"secret","secret":"b_secret"},{"name":"C","kind":"database","value":"url"}]}`,
-	"install_quadlet":     `{"project":"shop","service":"api","slot":"blue","host_port":18001,"container_port":8080,"memory":"512m","pids":256,"database_socket":true}`,
+	"write_service_env":   `{"project":"shop","service":"api","env":[{"name":"A","kind":"literal","value":"1"},{"name":"B","kind":"secret","secret":"b_secret"}]}`,
+	"install_quadlet":     `{"project":"shop","service":"api","slot":"blue","host_port":18001,"container_port":8080,"memory":"512m","pids":256}`,
 	"install_unit":        `{"project":"shop","service":"api","slot":"blue","host_port":18001,"exec":["./bin/app","--port","8080"],"memory":"512m","pids":256}`,
 	"write_release_auth":  `{"project":"shop","service":"api","secret":"rel_token"}`,
 	"reload_user_units":   `{"project":"shop"}`,
@@ -41,8 +40,8 @@ func TestEveryActionHasGoodExample(t *testing.T) {
 			t.Errorf("%s: %v", n, issues)
 		}
 	}
-	if len(Names()) != 16 {
-		t.Errorf("the list has exactly 16 actions, got %d: %v", len(Names()), Names())
+	if len(Names()) != 15 {
+		t.Errorf("the list has exactly 15 actions, got %d: %v", len(Names()), Names())
 	}
 }
 
@@ -75,7 +74,6 @@ func TestParamsRejected(t *testing.T) {
 		{"create_project_user", `{"project":"../x"}`},
 		{"create_project_user", `{"project":"shop\n"}`},
 		{"create_project_user", `{"project":"shop","path":"/etc"}`},
-		{"provision_postgres", `{"project":"shop","connection_format":"x"}`},
 		{"set_secret", `{"project":"shop","name":"Bad","ciphertext":"-----BEGIN AGE ENCRYPTED FILE-----\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldY\n-----END AGE ENCRYPTED FILE-----"}`},
 		{"set_secret", `{"project":"shop","name":"ok_name"}`},
 		{"set_secret", `{"project":"shop","name":"ok_name","ciphertext":"plain-text-value"}`},
@@ -84,14 +82,13 @@ func TestParamsRejected(t *testing.T) {
 		{"write_service_env", `{"project":"shop","service":"api","env":[{"name":"A-B","kind":"literal"}]}`},
 		{"write_service_env", `{"project":"shop","service":"api","env":[{"name":"A","kind":"secret"}]}`},
 		{"write_service_env", `{"project":"shop","service":"api","env":[{"name":"A","kind":"literal","secret":"x_y"}]}`},
-		{"write_service_env", `{"project":"shop","service":"api","env":[{"name":"A","kind":"database","value":"zzz"}]}`},
 		{"write_service_env", `{"project":"shop","service":"api","env":[{"name":"A","kind":"literal","value":"a\nb"}]}`},
 		{"write_service_env", `{"project":"shop","service":"api","env":[{"name":"A","kind":"literal"},{"name":"A","kind":"literal"}]}`},
 		{"write_service_env", `{"project":"shop","service":"api","env":[{"name":"A","kind":"exec","value":"id"}]}`},
-		{"install_quadlet", `{"project":"shop","service":"api","slot":"red","host_port":18001,"container_port":8080,"memory":"512m","pids":256,"database_socket":false}`},
-		{"install_quadlet", `{"project":"shop","service":"api","slot":"blue","host_port":80,"container_port":8080,"memory":"512m","pids":256,"database_socket":false}`},
-		{"install_quadlet", `{"project":"shop","service":"api","slot":"blue","host_port":18001,"container_port":8080,"memory":"512m\nExec=x","pids":256,"database_socket":false}`},
-		{"install_quadlet", `{"project":"shop","service":"api","slot":"blue","host_port":18001,"container_port":8080,"memory":"512m","pids":3,"database_socket":false}`},
+		{"install_quadlet", `{"project":"shop","service":"api","slot":"red","host_port":18001,"container_port":8080,"memory":"512m","pids":256}`},
+		{"install_quadlet", `{"project":"shop","service":"api","slot":"blue","host_port":80,"container_port":8080,"memory":"512m","pids":256}`},
+		{"install_quadlet", `{"project":"shop","service":"api","slot":"blue","host_port":18001,"container_port":8080,"memory":"512m\nExec=x","pids":256}`},
+		{"install_quadlet", `{"project":"shop","service":"api","slot":"blue","host_port":18001,"container_port":8080,"memory":"512m","pids":3}`},
 		{"install_caddy_site", `{"project":"shop","site":"main","host":"a b.example.com","listen_port":18000,"upstream_initial":"not_deployed","trusted_proxy":"none","max_body":"5MB"}`},
 		{"install_caddy_site", `{"project":"shop","site":"main","host":"x.example.com","listen_port":18000,"upstream_initial":"respond","trusted_proxy":"none","max_body":"5MB"}`},
 		{"install_caddy_site", `{"project":"shop","site":"main","host":"x.example.com","listen_port":18000,"upstream_initial":"not_deployed","trusted_proxy":"none","max_body":"5MB","routes":[{"path":"/a{b}","max_body":"1MB"}]}`},

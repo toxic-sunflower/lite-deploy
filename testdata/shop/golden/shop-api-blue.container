@@ -8,7 +8,6 @@ ContainerName=shop-api-blue
 Image=localhost/shop-api:blue
 PublishPort=127.0.0.1:18081:8080
 EnvironmentFile=%h/.config/lite-deploy/env/api.env
-Volume=/var/run/postgresql:/var/run/postgresql
 ReadOnly=true
 Tmpfs=/tmp
 NoNewPrivileges=true

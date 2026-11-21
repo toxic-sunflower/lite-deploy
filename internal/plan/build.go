@@ -23,10 +23,8 @@ const (
 	CodeUnusedSecret             = "unused_secret"
 	CodeInvalidSecret            = "invalid_secret"
 	CodeUnmanaged                = "project_exists_unmanaged"
-	CodeAdoptPassword            = "adopt_password_unknown"
 	CodePrecondition             = "precondition_failed"
 	CodeQuotaExceeded            = "quota_exceeded"
-	DBPasswordSecret             = "_db_password"
 	defaultTTL                   = 24 * time.Hour
 	defaultMaxProjects           = 50
 	defaultPortLo, defaultPortHi = project.PortMin, project.PortMax
@@ -52,17 +50,15 @@ type ProjectState struct {
 
 // State is everything the plan knows about the server. It is built from the files in state/ (see LoadState), and set directly in tests.
 type State struct {
-	ServerID       string
-	Now            time.Time
-	TTL            time.Duration
-	NewID          func(now time.Time) (string, error)
-	PortRange      [2]int
-	MaxProjects    int
-	Projects       map[string]ProjectState // managed projects
-	ExistingUsers  map[string]bool         // system users that exist on the server
-	Ciphertexts    map[string]string       // the ciphertext of the secrets the owner passes in this plan
-	RotatePassword bool                    // for adopt: change the password of the existing role
-	Servers        map[string]string       // server registry: name → address (lite server add)
+	ServerID      string
+	Now           time.Time
+	TTL           time.Duration
+	NewID         func(now time.Time) (string, error)
+	PortRange     [2]int
+	MaxProjects   int
+	Projects      map[string]ProjectState // managed projects
+	ExistingUsers map[string]bool         // system users that exist on the server
+	Ciphertexts   map[string]string       // the ciphertext of the secrets the owner passes in this plan
 }
 
 // Build builds a project.create plan from a validated description (SPEC-v0.md, section 3).
@@ -99,12 +95,6 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 		}
 	}
 
-	if db := p.Database; db != nil && !db.IsLocal() {
-		if _, ok := st.Servers[db.Server]; !ok {
-			return nil, &BuildError{Code: CodePrecondition, Message: fmt.Sprintf("server %q is not in the registry", db.Server), Hint: "lite server add " + db.Server + " ADDRESS"}
-		}
-	}
-
 	projHash, err := ProjectHash(p)
 	if err != nil {
 		return nil, &BuildError{Code: CodePrecondition, Message: err.Error()}
@@ -116,7 +106,7 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 		return nil, perr
 	}
 
-	secretSteps, serr := planSecrets(d, st, cur, managed)
+	secretSteps, serr := planSecrets(d, st, cur)
 	if serr != nil {
 		return nil, serr
 	}
@@ -129,21 +119,8 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 	b.add(actions.VerifyHostName, actions.VerifyHost{NoPodman: !hasContainers}, "Server check: OS, podman, caddy, postgresql, Caddy rules and ufw")
 	b.add(actions.CreateProjectUserName, actions.CreateProjectUser{Project: name}, fmt.Sprintf("User %s without a password and sudo, linger, configuration directories", name))
 
-	// In adopt mode the password of the existing role must be written before provision_postgres.
 	for _, s := range secretSteps {
-		if s.Name == DBPasswordSecret {
-			b.add(actions.SetSecretName, s, "Internal secret _db_password (the existing role password), ciphertext only")
-		}
-	}
-	if d.Database != nil && d.Database.IsLocal() {
-		b.add(actions.ProvisionPostgresName, actions.ProvisionPostgres{
-			Project: name, ConnectionFormat: d.Database.ConnectionFormat, RotatePassword: p.Adopt && !managed && st.RotatePassword,
-		}, fmt.Sprintf("Role and database %s in PostgreSQL, a pg_hba rule for this pair, the password is generated on the server", project.RoleName(name)))
-	}
-	for _, s := range secretSteps {
-		if s.Name != DBPasswordSecret {
-			b.add(actions.SetSecretName, s, fmt.Sprintf("Secret %s (write-only, the value in the plan is encrypted)", s.Name))
-		}
+		b.add(actions.SetSecretName, s, fmt.Sprintf("Secret %s (write-only, the value in the plan is encrypted)", s.Name))
 	}
 	if d.Registry != nil {
 		b.add(actions.RegistryLoginName, actions.RegistryLogin{
@@ -173,7 +150,7 @@ func Build(p *project.Project, st State) (*Plan, *BuildError) {
 			}
 			b.add(actions.InstallQuadletName, actions.InstallQuadlet{
 				Project: name, Service: sn, Slot: slot, HostPort: ports.Services[sn][i], ContainerPort: s.ContainerPort,
-				Memory: s.Limits.Memory, Pids: s.Limits.Pids, DatabaseSocket: s.DatabaseEnv != "" && d.Database.IsLocal(), Sockets: s.Sockets, Data: s.Data,
+				Memory: s.Limits.Memory, Pids: s.Limits.Pids, Sockets: s.Sockets, Data: s.Data,
 			}, fmt.Sprintf("Quadlet unit %s-%s-%s, port 127.0.0.1:%d", name, sn, slot, ports.Services[sn][i]))
 		}
 	}
@@ -295,18 +272,11 @@ func envFor(s project.Service, d *project.Project, st State) []actions.EnvVar {
 	for _, k := range sortedKeys(s.Secrets) {
 		out = append(out, actions.EnvVar{Name: k, Kind: "secret", Secret: secretName(s.Secrets[k])})
 	}
-	if s.DatabaseEnv != "" {
-		ev := actions.EnvVar{Name: s.DatabaseEnv, Kind: "database", Value: d.Database.ConnectionFormat}
-		if !d.Database.IsLocal() {
-			ev.Host, ev.Port, ev.Secret = st.Servers[d.Database.Server], d.Database.Port, secretName(d.Database.PasswordSecret)
-		}
-		out = append(out, ev)
-	}
 	return out
 }
 
 // planSecrets decides which set_secret steps are needed: the value is passed in this plan, or the secret is already on the server.
-func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) ([]actions.SetSecret, *BuildError) {
+func planSecrets(d *project.Project, st State, cur ProjectState) ([]actions.SetSecret, *BuildError) {
 	need := map[string]bool{}
 	for _, s := range d.Services {
 		for _, ref := range s.Secrets {
@@ -325,11 +295,6 @@ func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) (
 			need[n] = true
 		}
 	}
-	if d.Database != nil && !d.Database.IsLocal() {
-		if n := secretName(d.Database.PasswordSecret); own(n) {
-			need[n] = true
-		}
-	}
 	have := map[string]bool{}
 	for _, n := range cur.Secrets {
 		have[n] = true
@@ -343,21 +308,12 @@ func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) (
 	var steps []actions.SetSecret
 	var missing, unused []string
 	for _, n := range sortedKeys(st.Ciphertexts) {
-		if n == DBPasswordSecret {
-			if !d.Adopt {
-				return nil, &BuildError{Code: CodeInvalidProject, Message: "the internal secret _db_password can only be passed in adopt mode"}
-			}
-			continue
-		}
 		if !need[n] {
 			unused = append(unused, n)
 		}
 	}
 	if len(unused) > 0 {
 		return nil, &BuildError{Code: CodeUnusedSecret, Message: "ciphertexts were passed for secrets the project does not use: " + strings.Join(unused, ", ")}
-	}
-	if ct, ok := st.Ciphertexts[DBPasswordSecret]; ok {
-		steps = append(steps, actions.SetSecret{Project: d.Name, Name: DBPasswordSecret, Ciphertext: ct})
 	}
 	for _, n := range sortedKeys(need) {
 		if ct, ok := st.Ciphertexts[n]; ok {
@@ -369,10 +325,6 @@ func planSecrets(d *project.Project, st State, cur ProjectState, managed bool) (
 	if len(missing) > 0 {
 		return nil, &BuildError{Code: CodeSecretMissing, Message: "missing secrets: " + strings.Join(missing, ", "),
 			Hint: "encrypt the values with secret encrypt and pass the ciphertexts into the plan"}
-	}
-	if d.Adopt && d.Database != nil && d.Database.IsLocal() && !managed && !st.RotatePassword && st.Ciphertexts[DBPasswordSecret] == "" && !have[DBPasswordSecret] {
-		return nil, &BuildError{Code: CodeAdoptPassword, Message: "the password of the existing role is unknown",
-			Hint: "set the _db_password secret or allow a password change (rotate_password)"}
 	}
 	return steps, nil
 }

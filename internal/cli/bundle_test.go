@@ -16,7 +16,7 @@ func bundleJSON(t *testing.T, mutate func(*bundle)) string {
 		t.Fatal(err)
 	}
 	b := bundle{Project: raw, Ciphertexts: map[string]string{}}
-	for _, n := range []string{"ghcr_read_token", "auth_session_secret", "webhook_secret", "admin_username", "admin_password", "_db_password"} {
+	for _, n := range []string{"ghcr_read_token", "auth_session_secret", "webhook_secret", "admin_username", "admin_password", "database_url"} {
 		b.Ciphertexts[n] = ctArmor
 	}
 	if mutate != nil {
