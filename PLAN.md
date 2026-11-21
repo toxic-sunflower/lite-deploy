@@ -2,6 +2,10 @@
 
 Project: **lite-deploy** (a working name). Every session is short and solves one task. At the end a session updates `DECISIONS.md` and this file, commits and pushes to the branch. A pull request is not created without the owner's request.
 
+## Status on 2026-11-21 (v0.28.0)
+
+Since the paragraph below: Cloudflare is made entirely on the server (`lite cloudflare connect`, several tunnels, Access), the fallback password for direct mode with a fail2ban guard, the pages Secrets and Packages, context help (`<tip>`), `lite-ui update` and `lite-ui service`, the one-file Claude Desktop extension, and a database is now a secret (D-81; the core has no database field and no registry of servers). **What remains is still running it on a real server** (TESTING.md): none of the Cloudflare calls, `pg create-db --project` with a container, the fail2ban jail or Access has been run against the real thing. Open items: T16, T18, T19, T20 below.
+
 ## Status on 2026-11-20
 
 All the parts of v1 are written: the core (S1–S6), the Cloudflare plugin (S7), backups and secrets (S8), the interface `lite-ui` (S9) with its MCP mode (S10) and the skill for AI agents (S11), installing and updating with `liteup`, protection by default, publishing (tunnel or direct), confirming dangerous changes with the owner's key. The latest release is on the Releases page. What remains is **running it all on a real server**: the steps are in `TESTING.md`. Two hardening items are postponed on purpose (see S6). The queue below is the original plan and is kept for the history of decisions.
