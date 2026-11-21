@@ -42,7 +42,7 @@ Caddy asks Let's Encrypt for the certificate as soon as the name points at the s
 
 ## Tunnel: Cloudflare Tunnel
 
-> **The short way: one button.** In **Ingress**, the **Cloudflare** card is always at the top. Paste a Cloudflare API token, give the Cloudflare account any name (a friend's name, for example) and press **Connect through Cloudflare** under the domain. The server creates the tunnel in the account that owns the domain (once per account, reused for every domain of it), routes the domain to the port of the site, makes the DNS record, installs `cloudflared`, connects the tunnel and points the site at it. Nothing is done by hand in the Cloudflare dashboard.
+> **The short way: one button.** In **Ingress**, the **Cloudflare** card is always at the top. Paste a Cloudflare API token, give the tunnel any name (the project or a friend's name, for example; domains with the same name share one tunnel, different names make different tunnels, in the same Cloudflare account or in different ones) and press **Connect through Cloudflare** under the domain. The server creates the tunnel in the account that owns the domain (one tunnel per name, reused for every domain with that name), routes the domain to the port of the site, makes the DNS record, installs `cloudflared`, connects the tunnel and points the site at it. Nothing is done by hand in the Cloudflare dashboard.
 >
 > The API token is created by the owner of the Cloudflare account (My Profile, API Tokens, Create Custom Token) with only: **Account: Cloudflare Tunnel: Edit**, **Zone: DNS: Edit** and **Zone: Zone: Read**. It is used **once on the server and is never saved**: not on disk, not in the journal. Only the token of the tunnel itself stays on the server, because the tunnel needs it to run; it can run that one tunnel and nothing else. If the domain belongs to a friend, they create the API token and send it to you privately.
 >
@@ -52,7 +52,7 @@ Caddy asks Let's Encrypt for the certificate as soon as the name points at the s
 > echo 'THE_API_TOKEN' | lite cloudflare connect --domain app.example.com --port 18080 --name acme --token-stdin --project shop --site main
 > ```
 >
-> `--port` is the port of the site (`lite ingress` shows it), `--name` names the Cloudflare account, `--project` and `--site` point the site at the tunnel. When the token sees several accounts, the command lists them: pick one with `--account ID`.
+> `--port` is the port of the site (`lite ingress` shows it), `--name` names the tunnel (the same name: one tunnel for all those domains; another name: another tunnel), `--project` and `--site` point the site at the tunnel. When the token sees several accounts, the command lists them: pick one with `--account ID`.
 >
 > The text below is the same thing done by hand: you make the tunnel, the route and the DNS record in the Cloudflare dashboard, and the server only runs the tunnel (`lite cloudflare setup`).
 

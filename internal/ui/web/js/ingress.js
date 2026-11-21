@@ -19,7 +19,7 @@
       <div><b>Cloudflare</b> <span class="muted">{{ cfText }}</span></div>\
       <div class="help">Connect a domain through Cloudflare with one button: the server creates the tunnel, the route and the DNS record in the Cloudflare account that owns the domain. Paste a Cloudflare API token (the owner of the account creates it in Cloudflare: My Profile, API Tokens, Create Custom Token, with <b>Account: Cloudflare Tunnel: Edit</b>, <b>Zone: DNS: Edit</b>, <b>Zone: Zone: Read</b>). It is used once on the server and is not saved anywhere.</div>\
       <div class="row"><div class="grow"><label>API token</label><input type="password" v-model="cfa.token" autocomplete="off" spellcheck="false"></div>\
-        <div class="grow"><label>Name of this Cloudflare account (any, e.g. a friend’s name)</label><input type="text" v-model="cfa.name" placeholder="default" autocomplete="off" spellcheck="false"></div></div>\
+        <div class="grow"><label>Tunnel name (any, e.g. the project or a friend). Domains with the same name share one tunnel, different names make different tunnels</label><input type="text" v-model="cfa.name" placeholder="default" autocomplete="off" spellcheck="false"></div></div>\
       <div v-if="cfa.accounts" class="help warntxt">This token sees several Cloudflare accounts: {{ cfa.accounts }}. Put the id of the right one here and press the button again: <input type="text" v-model="cfa.account" style="width:260px" autocomplete="off"></div>\
       <table v-if="cf && cf.tunnels.length" style="margin-top:8px">\
         <tr v-for="x in cf.tunnels" :key="x.name"><td>Tunnel {{ x.name }}</td><td :class="x.running ? \'up\' : \'down\'">{{ x.running ? "connected and running" : "connected but not running" }}</td>\
@@ -96,7 +96,7 @@
       },
       cfaConnect: function (s) {
         var self = this, name = this.cfaName();
-        if (!/^[a-z][a-z0-9-]{0,20}$/.test(name)) { LU.say('err', 'The account name is lowercase letters, digits and dashes, starting with a letter.'); return; }
+        if (!/^[a-z][a-z0-9-]{0,20}$/.test(name)) { LU.say('err', 'The tunnel name is lowercase letters, digits and dashes, starting with a letter.'); return; }
         if (!s.port) { LU.say('err', 'The project is not created on the server yet, so the site has no port. Create the project first.'); return; }
         if (!confirm('Connect ' + s.host + ' through Cloudflare? The server creates the tunnel and the DNS record in the Cloudflare account and points ' + s.project + '/' + s.site + ' at it. A DNS record of this name is replaced.')) return;
         var args = ['connect', '--domain', s.host, '--port', String(s.port), '--project', s.project, '--site', s.site];
