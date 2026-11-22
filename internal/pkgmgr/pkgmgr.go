@@ -242,25 +242,11 @@ func (m *Manager) commands(mgr, op string, pkgs []string) []host.Cmd {
 	}
 }
 
-// aptSandboxDenied tells that apt could not switch to its own download user (_apt): a container or a restricted virtual
-// server may forbid it. apt then works with `-o APT::Sandbox::User=root`: the downloads are checked by the signatures of
-// the repositories all the same.
-func aptSandboxDenied(res host.Result) bool {
-	s := string(res.Stderr) + string(res.Stdout)
-	return strings.Contains(s, "seteuid") || strings.Contains(s, "setresuid") || strings.Contains(s, "Failed to set new user ids")
-}
-
 func (m *Manager) exec(ctx context.Context, mgr, op string, pkgs []string) error {
 	for _, c := range m.commands(mgr, op, pkgs) {
 		res, err := m.run(ctx, c)
 		if err != nil {
 			return fail("step_failed", "%s: %v", c.Name, err)
-		}
-		if res.ExitCode != 0 && c.Name == "apt-get" && aptSandboxDenied(res) {
-			c.Args = append([]string{"-o", "APT::Sandbox::User=root"}, c.Args...)
-			if res, err = m.run(ctx, c); err != nil {
-				return fail("step_failed", "%s: %v", c.Name, err)
-			}
 		}
 		if res.ExitCode != 0 {
 			return fail("step_failed", "%s %s: %s", c.Name, strings.Join(c.Args, " "), strings.TrimSpace(string(res.Stderr)))
@@ -552,12 +538,6 @@ func (m *Manager) UpdateAll(ctx context.Context) error {
 		res, err := m.run(ctx, c)
 		if err != nil {
 			return fail("step_failed", "%s: %v", c.Name, err)
-		}
-		if res.ExitCode != 0 && c.Name == "apt-get" && aptSandboxDenied(res) {
-			c.Args = append([]string{"-o", "APT::Sandbox::User=root"}, c.Args...)
-			if res, err = m.run(ctx, c); err != nil {
-				return fail("step_failed", "%s: %v", c.Name, err)
-			}
 		}
 		if res.ExitCode != 0 {
 			return fail("step_failed", "%s %s: %s", c.Name, strings.Join(c.Args, " "), strings.TrimSpace(string(res.Stderr)))

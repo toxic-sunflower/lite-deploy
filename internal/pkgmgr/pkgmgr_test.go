@@ -220,53 +220,29 @@ func TestSearchApt(t *testing.T) {
 	}
 }
 
-// Where apt cannot switch to its own user, the same command is repeated without that switch; where it can, it is not.
-func TestAptRetriesWithoutTheSandboxUser(t *testing.T) {
+// When apt cannot switch to its own user, the install stops with apt's message: nothing is repeated in another way
+// (a hidden retry once hid a broken executor and left PostgreSQL half installed).
+func TestAptFailureIsNotHiddenByARetry(t *testing.T) {
 	var calls []string
-	installed := false
 	r := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
-		line := c.Name + " " + strings.Join(c.Args, " ")
-		calls = append(calls, line)
+		calls = append(calls, c.Name+" "+strings.Join(c.Args, " "))
 		if c.Name == "dpkg-query" {
-			if installed {
-				return host.Result{Stdout: []byte("install ok installed|2.8.0")}, nil
-			}
 			return host.Result{ExitCode: 1}, nil
 		}
-		if strings.Contains(line, "APT::Sandbox::User=root install") {
-			installed = true
-		}
-		if c.Name == "apt-get" && len(c.Args) > 0 && c.Args[0] != "--version" && !strings.Contains(line, "APT::Sandbox::User=root") {
+		if c.Name == "apt-get" && len(c.Args) > 0 && c.Args[0] != "--version" {
 			return host.Result{ExitCode: 100, Stderr: []byte("E: seteuid 42 failed - seteuid (1: Operation not permitted)")}, nil
 		}
 		return host.Result{}, nil
 	}}
 	m := &Manager{Runner: r, FS: host.NewMemFS(), Now: time.Now}
-	if err := m.Install(context.Background(), "caddy"); err != nil {
-		t.Fatalf("the retry must make it work: %v\n%v", err, calls)
+	err := m.Install(context.Background(), "caddy")
+	if err == nil || !strings.Contains(err.Error(), "seteuid") {
+		t.Fatalf("the error of apt must be returned: %v", err)
 	}
-	retried := 0
 	for _, c := range calls {
-		if strings.Contains(c, "APT::Sandbox::User=root") {
-			retried++
+		if strings.Contains(c, "Sandbox") {
+			t.Errorf("apt must not be repeated in a different way: %s", c)
 		}
-	}
-	if retried != 2 {
-		t.Errorf("update and install are both repeated: %d\n%v", retried, calls)
-	}
-	// a different failure is not hidden by the retry
-	r2 := &host.FakeRunner{Handler: func(c host.Cmd) (host.Result, error) {
-		if c.Name == "dpkg-query" {
-			return host.Result{ExitCode: 1}, nil
-		}
-		if c.Name == "apt-get" && len(c.Args) > 0 && c.Args[0] == "install" {
-			return host.Result{ExitCode: 100, Stderr: []byte("E: Unable to locate package nosuch")}, nil
-		}
-		return host.Result{}, nil
-	}}
-	m2 := &Manager{Runner: r2, FS: host.NewMemFS(), Now: time.Now}
-	if err := m2.Install(context.Background(), "nosuch"); err == nil || !strings.Contains(err.Error(), "Unable to locate") {
-		t.Errorf("a real failure must be reported: %v", err)
 	}
 }
 
